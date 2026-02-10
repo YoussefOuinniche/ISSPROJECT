@@ -1,0 +1,63 @@
+/* Logo 3D Effect Styles */
+.logo-3d {
+  filter: drop-shadow(0 4px 8px rgba(25, 93, 230, 0.3))
+          drop-shadow(0 8px 16px rgba(25, 93, 230, 0.2));
+  transition: all 0.3s ease;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+.logo-3d:hover {
+  filter: drop-shadow(0 6px 12px rgba(25, 93, 230, 0.4))
+          drop-shadow(0 12px 24px rgba(25, 93, 230, 0.3));
+  transform: translateY(-2px);
+}
+
+.logo-3d-large {
+  filter: drop-shadow(0 8px 16px rgba(25, 93, 230, 0.4))
+          drop-shadow(0 16px 32px rgba(25, 93, 230, 0.25))
+          drop-shadow(0 0 40px rgba(25, 93, 230, 0.15));
+  transition: all 0.4s ease;
+  animation: float 6s ease-in-out infinite;
+}
+
+.logo-3d-large:hover {
+  filter: drop-shadow(0 12px 24px rgba(25, 93, 230, 0.5))
+          drop-shadow(0 24px 48px rgba(25, 93, 230, 0.3))
+          drop-shadow(0 0 60px rgba(25, 93, 230, 0.2));
+  transform: translateY(-4px) scale(1.02);
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Glow effect */
+.logo-glow {
+  position: relative;
+}
+
+.logo-glow::before {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(circle, rgba(25, 93, 230, 0.15) 0%, transparent 70%);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.logo-glow:hover::before {
+  opacity: 1;
+}
+
+/* Remove black background from images */
+img.logo-3d, img.logo-3d-large {
+  mix-blend-mode: normal;
+  background: transparent;
+}
