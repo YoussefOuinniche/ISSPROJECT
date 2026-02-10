@@ -1,0 +1,126 @@
+/* Sidebar container */
+.sidebar {
+  width: 16rem; /* w-64 */
+  border-right: 1px solid #e2e2e8; /* border-slate-200 */
+  background-color: white; /* bg-white */
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1rem; /* p-4 */
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+/* Dark mode sidebar */
+.sidebar.dark {
+  background-color: #111621; /* dark:bg-background-dark */
+  border-color: #1e293b; /* dark:border-slate-800 */
+}
+
+/* Logo section */
+.sidebar .logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem; /* gap-3 */
+  padding-left: 0.5rem; /* px-2 */
+  padding-right: 0.5rem;
+}
+
+.sidebar .logo .logo-icon {
+  background-color: #195de6; /* bg-primary */
+  border-radius: 0.5rem; /* rounded-lg */
+  padding: 0.5rem; /* p-2 */
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar .logo h1 {
+  font-size: 1rem; /* text-base */
+  font-weight: 700; /* font-bold */
+  line-height: 1.25rem; /* leading-tight */
+  margin: 0;
+}
+
+.sidebar .logo p {
+  font-size: 0.75rem; /* text-xs */
+  color: #6b7280; /* text-slate-500 */
+  margin: 0;
+}
+
+.sidebar.dark .logo p {
+  color: #9ca3af; /* dark:text-slate-400 */
+}
+
+/* Navigation items */
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem; /* gap-2 */
+}
+
+.sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem; /* gap-3 */
+  padding: 0.5rem 0.75rem; /* py-2 px-3 */
+  border-radius: 0.5rem; /* rounded-lg */
+  font-size: 0.875rem; /* text-sm */
+  font-weight: 500; /* font-medium */
+  color: #4b5563; /* text-slate-600 */
+  text-decoration: none;
+  transition: all 0.3s ease; /* transition-colors */
+}
+
+.sidebar.dark nav a {
+  color: #9ca3af; /* dark:text-slate-400 */
+}
+
+.sidebar nav a:hover {
+  background-color: #f3f4f6; /* hover:bg-slate-100 */
+}
+
+.sidebar.dark nav a:hover {
+  background-color: #1e293b; /* dark:hover:bg-slate-800 */
+}
+
+/* Active nav item */
+.sidebar nav a.active {
+  background-color: #195de6; /* bg-primary */
+  color: white;
+}
+
+/* Logout section */
+.sidebar .logout {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem; /* gap-4 */
+  border-top: 1px solid #e2e2e8; /* border-t border-slate-200 */
+  padding-top: 1rem; /* pt-4 */
+}
+
+.sidebar.dark .logout {
+  border-color: #1e293b; /* dark:border-slate-800 */
+}
+
+.sidebar .logout-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem; /* gap-3 */
+  padding: 0.5rem 0.75rem; /* px-3 py-2 */
+  font-size: 0.875rem; /* text-sm */
+  font-weight: 500; /* font-medium */
+  color: #4b5563; /* text-slate-600 */
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.sidebar.dark .logout-item {
+  color: #9ca3af; /* dark:text-slate-400 */
+}
+
+.sidebar .logout-item:hover {
+  color: #ef4444; /* hover:text-red-500 */
+}
