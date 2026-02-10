@@ -1,0 +1,109 @@
+body {
+  margin: 0;
+  font-family: Inter, sans-serif;
+  background: #111621;
+  color: white;
+}
+
+.analytics-page {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* SIDEBAR */
+.sidebar {
+  width: 240px;
+  background: #0f172a;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.logo-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-box img {
+  width: 40px;
+}
+
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  margin-top: 30px;
+}
+
+.sidebar nav a {
+  padding: 10px;
+  color: #94a3b8;
+  text-decoration: none;
+  border-radius: 6px;
+}
+
+.sidebar nav a:hover {
+  background: #1e293b;
+}
+
+.sidebar nav .active {
+  background: #195de6;
+  color: white;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+}
+
+/* MAIN */
+.main {
+  flex: 1;
+  padding: 30px;
+}
+
+/* TOPBAR */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.topbar button {
+  background: #195de6;
+  border: none;
+  padding: 10px 16px;
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+/* METRICS */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 25px;
+}
+
+.card {
+  background: #1c2230;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+/* CHARTS */
+.charts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+}
+
+.chart-card {
+  background: #1c2230;
+  padding: 20px;
+  border-radius: 10px;
+}
