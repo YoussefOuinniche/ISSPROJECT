@@ -1,4 +1,4 @@
-## Skill Pulse AI: AI-Powered Career Development & Upskilling Platform
+## SkillPulse : AI-Powered Career Development & Upskilling Platform
 
 ## Project Overview
 
