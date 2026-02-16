@@ -1,67 +1,100 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import supabase, { testConnection, getUsers, getUserSkills, getRecommendations } from "./connect.js";
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+require('dotenv').config();
 
-dotenv.config();
+const { pool } = require('./config/database');
+const errorHandler = require('./middleware/errorHandler');
 
+// Import routes
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/User');
+const skillRoutes = require('./routes/Skills');
+const trendRoutes = require('./routes/Trends');
+
+// Initialize express app
 const app = express();
-app.use(cors());
-app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("API is running 🚀 - Connected to local Supabase");
-});
+// Middleware
+app.use(helmet()); // Security headers
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || '*',
+  credentials: true
+}));
+app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined')); // Logging
+app.use(express.json()); // Body parser
+app.use(express.urlencoded({ extended: true }));
 
-/* TEST DATABASE CONNECTION */
-app.get("/test-db", async (req, res) => {
-  const result = await testConnection();
-
-  if (!result) {
-    return res.status(500).json({ error: "Connection failed" });
+// Health check route
+app.get('/health', async (req, res) => {
+  try {
+    // Test database connection
+    await pool.query('SELECT NOW()');
+    res.status(200).json({
+      success: true,
+      message: 'Server is healthy',
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      message: 'Server is unhealthy',
+      database: 'disconnected',
+      error: error.message
+    });
   }
-
-  res.json({ success: true, message: "Connected to local Supabase ✅" });
 });
 
-/* GET ALL USERS WITH PROFILES */
-app.get("/api/users", async (req, res) => {
-  const users = await getUsers();
+// API routes
+app.use('/api/auth', authRoutes);
+app.use('/api/user', userRoutes);
+app.use('/api/skills', skillRoutes);
+app.use('/api/trends', trendRoutes);
 
-  if (!users) {
-    return res.status(500).json({ error: "Failed to fetch users" });
-  }
-
-  res.json({ success: true, data: users });
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found'
+  });
 });
 
-/* GET USER SKILLS */
-app.get("/api/users/:userId/skills", async (req, res) => {
-  const { userId } = req.params;
-  const skills = await getUserSkills(userId);
+// Error handler (must be last)
+app.use(errorHandler);
 
-  if (!skills) {
-    return res.status(500).json({ error: "Failed to fetch user skills" });
-  }
-
-  res.json({ success: true, data: skills });
-});
-
-/* GET USER RECOMMENDATIONS */
-app.get("/api/users/:userId/recommendations", async (req, res) => {
-  const { userId } = req.params;
-  const recommendations = await getRecommendations(userId);
-
-  if (!recommendations) {
-    return res.status(500).json({ error: "Failed to fetch recommendations" });
-  }
-
-  res.json({ success: true, data: recommendations });
-});
-
+// Start server
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT} 🔥`);
-  console.log(`Supabase local: http://127.0.0.1:54321`);
-  console.log(`Supabase Studio: http://127.0.0.1:54323`);
+
+const server = app.listen(PORT, () => {
+  console.log(`
+╔════════════════════════════════════════╗
+║   SecureHire AI Backend Server         ║
+║   Port: ${PORT}                        ║
+║   Environment: ${process.env.NODE_ENV || 'development'}           ║
+║   Status: Running ✓                    ║
+╚════════════════════════════════════════╝
+  `);
 });
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled Promise Rejection:', err);
+  // Close server & exit process
+  server.close(() => process.exit(1));
+});
+
+// Handle SIGTERM
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Closing server gracefully...');
+  server.close(() => {
+    console.log('Server closed');
+    pool.end(() => {
+      console.log('Database pool closed');
+      process.exit(0);
+    });
+  });
+});
+
+module.exports = app;
