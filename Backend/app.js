@@ -12,6 +12,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/User');
 const skillRoutes = require('./routes/Skills');
 const trendRoutes = require('./routes/Trends');
+const publicRoutes = require('./routes/Public');
 
 // Initialize express app
 const app = express();
@@ -52,6 +53,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/skills', skillRoutes);
 app.use('/api/trends', trendRoutes);
+app.use('/api/public', publicRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {

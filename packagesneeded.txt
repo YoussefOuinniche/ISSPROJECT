@@ -1,0 +1,10 @@
+backend:
+express
+cors
+helmet
+morgan
+dotenv
+express-validator
+jsonwebtoken
+bcrypt
+pg
