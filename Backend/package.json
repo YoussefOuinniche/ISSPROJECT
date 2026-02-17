@@ -3,40 +3,25 @@
   "version": "1.0.0",
   "private": true,
   "main": "app.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node app.js",
-    "dev": "NODE_ENV=development node app.js"
-  },
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^17.3.1",
-    "express": "^4.18.4",
-    "helmet": "^7.0.1",
-    "morgan": "^1.10.0",
-    "express-validator": "^6.15.0",
-    "pg": "^8.11.3"
-  }
-}
-{
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
-  "scripts": {
+    "dev": "node app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "bcrypt": "^6.0.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
-    "helmet": "^8.1.0",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^9.2.1",
-    "morgan": "^1.10.1"
+    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.4",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "pg": "^8.11.3"
   }
 }
