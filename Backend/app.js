@@ -8,7 +8,7 @@ const { pool } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 
 // Import routes
-const authRoutes = require('./routes/auth');
+const authRoutes = require('./routes/Auth');
 const userRoutes = require('./routes/User');
 const skillRoutes = require('./routes/Skills');
 const trendRoutes = require('./routes/Trends');

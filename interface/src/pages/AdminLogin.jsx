@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import api from '../api';
+import { setAuthTokens, setUser } from '../utils/auth';
 import './AdminLogin.css';
 import '../components/Logo3D.css';
 
@@ -9,16 +11,43 @@ const AdminLogin = ({ onLogin }) => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Add your login logic here
-    console.log('Login attempt:', { email, password, rememberMe });
-    
-    // For demo purposes, login with any credentials
-    if (email && password) {
-      onLogin();
-      navigate('/dashboard');
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await api.post('/api/auth/login', {
+        email,
+        password
+      });
+
+      if (response.data.success) {
+        const { token, refreshToken, user } = response.data.data;
+        
+        // Store tokens and user data
+        setAuthTokens(token, refreshToken);
+        setUser(user);
+        
+        // Call parent login handler
+        onLogin();
+        
+        // Navigate to dashboard
+        navigate('/dashboard');
+      } else {
+        setError(response.data.message || 'Login failed');
+      }
+    } catch (err) {
+      setError(
+        err.response?.data?.message || 
+        err.message || 
+        'Login failed. Please check your credentials.'
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -144,12 +173,20 @@ const AdminLogin = ({ onLogin }) => {
                 </a>
               </div>
 
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-600 dark:text-red-400">
+                  {error}
+                </div>
+              )}
+
               {/* Login Button */}
               <button
-                className="w-full flex cursor-pointer items-center justify-center rounded-lg h-14 bg-primary text-white text-base font-bold leading-normal tracking-wide hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-[0.98]"
+                className="w-full flex cursor-pointer items-center justify-center rounded-lg h-14 bg-primary text-white text-base font-bold leading-normal tracking-wide hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 type="submit"
+                disabled={loading}
               >
-                Sign In
+                {loading ? 'Signing in...' : 'Sign In'}
               </button>
             </form>
 

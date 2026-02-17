@@ -1,18 +1,68 @@
-// Minimal auth middleware for local development and frontend integration
-// `protect` will attach a demo user if no real auth is present.
+const jwt = require('jsonwebtoken');
+
+// Protect routes - require authentication
 exports.protect = (req, res, next) => {
-  // If a real auth token were present, verify here.
-  // For integration/demo, attach a default user so protected routes work.
-  if (!req.user) {
-    req.user = { id: 'demo-user', email: 'demo@local' };
+  try {
+    // Get token from header
+    const authHeader = req.headers.authorization;
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, no token provided'
+      });
+    }
+
+    // Extract token
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, no token'
+      });
+    }
+
+    // Verify token
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = { id: decoded.id };
+      next();
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authorized, token failed'
+      });
+    }
+  } catch (error) {
+    return res.status(401).json({
+      success: false,
+      message: 'Not authorized'
+    });
   }
-  next();
 };
 
+// Optional auth - attach user if token exists
 exports.optionalAuth = (req, res, next) => {
-  // If Authorization header exists, pretend user is authenticated
-  if (req.headers.authorization) {
-    req.user = { id: 'demo-user', email: 'demo@local' };
+  try {
+    const authHeader = req.headers.authorization;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = { id: decoded.id };
+      } catch (error) {
+        // Token invalid, continue without user
+        req.user = null;
+      }
+    }
+    
+    next();
+  } catch (error) {
+    // Continue without user on error
+    req.user = null;
+    next();
   }
-  next();
 };

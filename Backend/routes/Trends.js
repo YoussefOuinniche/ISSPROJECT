@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
-const TrendController = require('../controllers/Trendcontroller');
+const TrendController = require('../controllers/TrendController');
 const { protect, optionalAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 

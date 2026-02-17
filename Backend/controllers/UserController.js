@@ -1,8 +1,8 @@
-const User = require('../models/User');
+const User = require('../models/Users');
 const Profile = require('../models/Profile');
 const UserSkill = require('../models/Userskill');
 const SkillGap = require('../models/Skillgap');
-const Recommendation = require('../models/Recommendation');
+const Recommendation = require('../models/Reccomandation');
 
 class UserController {
   // Get user profile

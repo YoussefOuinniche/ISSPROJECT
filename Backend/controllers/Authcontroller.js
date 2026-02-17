@@ -1,4 +1,4 @@
-const User = require('../models/User');
+const User = require('../models/Users');
 const Profile = require('../models/Profile');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -201,7 +201,7 @@ class AuthController {
 
       // Generate reset token
       const resetToken = crypto.randomBytes(32).toString('hex');
-      const resetExpires = new Date(Date.now() + parseInt(process.env.RESET_PASSWORD_EXPIRE));
+      const resetExpires = new Date(Date.now() + parseInt(process.env.RESET_PASSWORD_EXPIRE || 3600000));
 
       // Save reset token
       await User.setPasswordResetToken(email, resetToken, resetExpires);

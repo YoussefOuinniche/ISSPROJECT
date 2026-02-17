@@ -1,5 +1,19 @@
-// Lightweight validate middleware placeholder
-// Routes already apply express-validator; this middleware is a no-op placeholder
+const { validationResult } = require('express-validator');
+
+// Validate express-validator results
 module.exports = function validate(req, res, next) {
+  const errors = validationResult(req);
+  
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: errors.array().map(err => ({
+        field: err.path || err.param,
+        message: err.msg
+      }))
+    });
+  }
+  
   next();
 };
