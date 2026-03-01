@@ -1,17 +1,3 @@
-"""
-SkillPulse AI Backend
-=====================
-FastAPI server that integrates a local LLM (via Ollama) for:
-  - Skill gap analysis
-  - Personalized learning roadmap generation
-  - Skill & career recommendations
-  - Trend-based insights
-
-Ollama must be running locally:  https://ollama.com
-Default model: llama3.2  (change via OLLAMA_MODEL env var)
-Pull a model:  ollama pull llama3.2
-"""
-
 import os
 import json
 import logging
@@ -27,9 +13,7 @@ from pydantic import BaseModel, Field
 from openai import OpenAI
 import uvicorn
 
-# ---------------------------------------------------------------------------
 # Configuration
-# ---------------------------------------------------------------------------
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
@@ -45,9 +29,7 @@ API_PORT = int(os.getenv("API_PORT", "8000"))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("skillpulse-ai")
 
-# ---------------------------------------------------------------------------
-# LLM client (OpenAI‑compatible → Ollama)
-# ---------------------------------------------------------------------------
+# LLM client (OpenAI-compatible → Ollama)
 llm = OpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
 
 
@@ -70,7 +52,7 @@ def chat(system_prompt: str, user_prompt: str) -> str:
 
 
 def chat_json(system_prompt: str, user_prompt: str) -> dict | list:
-    """Chat with the LLM and parse the response as JSON."""
+    # Chat with the LLM and parse the response as JSON
     raw = chat(system_prompt, user_prompt)
     # Strip markdown code fences if present
     cleaned = raw.strip()
@@ -95,9 +77,8 @@ def chat_json(system_prompt: str, user_prompt: str) -> dict | list:
         raise HTTPException(status_code=502, detail="LLM returned invalid JSON")
 
 
-# ---------------------------------------------------------------------------
 # Database helpers
-# ---------------------------------------------------------------------------
+
 def get_db():
     """Return a psycopg2 connection using the project DATABASE_URL."""
     return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
@@ -159,8 +140,16 @@ def fetch_trends(limit: int = 20) -> List[dict]:
         return cur.fetchall()
 
 
-def save_skill_gaps(user_id: str, gaps: List[dict]):
-    """Persist AI-generated skill gaps into the database."""
+def save_skill_gaps(user_id: str, gaps: List[dict]) -> None:
+    """Persist AI-generated skill gaps into the database.
+
+    Clears any previously AI-generated gaps for the user before inserting
+    the new ones so the table always reflects the latest analysis.
+
+    Args:
+        user_id: UUID of the user whose gaps are being updated.
+        gaps:    List of gap dicts produced by the LLM.
+    """
     with get_db() as conn, conn.cursor() as cur:
         # Clear old AI-generated gaps
         cur.execute(
@@ -184,8 +173,13 @@ def save_skill_gaps(user_id: str, gaps: List[dict]):
         conn.commit()
 
 
-def save_recommendations(user_id: str, recs: List[dict]):
-    """Persist AI-generated recommendations into the database."""
+def save_recommendations(user_id: str, recs: List[dict]) -> None:
+    """Persist AI-generated recommendations into the database.
+
+    Args:
+        user_id: UUID of the user receiving the recommendations.
+        recs:    List of recommendation dicts produced by the LLM.
+    """
     with get_db() as conn, conn.cursor() as cur:
         for rec in recs:
             cur.execute(
@@ -204,9 +198,7 @@ def save_recommendations(user_id: str, recs: List[dict]):
         conn.commit()
 
 
-# ---------------------------------------------------------------------------
 # Pydantic request / response models
-# ---------------------------------------------------------------------------
 class SkillGapRequest(BaseModel):
     user_id: str = Field(..., description="UUID of the user")
     target_role: Optional[str] = Field(
@@ -236,11 +228,11 @@ class FreeAnalysisRequest(BaseModel):
     target_role: str
 
 
-# ---------------------------------------------------------------------------
-# FastAPI application
-# ---------------------------------------------------------------------------
+# FastAPI application & middleware
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Handle application startup checks and graceful shutdown logging."""
     logger.info("SkillPulse AI starting — model=%s  url=%s", OLLAMA_MODEL, OLLAMA_BASE_URL)
     # Quick LLM health check
     try:
@@ -268,7 +260,6 @@ app.add_middleware(
 )
 
 
-# ---- Health ------------------------------------------------------------------
 @app.get("/health")
 async def health():
     """Check LLM + DB connectivity."""
@@ -288,7 +279,6 @@ async def health():
     return {"success": ok, "services": status, "model": OLLAMA_MODEL}
 
 
-# ---- Skill Gap Analysis -----------------------------------------------------
 SKILL_GAP_SYSTEM = """You are an expert career advisor for the IT industry.
 Given a user's current skills (with proficiency levels) and their target role,
 identify the SKILL GAPS — skills they are missing or need to improve.
@@ -345,7 +335,6 @@ async def analyze_skill_gaps(req: SkillGapRequest):
     return {"success": True, "target_role": target, "gaps": gaps}
 
 
-# ---- Learning Roadmap --------------------------------------------------------
 ROADMAP_SYSTEM = """You are an expert learning advisor for IT professionals.
 Given a user's skill gaps and a timeframe, generate a structured learning roadmap.
 
@@ -404,7 +393,6 @@ async def generate_roadmap(req: RoadmapRequest):
     return {"success": True, "data": roadmap}
 
 
-# ---- Recommendations ---------------------------------------------------------
 RECOMMEND_SYSTEM = """You are an AI career coach for IT professionals.
 Given the user's profile, current skills, and latest industry trends,
 suggest actionable recommendations.
@@ -457,7 +445,6 @@ async def recommend(req: RecommendRequest):
     return {"success": True, "data": recs}
 
 
-# ---- Career Advice (free-text Q&A) ------------------------------------------
 CAREER_SYSTEM = """You are SkillPulse AI, an expert career advisor for IT professionals.
 Answer the user's career-related question in a helpful, concise way.
 If the user's profile context is provided, personalise your answer.
@@ -487,7 +474,6 @@ async def career_advice(req: CareerAdviceRequest):
     return {"success": True, "answer": answer}
 
 
-# ---- Free Analysis (no DB user required) ------------------------------------
 FREE_ANALYSIS_SYSTEM = """You are an expert IT career analyst.
 Given a list of skills and a target role, provide:
 1. A skill gap analysis
@@ -519,7 +505,6 @@ async def analyze_free(req: FreeAnalysisRequest):
     return {"success": True, "data": result}
 
 
-# ---- List available Ollama models --------------------------------------------
 @app.get("/models")
 async def list_models():
     """List models available in the local Ollama instance."""
@@ -534,9 +519,7 @@ async def list_models():
         raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
 
 
-# ---------------------------------------------------------------------------
 # Entry point
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     uvicorn.run(
         "backend:app",
