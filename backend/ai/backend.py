@@ -1,17 +1,16 @@
-import os
-import json
-import logging
-from typing import Dict, List, Optional
-from contextlib import asynccontextmanager
-
-import psycopg2
-import psycopg2.extras
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from openai import OpenAI
-import uvicorn
+import os # Used for environment variable access and path handling
+import json # For parsing LLM responses that are expected to be in JSON format
+import logging # For logging application events and errors
+from typing import Dict, List, Optional # For type annotations
+from contextlib import asynccontextmanager # For managing FastAPI application lifespan events
+import psycopg2 # PostgreSQL database adapter for Python
+import psycopg2.extras # For using RealDictCursor which returns rows as dictionaries
+from dotenv import load_dotenv # For loading environment variables from a .env file
+from fastapi import FastAPI, HTTPException, Body # FastAPI framework and related exceptions
+from fastapi.middleware.cors import CORSMiddleware # Middleware to handle Cross-Origin Resource Sharing (CORS)
+from pydantic import BaseModel, Field # For defining request and response models with validation
+from openai import OpenAI # OpenAI client (used to talk to Ollama's OpenAI-compatible endpoint)
+import uvicorn # ASGI server for running the FastAPI application
 
 # Configuration
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
