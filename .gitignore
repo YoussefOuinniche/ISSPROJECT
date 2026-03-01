@@ -29,6 +29,15 @@ out/
 *.swp
 *.swo
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+
 # Project specific
 backend/node_modules/
 backend/.env
