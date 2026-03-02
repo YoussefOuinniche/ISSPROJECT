@@ -38,5 +38,28 @@ module.exports = (sequelize) => {
     Profile.belongsTo(models.User, { foreignKey: 'user_id' });
   };
 
+  // ----- static helpers -----------------------------------------------------
+
+  Profile.getFullProfile = async function (userId) {
+    return await this.findOne({
+      where: { user_id: userId },
+      include: [this.sequelize.models.User],
+    });
+  };
+
+  Profile.findByUserId = async function (userId) {
+    return await this.findOne({ where: { user_id: userId } });
+  };
+
+  Profile.update = async function (userId, updates) {
+    const [count] = await this.update(updates, { where: { user_id: userId } });
+    if (!count) return null;
+    return this.findByUserId(userId);
+  };
+
+  Profile.create = async function (userId, data) {
+    return await this.create({ user_id: userId, ...data });
+  };
+
   return Profile;
 };

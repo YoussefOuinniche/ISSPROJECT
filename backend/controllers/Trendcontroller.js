@@ -1,4 +1,4 @@
-const Trend = require('../models/Trend');
+const { Trend } = require('../models');
 
 class TrendController {
   // Get all trends

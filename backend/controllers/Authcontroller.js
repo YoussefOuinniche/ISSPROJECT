@@ -1,20 +1,21 @@
-const User = require('../models/Users');
-const Profile = require('../models/Profile');
+// Models come from models/index.js which initializes Sequelize
+const { User, Profile } = require('../models');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
 // Generate JWT token
+// Falls back to sane defaults so dev environment works without extra .env vars
 const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
-  });
+  const secret = process.env.JWT_SECRET || 'dev_jwt_secret';
+  const expiresIn = process.env.JWT_EXPIRE || '1h';
+  return jwt.sign({ id: userId }, secret, { expiresIn });
 };
 
 // Generate refresh token
 const generateRefreshToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRE
-  });
+  const secret = process.env.JWT_REFRESH_SECRET || 'dev_refresh_secret';
+  const expiresIn = process.env.JWT_REFRESH_EXPIRE || '7d';
+  return jwt.sign({ id: userId }, secret, { expiresIn });
 };
 
 class AuthController {
@@ -134,7 +135,7 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: 'Error logging in',
-        error: error.message
+        error: error.message || 'internal error'
       });
     }
   }

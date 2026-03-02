@@ -1,4 +1,4 @@
-const { DataTypes } = require('sequelize');
+const { DataTypes, Op } = require('sequelize');
 
 module.exports = (sequelize) => {
   const Recommendation = sequelize.define('Recommendation', {
@@ -46,6 +46,29 @@ module.exports = (sequelize) => {
     Recommendation.belongsTo(models.User, { foreignKey: 'user_id' });
     Recommendation.belongsTo(models.Skill, { foreignKey: 'skill_id' });
     Recommendation.belongsTo(models.Trend, { foreignKey: 'trend_id' });
+  };
+
+  // static helpers
+  Recommendation.findByUserAndType = async function (userId, type, limit = 20) {
+    return await this.findAll({ where: { user_id: userId, type }, limit });
+  };
+
+  Recommendation.findByUserId = async function (userId, limit = 50, offset = 0) {
+    return await this.findAll({
+      where: { user_id: userId },
+      order: [['created_at', 'DESC']],
+      limit,
+      offset,
+    });
+  };
+
+  Recommendation.getRecentRecommendations = async function (userId, days = 7, limit = 10) {
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    return await this.findAll({
+      where: { user_id: userId, created_at: { [Op.gte]: cutoff } },
+      order: [['created_at', 'DESC']],
+      limit,
+    });
   };
 
   return Recommendation;

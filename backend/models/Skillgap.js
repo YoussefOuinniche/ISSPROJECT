@@ -40,5 +40,14 @@ module.exports = (sequelize) => {
     SkillGap.belongsTo(models.Skill, { foreignKey: 'skill_id' });
   };
 
+  // helper methods
+  SkillGap.findByUserAndDomain = async function (userId, domain) {
+    return await this.findAll({ where: { user_id: userId, domain } });
+  };
+
+  SkillGap.findByUserId = async function (userId) {
+    return await this.findAll({ where: { user_id: userId } });
+  };
+
   return SkillGap;
 };
