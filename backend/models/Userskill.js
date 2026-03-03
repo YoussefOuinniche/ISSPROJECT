@@ -138,4 +138,17 @@ class UserSkill {
   }
 }
 
-module.exports = UserSkill;
+  UserSkill.update = async function (userId, skillId, updates) {
+    const [count] = await this.sequelize.models.UserSkill.update(updates, {
+      where: { user_id: userId, skill_id: skillId },
+    });
+    if (!count) return null;
+    return this.findOne({ where: { user_id: userId, skill_id: skillId } });
+  };
+
+  UserSkill.delete = async function (userId, skillId) {
+    return await this.destroy({ where: { user_id: userId, skill_id: skillId } });
+  };
+
+  return UserSkill;
+};

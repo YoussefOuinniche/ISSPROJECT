@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
+import api from '../api'; // Ensure this axios instance points to http://localhost:4000
 import { setAuthTokens, setUser } from '../utils/auth';
 import AnimatedButton from '../components/ui/AnimatedButton';
 import { useToast } from '../components/ui/Toast';
@@ -22,26 +22,39 @@ const AdminLogin = ({ onLogin }) => {
     setError('');
     setLoading(true);
 
+    // Basic Validation
+    if (!email || !password) {
+      setError('Please enter both email and password.');
+      setLoading(false);
+      return;
+    }
+
     try {
+      // We call the auth login endpoint. 
+      // Note: If your axios 'api' instance already has a baseURL, 
+      // you just need '/api/auth/login'
       const response = await api.post('/api/auth/login', {
-        email,
-        password
+        email: email.trim(),
+        password: password
       });
 
-      if (response.data.success) {
+      // Based on your app.js, the backend returns { success: true, data: { ... } }
+      if (response.data && response.data.success) {
         const { token, refreshToken, user } = response.data.data;
         
-        // Store tokens and user data
+        // 1. Store tokens in LocalStorage/Cookies
         setAuthTokens(token, refreshToken);
+        
+        // 2. Store user profile
         setUser(user);
         
-        // Call parent login handler
-        onLogin();
+        // 3. Trigger parent state update
+        if (onLogin) onLogin();
         
-        // Navigate to dashboard
+        // 4. Redirect
         navigate('/dashboard');
       } else {
-        setError(response.data.message || 'Login failed');
+        setError(response.data?.message || 'Login failed. Please try again.');
       }
     } catch (err) {
       const status = err.response?.status;
@@ -84,7 +97,6 @@ const AdminLogin = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background-light dark:bg-background-dark font-display">
-      {/* Top Navigation Bar */}
       <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-[#292e38] px-10 py-3 bg-background-light dark:bg-background-dark">
         <div className="flex items-center gap-4 text-white">
           <div className="logo-glow">
@@ -108,12 +120,9 @@ const AdminLogin = ({ onLogin }) => {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="flex-1 flex items-center justify-center p-6 auth-gradient">
         <div className="layout-content-container flex flex-col max-w-[480px] w-full">
-          {/* Login Card */}
           <div className="bg-white dark:bg-[#1c2230] rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 p-8 md:p-10">
-            {/* Branding/Header */}
             <div className="flex flex-col items-center mb-8">
               <div className="logo-glow">
                 <img 
@@ -130,9 +139,7 @@ const AdminLogin = ({ onLogin }) => {
               </p>
             </div>
 
-            {/* Form */}
             <form className="space-y-5" onSubmit={handleSubmit}>
-              {/* Email Field */}
               <div className="flex flex-col gap-2">
                 <label className="text-slate-900 dark:text-white text-sm font-medium leading-normal">
                   Email Address
@@ -143,15 +150,15 @@ const AdminLogin = ({ onLogin }) => {
                   </span>
                   <input
                     className="form-input flex w-full rounded-lg text-slate-900 dark:text-white focus:outline-0 focus:ring-2 focus:ring-primary border border-slate-200 dark:border-[#3c4453] bg-slate-50 dark:bg-[#111621] h-14 placeholder:text-slate-400 dark:placeholder:text-[#9da6b8] pl-12 pr-4 text-base font-normal leading-normal transition-all"
-                    placeholder="admin@company.com"
+                    placeholder="admin@skillpulse.com"
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    required
                   />
                 </div>
               </div>
 
-              {/* Password Field */}
               <div className="flex flex-col gap-2">
                 <label className="text-slate-900 dark:text-white text-sm font-medium leading-normal">
                   Password
@@ -166,6 +173,7 @@ const AdminLogin = ({ onLogin }) => {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    required
                   />
                   <AnimatedButton
                     variant="ghost"
@@ -181,7 +189,6 @@ const AdminLogin = ({ onLogin }) => {
                 </div>
               </div>
 
-              {/* Options Row */}
               <div className="flex items-center justify-between py-2">
                 <label className="flex items-center gap-2 cursor-pointer group">
                   <input
@@ -203,9 +210,8 @@ const AdminLogin = ({ onLogin }) => {
                 </a>
               </div>
 
-              {/* Error Message */}
               {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-600 dark:text-red-400">
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-sm text-red-600 dark:text-red-400 animate-pulse">
                   {error}
                 </div>
               )}
@@ -255,21 +261,12 @@ const AdminLogin = ({ onLogin }) => {
             </div>
           </div>
 
-          {/* Footer Copy */}
           <p className="mt-8 text-center text-slate-500 dark:text-slate-500 text-xs">
-            © 2024 Admin Portal Inc. All rights reserved. <br />
-            Secured by Enterprise Grade Encryption.
+            © 2026 SkillPulse AI. Secure Enterprise Access. <br />
+            Encryption Active: TLS 1.3
           </p>
         </div>
       </main>
-
-      {/* Bottom Illustration (Decorative) */}
-      <div className="hidden lg:block fixed bottom-0 right-0 p-10 opacity-20 dark:opacity-10 pointer-events-none">
-        <span className="material-symbols-outlined text-[120px] text-primary">analytics</span>
-      </div>
-      <div className="hidden lg:block fixed top-24 left-0 p-10 opacity-20 dark:opacity-10 pointer-events-none">
-        <span className="material-symbols-outlined text-[80px] text-primary">group_work</span>
-      </div>
     </div>
   );
 };

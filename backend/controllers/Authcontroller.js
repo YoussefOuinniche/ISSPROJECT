@@ -1,5 +1,5 @@
-const User = require('../models/Users');
-const Profile = require('../models/Profile');
+// Models come from models/index.js which initializes Sequelize
+const { User, Profile } = require('../models');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
@@ -144,7 +144,7 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: 'Error logging in',
-        error: error.message
+        error: error.message || 'internal error'
       });
     }
   }

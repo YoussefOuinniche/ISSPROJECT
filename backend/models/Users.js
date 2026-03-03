@@ -36,10 +36,10 @@ class User {
     return data;
   }
 
-  // Verify password
-  static async verifyPassword(plainPassword, hashedPassword) {
-    return await bcrypt.compare(plainPassword, hashedPassword);
-  }
+  // Find user by email (case-insensitive)
+  User.findByEmail = async function (email) {
+    return await this.findOne({ where: { email } });
+  };
 
   // Update user
   static async update(id, updates) {
