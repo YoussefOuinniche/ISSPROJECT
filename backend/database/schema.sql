@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS users (
     email                   VARCHAR(255) UNIQUE NOT NULL,
     password_hash           VARCHAR(255),
     full_name               VARCHAR(255),
+    role                    VARCHAR(20) NOT NULL DEFAULT 'user',  -- 'user' | 'admin'
     refresh_token           TEXT,
     reset_password_token    TEXT,
     reset_password_expires  TIMESTAMP,
@@ -189,21 +190,23 @@ ON CONFLICT (id) DO NOTHING;
 --                    password : Adm!n@SP#2026
 --                    bcrypt hash (cost 12) shown below
 -- ============================================================
-INSERT INTO users (id, email, password_hash, full_name) VALUES
+INSERT INTO users (id, email, password_hash, full_name, role) VALUES
     -- ── The four team members ────────────────────────────────────
-    ('20000000-0000-0000-0000-000000000001', 'omar.tentouch@skillpulse.io',    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Omar Tentouch'),
-    ('20000000-0000-0000-0000-000000000002', 'tamjid.trabelsi@skillpulse.io',  '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Tamjid Trabelsi'),
-    ('20000000-0000-0000-0000-000000000003', 'youssef.ouenniche@skillpulse.io','$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Youssef Ouenniche'),
-    ('20000000-0000-0000-0000-000000000004', 'rayen.chanchah@skillpulse.io',   '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Rayen Chanchah'),
+    ('20000000-0000-0000-0000-000000000001', 'omar.tentouch@skillpulse.io',    '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Omar Tentouch',     'user'),
+    ('20000000-0000-0000-0000-000000000002', 'tamjid.trabelsi@skillpulse.io',  '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Tamjid Trabelsi',   'user'),
+    ('20000000-0000-0000-0000-000000000003', 'youssef.ouenniche@skillpulse.io','$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Youssef Ouenniche', 'user'),
+    ('20000000-0000-0000-0000-000000000004', 'rayen.chanchah@skillpulse.io',   '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Rayen Chanchah',    'user'),
     -- ── Additional users ─────────────────────────────────────────
-    ('20000000-0000-0000-0000-000000000005', 'sara.benmoussa@skillpulse.io',   '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Sara Benmoussa'),
-    ('20000000-0000-0000-0000-000000000006', 'karim.ajroudi@skillpulse.io',    '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Karim Ajroudi'),
-    ('20000000-0000-0000-0000-000000000007', 'lina.dridi@skillpulse.io',       '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Lina Dridi'),
-    ('20000000-0000-0000-0000-000000000008', 'mohamed.khelil@skillpulse.io',   '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Mohamed Khelil'),
-    ('20000000-0000-0000-0000-000000000009', 'nadia.boukhalfa@skillpulse.io',  '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Nadia Boukhalfa'),
+    ('20000000-0000-0000-0000-000000000005', 'sara.benmoussa@skillpulse.io',   '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Sara Benmoussa',    'user'),
+    ('20000000-0000-0000-0000-000000000006', 'karim.ajroudi@skillpulse.io',    '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Karim Ajroudi',     'user'),
+    ('20000000-0000-0000-0000-000000000007', 'lina.dridi@skillpulse.io',       '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Lina Dridi',        'user'),
+    ('20000000-0000-0000-0000-000000000008', 'mohamed.khelil@skillpulse.io',   '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Mohamed Khelil',    'user'),
+    ('20000000-0000-0000-0000-000000000009', 'nadia.boukhalfa@skillpulse.io',  '$2b$10$CfnFCxSeWrKkONM1Vl1E.uoYuHUxOl98M7iMZXk7aBrnP.piTku.O', 'Nadia Boukhalfa',   'user'),
     -- ── Admin (cost-12 hash of  Adm!n@SP#2026 ) ─────────────────
-    ('20000000-0000-0000-0000-000000000010', 'admin@skillpulse.io',            '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj/opbMoFvSi', 'SkillPulse Admin')
-ON CONFLICT (id) DO NOTHING;
+    ('20000000-0000-0000-0000-000000000010', 'admin@skillpulse.io',            '$2b$12$52c4.KbFuz0cV2KfzrBuyuQctVBGPKpEyA/cSIoIjsCDuQ.j.QUq2', 'SkillPulse Admin',  'admin')
+ON CONFLICT (id) DO UPDATE
+    SET password_hash = EXCLUDED.password_hash,
+        role         = EXCLUDED.role;
 
 -- ============================================================
 -- SEED: Profiles

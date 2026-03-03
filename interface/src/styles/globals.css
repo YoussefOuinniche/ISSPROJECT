@@ -1,0 +1,114 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --bg-app: 7 12 21;
+  --bg-surface: 15 22 35;
+  --bg-elevated: 19 30 48;
+
+  --border-subtle: 148 163 184;
+  --border-strong: 56 189 248;
+
+  --text-primary: 241 245 249;
+  --text-secondary: 203 213 225;
+  --text-muted: 148 163 184;
+
+  --brand: 34 211 238;
+  --brand-foreground: 8 47 73;
+
+  --success: 34 197 94;
+  --warn: 245 158 11;
+  --danger: 239 68 68;
+
+  --motion-fast: 150ms;
+  --motion-normal: 250ms;
+  --motion-slow: 350ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 1ms;
+    --motion-normal: 1ms;
+    --motion-slow: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    background: rgb(var(--bg-app));
+    color: rgb(var(--text-primary));
+    font-family: Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    margin: 0;
+  }
+
+  h1 {
+    font-size: clamp(1.875rem, 1.4rem + 1.5vw, 2rem);
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-size: clamp(1rem, 0.95rem + 0.4vw, 1.125rem);
+    line-height: 1.3;
+    font-weight: 600;
+  }
+
+  p {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    color: rgb(var(--text-secondary));
+  }
+
+  *:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(15, 22, 35, 1), 0 0 0 4px rgba(34, 211, 238, 0.65);
+    border-radius: 0.5rem;
+  }
+}
+
+@layer utilities {
+  .glass-surface {
+    background: linear-gradient(180deg, rgba(15, 22, 35, 0.86), rgba(15, 22, 35, 0.65));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+  }
+
+  .card-premium {
+    border-radius: 1.25rem;
+    border: 1px solid rgba(var(--border-subtle), 0.2);
+    background: rgb(var(--bg-surface));
+    box-shadow: 0 8px 30px rgba(2, 8, 23, 0.25);
+    transition-property: transform, box-shadow, border-color;
+    transition-duration: var(--motion-normal);
+    transition-timing-function: ease-out;
+  }
+
+  .card-premium:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 40px rgba(2, 8, 23, 0.45);
+    border-color: rgba(56, 189, 248, 0.35);
+  }
+
+  .text-meta {
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+  }
+}

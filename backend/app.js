@@ -4,7 +4,7 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 require('dotenv').config();
 
-const { pool } = require('./config/database');
+const { supabase } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 
 // Import routes
@@ -30,8 +30,8 @@ app.use(express.urlencoded({ extended: true }));
 // Health check route
 app.get('/health', async (req, res) => {
   try {
-    // Test database connection
-    await pool.query('SELECT NOW()');
+    const { error } = await supabase.from('users').select('id').limit(1);
+    if (error) throw error;
     res.status(200).json({
       success: true,
       message: 'Server is healthy',
@@ -72,7 +72,7 @@ const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════╗
-║   SecureHire AI Backend Server         ║
+║   Skill Pulse Backend Server           
 ║   Port: ${PORT}                        ║
 ║   Environment: ${process.env.NODE_ENV || 'development'}           ║
 ║   Status: Running ✓                    ║

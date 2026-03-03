@@ -1,136 +1,125 @@
-const { query } = require('../config/database');
+const { supabase } = require('../config/database');
 
 class Skill {
   // Create a new skill
   static async create(name, category) {
-    const text = `
-      INSERT INTO skills (name, category)
-      VALUES ($1, $2)
-      RETURNING *
-    `;
-    const values = [name, category];
-    const result = await query(text, values);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('skills')
+      .insert({ name, category })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Find skill by ID
   static async findById(id) {
-    const text = 'SELECT * FROM skills WHERE id = $1';
-    const result = await query(text, [id]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('skills')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
   }
 
   // Find skill by name
   static async findByName(name) {
-    const text = 'SELECT * FROM skills WHERE name = $1';
-    const result = await query(text, [name]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('skills')
+      .select('*')
+      .eq('name', name)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
   }
 
   // Get all skills
   static async findAll(limit = 100, offset = 0) {
-    const text = `
-      SELECT * FROM skills 
-      ORDER BY name ASC
-      LIMIT $1 OFFSET $2
-    `;
-    const result = await query(text, [limit, offset]);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('skills')
+      .select('*')
+      .order('name', { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return data || [];
   }
 
   // Get skills by category
   static async findByCategory(category, limit = 100, offset = 0) {
-    const text = `
-      SELECT * FROM skills 
-      WHERE category = $1
-      ORDER BY name ASC
-      LIMIT $2 OFFSET $3
-    `;
-    const result = await query(text, [category, limit, offset]);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('skills')
+      .select('*')
+      .eq('category', category)
+      .order('name', { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return data || [];
   }
 
   // Search skills by name
   static async search(searchTerm, limit = 20) {
-    const text = `
-      SELECT * FROM skills 
-      WHERE name ILIKE $1
-      ORDER BY name ASC
-      LIMIT $2
-    `;
-    const result = await query(text, [`%${searchTerm}%`, limit]);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('skills')
+      .select('*')
+      .ilike('name', `%${searchTerm}%`)
+      .order('name', { ascending: true })
+      .limit(limit);
+    if (error) throw error;
+    return data || [];
   }
 
   // Update skill
   static async update(id, updates) {
-    const fields = [];
-    const values = [];
-    let paramCount = 1;
-
+    const dbUpdates = {};
     Object.keys(updates).forEach(key => {
-      if (updates[key] !== undefined) {
-        fields.push(`${key} = $${paramCount}`);
-        values.push(updates[key]);
-        paramCount++;
-      }
+      if (updates[key] !== undefined) dbUpdates[key] = updates[key];
     });
-
-    if (fields.length === 0) {
-      throw new Error('No fields to update');
-    }
-
-    values.push(id);
-    const text = `
-      UPDATE skills 
-      SET ${fields.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING *
-    `;
-    
-    const result = await query(text, values);
-    return result.rows[0];
+    if (Object.keys(dbUpdates).length === 0) throw new Error('No fields to update');
+    const { data, error } = await supabase
+      .from('skills')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Delete skill
   static async delete(id) {
-    const text = 'DELETE FROM skills WHERE id = $1 RETURNING *';
-    const result = await query(text, [id]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('skills')
+      .delete()
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Get all unique categories
   static async getCategories() {
-    const text = `
-      SELECT DISTINCT category 
-      FROM skills 
-      WHERE category IS NOT NULL
-      ORDER BY category ASC
-    `;
-    const result = await query(text);
-    return result.rows.map(row => row.category);
+    const { data, error } = await supabase
+      .from('skills')
+      .select('category')
+      .not('category', 'is', null)
+      .order('category', { ascending: true });
+    if (error) throw error;
+    return [...new Set((data || []).map(r => r.category))];
   }
 
-  // Bulk create skills
+  // Bulk create skills (ignore duplicates)
   static async bulkCreate(skills) {
-    const values = [];
-    const placeholders = [];
-    
-    skills.forEach((skill, index) => {
-      const offset = index * 2;
-      placeholders.push(`($${offset + 1}, $${offset + 2})`);
-      values.push(skill.name, skill.category);
-    });
-
-    const text = `
-      INSERT INTO skills (name, category)
-      VALUES ${placeholders.join(', ')}
-      ON CONFLICT (name) DO NOTHING
-      RETURNING *
-    `;
-    
-    const result = await query(text, values);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('skills')
+      .upsert(
+        skills.map(s => ({ name: s.name, category: s.category })),
+        { onConflict: 'name', ignoreDuplicates: true }
+      )
+      .select();
+    if (error) throw error;
+    return data || [];
   }
 }
 

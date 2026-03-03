@@ -1,210 +1,300 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import api from '../api';
+import AnimatedButton from '../components/ui/AnimatedButton';
+import MotionCard from '../components/ui/MotionCard';
+import { useToast } from '../components/ui/Toast';
+
+// Animated skills bar chart
+const SkillsChart = ({ data }) => {
+  if (!data || data.length === 0) {
+    return (
+      <div className="h-40 flex items-center justify-center text-slate-500 text-sm">
+        No skill data available
+      </div>
+    );
+  }
+  const max = Math.max(...data.map(d => d.count));
+  const palette = [
+    'from-cyan-500 to-blue-500',
+    'from-purple-500 to-pink-500',
+    'from-green-500 to-emerald-400',
+    'from-orange-500 to-amber-400',
+    'from-rose-500 to-red-500',
+    'from-indigo-500 to-violet-500',
+  ];
+  return (
+    <div className="flex items-end gap-3 px-2" style={{ height: '140px' }}>
+      {data.map((d, i) => {
+        const pct = Math.max(6, Math.round((d.count / max) * 100));
+        return (
+          <div key={d.name} className="flex-1 flex flex-col items-center gap-1.5 group">
+            <span className="text-xs font-bold text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              {d.count}
+            </span>
+            <div className="w-full relative" style={{ height: '100px' }}>
+              <div
+                className={`absolute bottom-0 left-0 right-0 rounded-t-lg bg-gradient-to-t ${palette[i % palette.length]}
+                            skill-bar opacity-80 group-hover:opacity-100 transition-opacity duration-200`}
+                style={{ height: `${pct}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-slate-400 text-center leading-tight max-w-full truncate block">
+              {d.name}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const colorMap = {
+  blue:   { gradient: 'from-blue-600/20 to-blue-900/10',    border: 'border-blue-500/20',   icon: 'text-blue-400',   badge: 'text-blue-300 bg-blue-500/10',   glow: 'hover:shadow-blue-500/10'   },
+  purple: { gradient: 'from-purple-600/20 to-purple-900/10', border: 'border-purple-500/20', icon: 'text-purple-400', badge: 'text-purple-300 bg-purple-500/10', glow: 'hover:shadow-purple-500/10' },
+  green:  { gradient: 'from-green-600/20 to-green-900/10',   border: 'border-green-500/20',  icon: 'text-green-400',  badge: 'text-green-300 bg-green-500/10',  glow: 'hover:shadow-green-500/10'  },
+  orange: { gradient: 'from-orange-600/20 to-orange-900/10', border: 'border-orange-500/20', icon: 'text-orange-400', badge: 'text-orange-300 bg-orange-500/10', glow: 'hover:shadow-orange-500/10' },
+};
+
+const activityColorMap = {
+  blue:   'bg-blue-500/10 text-blue-400',
+  orange: 'bg-orange-500/10 text-orange-400',
+  green:  'bg-green-500/10 text-green-400',
+  red:    'bg-red-500/10 text-red-400',
+};
 
 const Dashboard = () => {
+  const navigate = useNavigate();
+  const toast = useToast();
   const [timeRange, setTimeRange] = useState('30d');
   const [stats, setStats] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
+  const [skillsByCategory, setSkillsByCategory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState(null);
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadDashboard() {
-      try {
-        const res = await api.get('/api/public/dashboard');
-        if (!mounted) return;
-        if (res && res.data && res.data.data) {
-          setStats(res.data.data.stats || []);
-          setRecentActivities(res.data.data.recentActivities || []);
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard data', err);
+  const loadDashboard = useCallback(async () => {
+    try {
+      const res = await api.get('/api/public/dashboard');
+      if (res?.data?.data) {
+        const { stats, recentActivities, skillsByCategory } = res.data.data;
+        setStats(stats || []);
+        setRecentActivities(recentActivities || []);
+        setSkillsByCategory(skillsByCategory || []);
+        setLastUpdated(new Date());
       }
+    } catch (err) {
+      console.error('Failed to load dashboard data', err);
+    } finally {
+      setLoading(false);
     }
-
-    loadDashboard();
-    return () => {
-      mounted = false;
-    };
   }, []);
 
+  useEffect(() => {
+    loadDashboard();
+    const interval = setInterval(loadDashboard, 30000);
+    const onGlobalRefresh = () => loadDashboard();
+    window.addEventListener('skillpulse:refresh', onGlobalRefresh);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('skillpulse:refresh', onGlobalRefresh);
+    };
+  }, [loadDashboard]);
+
+  const exportCsv = () => {
+    if (!stats.length) {
+      toast.info('No dashboard data to export');
+      return;
+    }
+    const rows = [
+      ['Title', 'Value', 'DisplayValue', 'Change', 'Label'],
+      ...stats.map((item) => [item.title, item.value, item.displayValue, item.change, item.changeLabel]),
+    ];
+    const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `dashboard-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Dashboard CSV exported');
+  };
+
+  const onCardClick = (title) => {
+    const map = {
+      'Total Users': '/users',
+      'Skills Tracked': '/content?type=Skill',
+      'Active Trends': '/analytics?focus=trends',
+      'Skill Gaps': '/analytics?focus=skill-gaps',
+    };
+    const destination = map[title];
+    if (destination) navigate(destination);
+  };
+
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark">
-      {/* Header */}
-      <div className="border-b border-slate-200 dark:border-[#292e38] bg-white dark:bg-[#1a1f2e] px-6 py-4">
+    <div className="min-h-screen bg-[#080c14]">
+      {/* Page Header */}
+      <div className="border-b border-white/5 bg-[#0f1623]/60 backdrop-blur-sm px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Overview</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Welcome back, Alex Rivera
+            <h1 className="text-2xl font-bold text-white">Overview</h1>
+            <p className="text-sm text-slate-400 mt-0.5 flex items-center gap-2">
+              Real-time platform statistics
+              {lastUpdated && (
+                <span className="text-xs text-slate-600 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                  Updated {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-              <span className="material-symbols-outlined text-xl">download</span>
+            <AnimatedButton
+              onClick={loadDashboard}
+              disabled={loading}
+              variant="ghost"
+              className="text-slate-400"
+            >
+              <span className={`material-symbols-outlined text-xl ${loading ? 'animate-spin' : ''}`}>refresh</span>
+              Refresh
+            </AnimatedButton>
+            <AnimatedButton variant="gradient" className="text-white" onClick={exportCsv}>
+              <span className="material-symbols-outlined text-xl">downloading</span>
               Export
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors">
-              <span className="material-symbols-outlined text-xl">add</span>
-              New Report
-            </button>
+            </AnimatedButton>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="p-6">
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {stats.map((stat, index) => (
-            <div
-              key={index}
-              className="bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <span className="material-symbols-outlined text-primary text-2xl">
-                    {stat.icon}
-                  </span>
-                </div>
-              </div>
-              <h3 className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-                {stat.title}
-              </h3>
-              <div className="flex items-end justify-between">
-                <p className="text-3xl font-bold text-slate-900 dark:text-white">
-                  {stat.value}
-                </p>
-                <div className="flex items-center gap-1">
-                  <span
-                    className={`text-sm font-medium ${
-                      stat.positive ? 'text-green-500' : 'text-red-500'
-                    }`}
-                  >
-                    {stat.change}
-                  </span>
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 mt-1">{stat.changeLabel}</p>
-            </div>
-          ))}
-        </div>
+      <div className="p-6 space-y-6">
+        {/* Stat Cards */}
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="rounded-2xl h-40 bg-white/5 animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {stats.map((stat, index) => {
+              const g = colorMap[stat.color] || colorMap.blue;
+              return (
+                <MotionCard
+                  key={index}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, delay: index * 0.06 }}
+                  whileHover={{ y: -6 }}
+                  className={`relative rounded-2xl border ${g.border} bg-gradient-to-br ${g.gradient}
+                              hover:shadow-xl ${g.glow} hover:-translate-y-1.5
+                              transition-all duration-300 backdrop-blur-sm overflow-hidden
+                              group p-6 stat-card cursor-pointer`}
+                  onClick={() => onCardClick(stat.title)}
+                >
+                  <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full blur-3xl
+                                  bg-white/5 group-hover:bg-white/10 transition-opacity duration-300" />
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                      <span className={`material-symbols-outlined text-2xl ${g.icon}`}>{stat.icon}</span>
+                    </div>
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${g.badge}`}>
+                      {stat.change}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-1 font-medium">{stat.title}</p>
+                  <p className="text-3xl font-bold text-white tabular-nums">{stat.displayValue}</p>
+                  <p className="text-xs text-slate-600 mt-1.5">{stat.changeLabel}</p>
+                </MotionCard>
+              );
+            })}
+          </div>
+        )}
 
-        {/* Charts and Activity */}
+        {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* User Growth Trends */}
-          <div className="lg:col-span-2 bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6">
+          {/* Bar Chart */}
+          <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-[#0f1623]/80 backdrop-blur-sm p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  User Growth Trends
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Daily acquisition rate for the last 30 days
+                <h2 className="text-lg font-bold text-white">Skills by Category</h2>
+                <p className="text-sm text-slate-400 mt-0.5">
+                  Distribution across {skillsByCategory.reduce((a, b) => a + b.count, 0)} tracked skills
                 </p>
               </div>
-              <div className="flex gap-2">
-                <button
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    timeRange === '30d'
-                      ? 'bg-primary text-white'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                  onClick={() => setTimeRange('30d')}
-                >
-                  30D
-                </button>
-                <button
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    timeRange === '90d'
-                      ? 'bg-primary text-white'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                  onClick={() => setTimeRange('90d')}
-                >
-                  90D
-                </button>
-                <button
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    timeRange === '1y'
-                      ? 'bg-primary text-white'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                  onClick={() => setTimeRange('1y')}
-                >
-                  1Y
-                </button>
+              <div className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
+                {['30d', '90d', '1y'].map(r => (
+                  <AnimatedButton
+                    key={r}
+                    onClick={() => setTimeRange(r)}
+                    size="sm"
+                    variant={timeRange === r ? 'gradient' : 'ghost'}
+                    className={`text-xs font-semibold transition-all duration-200
+                      ${timeRange === r
+                        ? 'text-white shadow-sm shadow-cyan-500/20'
+                        : 'text-slate-500 hover:text-white'}`}
+                  >
+                    {r.toUpperCase()}
+                  </AnimatedButton>
+                ))}
               </div>
             </div>
-            {/* Chart Placeholder */}
-            <div className="h-64 flex items-center justify-center bg-slate-50 dark:bg-[#111621] rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700">
-              <div className="text-center">
-                <span className="material-symbols-outlined text-6xl text-slate-400">
-                  insert_chart
+            {loading ? (
+              <div className="h-40 bg-white/5 rounded-xl animate-pulse" />
+            ) : (
+              <SkillsChart data={skillsByCategory} />
+            )}
+            <div className="mt-4 flex items-center gap-3 flex-wrap">
+              {skillsByCategory.map((d, i) => (
+                <span key={d.name} className="flex items-center gap-1.5 text-xs text-slate-500">
+                  <span className="w-2 h-2 rounded-sm inline-block" style={{
+                    background: ['#06b6d4','#a855f7','#10b981','#f97316','#ef4444','#6366f1'][i % 6]
+                  }} />
+                  {d.name} ({d.count})
                 </span>
-                <p className="text-slate-500 dark:text-slate-400 mt-2">
-                  Chart visualization area
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between mt-4 text-xs text-slate-500">
-              <span>MAY 01</span>
-              <span>MAY 10</span>
-              <span>MAY 20</span>
-              <span>MAY 30</span>
+              ))}
             </div>
           </div>
 
-          {/* Recent Activity */}
-          <div className="bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                Recent Activity
-              </h2>
-              <button className="text-sm text-primary hover:text-primary/80 font-medium">
-                View All
-              </button>
+          {/* Recent Members */}
+          <div className="rounded-2xl border border-white/5 bg-[#0f1623]/80 backdrop-blur-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold text-white">Recent Members</h2>
+              <span className="text-xs font-medium text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/5 flex items-center gap-1.5">
+                Live <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+              </span>
             </div>
-            <div className="space-y-4">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex gap-3">
+            {loading ? (
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className="h-12 bg-white/5 rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentActivities.map((activity, index) => (
                   <div
-                    className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
-                      activity.color === 'blue'
-                        ? 'bg-blue-500/10'
-                        : activity.color === 'orange'
-                        ? 'bg-orange-500/10'
-                        : activity.color === 'green'
-                        ? 'bg-green-500/10'
-                        : 'bg-red-500/10'
-                    }`}
+                    key={index}
+                    className="flex gap-3 p-2.5 rounded-xl hover:bg-white/5 border border-transparent
+                               hover:border-white/5 transition-all duration-200 group"
                   >
-                    <span
-                      className={`material-symbols-outlined text-xl ${
-                        activity.color === 'blue'
-                          ? 'text-blue-500'
-                          : activity.color === 'orange'
-                          ? 'text-orange-500'
-                          : activity.color === 'green'
-                          ? 'text-green-500'
-                          : 'text-red-500'
-                      }`}
-                    >
-                      {activity.icon}
-                    </span>
+                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center
+                                    ${activityColorMap[activity.color] || activityColorMap.blue}
+                                    transition-transform duration-200 group-hover:scale-110`}>
+                      <span className="material-symbols-outlined text-base">{activity.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">{activity.user}</p>
+                      <p className="text-xs text-slate-500 truncate">{activity.action}</p>
+                      <p className="text-xs text-slate-700 mt-0.5">{activity.time}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-900 dark:text-white">
-                      <span className="font-medium text-primary">{activity.user}</span>{' '}
-                      {activity.action}
-                    </p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                      {activity.time}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -213,3 +303,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+

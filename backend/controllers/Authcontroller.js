@@ -3,16 +3,16 @@ const Profile = require('../models/Profile');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-// Generate JWT token
-const generateToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+// Generate JWT token — embeds role so middleware can enforce admin-only routes
+const generateToken = (userId, role) => {
+  return jwt.sign({ id: userId, role }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRE
   });
 };
 
 // Generate refresh token
-const generateRefreshToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_REFRESH_SECRET, {
+const generateRefreshToken = (userId, role) => {
+  return jwt.sign({ id: userId, role }, process.env.JWT_REFRESH_SECRET, {
     expiresIn: process.env.JWT_REFRESH_EXPIRE
   });
 };
@@ -49,8 +49,8 @@ class AuthController {
       }
 
       // Generate tokens
-      const token = generateToken(user.id);
-      const refreshToken = generateRefreshToken(user.id);
+      const token = generateToken(user.id, user.role || 'user');
+      const refreshToken = generateRefreshToken(user.id, user.role || 'user');
 
       // Save refresh token
       await User.updateRefreshToken(user.id, refreshToken);
@@ -62,7 +62,8 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
-            fullName: user.full_name
+            fullName: user.full_name,
+            role: user.role || 'user'
           },
           token,
           refreshToken
@@ -109,9 +110,17 @@ class AuthController {
         });
       }
 
+      // This panel is admin-only
+      if ((user.role || 'user') !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: admin credentials required'
+        });
+      }
+
       // Generate tokens
-      const token = generateToken(user.id);
-      const refreshToken = generateRefreshToken(user.id);
+      const token = generateToken(user.id, user.role);
+      const refreshToken = generateRefreshToken(user.id, user.role);
 
       // Save refresh token
       await User.updateRefreshToken(user.id, refreshToken);
@@ -123,7 +132,8 @@ class AuthController {
           user: {
             id: user.id,
             email: user.email,
-            fullName: user.full_name
+            fullName: user.full_name,
+            role: user.role
           },
           token,
           refreshToken
@@ -154,9 +164,13 @@ class AuthController {
       // Verify refresh token
       const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
       
+      // Fetch the user so we can re-embed the current role
+      const user = await User.findById(decoded.id);
+      if (!user) throw new Error('User not found');
+
       // Generate new tokens
-      const newToken = generateToken(decoded.id);
-      const newRefreshToken = generateRefreshToken(decoded.id);
+      const newToken = generateToken(decoded.id, user.role || 'user');
+      const newRefreshToken = generateRefreshToken(decoded.id, user.role || 'user');
 
       // Update refresh token in database
       await User.updateRefreshToken(decoded.id, newRefreshToken);

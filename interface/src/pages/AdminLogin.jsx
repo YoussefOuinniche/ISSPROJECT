@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
 import { setAuthTokens, setUser } from '../utils/auth';
+import AnimatedButton from '../components/ui/AnimatedButton';
+import { useToast } from '../components/ui/Toast';
 import './AdminLogin.css';
 import '../components/Logo3D.css';
 
 const AdminLogin = ({ onLogin }) => {
   const navigate = useNavigate();
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -41,11 +44,16 @@ const AdminLogin = ({ onLogin }) => {
         setError(response.data.message || 'Login failed');
       }
     } catch (err) {
-      setError(
-        err.response?.data?.message || 
-        err.message || 
-        'Login failed. Please check your credentials.'
-      );
+      const status = err.response?.status;
+      const msg = err.response?.data?.message;
+
+      if (status === 403) {
+        setError('This portal is for admin accounts only.');
+      } else if (status === 401) {
+        setError('Invalid email or password.');
+      } else {
+        setError(msg || err.message || 'Login failed. Please check your credentials.');
+      }
     } finally {
       setLoading(false);
     }
@@ -53,6 +61,25 @@ const AdminLogin = ({ onLogin }) => {
 
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
+  };
+
+  const openSupport = () => {
+    window.open('mailto:support@skillpulse.com?subject=Admin%20Portal%20Support', '_blank');
+    toast.info('Opening support email');
+  };
+
+  const openSecurityPolicy = () => {
+    window.open('https://example.com/security-policy', '_blank', 'noopener,noreferrer');
+    toast.info('Opening security policy');
+  };
+
+  const forgotPassword = (event) => {
+    event.preventDefault();
+    if (!email) {
+      toast.info('Enter your email to request a reset');
+      return;
+    }
+    toast.success(`Password reset instructions sent to ${email}`);
   };
 
   return (
@@ -75,9 +102,9 @@ const AdminLogin = ({ onLogin }) => {
           </div>
         </div>
         <div className="flex flex-1 justify-end gap-8">
-          <button className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-primary/90 transition-colors">
+          <AnimatedButton variant="gradient" size="md" className="min-w-[84px] text-sm font-bold leading-normal tracking-[0.015em]" onClick={openSupport} type="button">
             <span className="truncate">Support</span>
-          </button>
+          </AnimatedButton>
         </div>
       </header>
 
@@ -99,7 +126,7 @@ const AdminLogin = ({ onLogin }) => {
                 Welcome back
               </h1>
               <p className="text-slate-500 dark:text-slate-400 text-base font-normal leading-normal text-center mt-2 px-4">
-                Please enter your credentials to manage the mobile app.
+                Please enter your admin credentials to manage the platform.
               </p>
             </div>
 
@@ -140,15 +167,17 @@ const AdminLogin = ({ onLogin }) => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
-                  <button
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors"
+                  <AnimatedButton
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary min-w-[40px]"
                     type="button"
                     onClick={togglePasswordVisibility}
                   >
                     <span className="material-symbols-outlined text-xl">
                       {showPassword ? 'visibility_off' : 'visibility'}
                     </span>
-                  </button>
+                  </AnimatedButton>
                 </div>
               </div>
 
@@ -168,6 +197,7 @@ const AdminLogin = ({ onLogin }) => {
                 <a
                   className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
                   href="#"
+                  onClick={forgotPassword}
                 >
                   Forgot password?
                 </a>
@@ -181,13 +211,16 @@ const AdminLogin = ({ onLogin }) => {
               )}
 
               {/* Login Button */}
-              <button
-                className="w-full flex cursor-pointer items-center justify-center rounded-lg h-14 bg-primary text-white text-base font-bold leading-normal tracking-wide hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+              <AnimatedButton
+                variant="gradient"
+                size="lg"
+                fullWidth
+                className="text-base font-bold leading-normal tracking-wide"
                 type="submit"
                 disabled={loading}
               >
                 {loading ? 'Signing in...' : 'Sign In'}
-              </button>
+              </AnimatedButton>
             </form>
 
             {/* Help Footer */}
@@ -199,6 +232,10 @@ const AdminLogin = ({ onLogin }) => {
                 <a
                   className="flex items-center gap-1 text-xs text-slate-500 hover:text-primary transition-colors"
                   href="#"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    openSupport();
+                  }}
                 >
                   <span className="material-symbols-outlined text-sm">contact_support</span>
                   Technical Support
@@ -206,6 +243,10 @@ const AdminLogin = ({ onLogin }) => {
                 <a
                   className="flex items-center gap-1 text-xs text-slate-500 hover:text-primary transition-colors"
                   href="#"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    openSecurityPolicy();
+                  }}
                 >
                   <span className="material-symbols-outlined text-sm">verified_user</span>
                   Security Policy

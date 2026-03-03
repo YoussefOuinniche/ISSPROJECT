@@ -1,47 +1,43 @@
 /**
- * Database pool loader.
- * Attempts to create a real Postgres Pool when DATABASE_URL or PG* env vars are present.
- * Otherwise exports a lightweight mock pool with `query()` and `end()` so the app can run in dev.
+ * Database client — uses @supabase/supabase-js (HTTPS-based).
+ *
+ * Why: Supabase free-tier projects migrated to IPv6-only direct connections.
+ * The old pg / DATABASE_URL approach fails with ENOTFOUND on db.*.supabase.co.
+ * The Supabase JS client communicates over HTTPS, which always works.
+ *
+ * Required .env variables:
+ *   SUPABASE_URL              https://<project-ref>.supabase.co
+ *   SUPABASE_SERVICE_ROLE_KEY  sb_secret_...  (from Project Settings → API)
  */
-const { env } = process;
+const _env = process.env; // keep reference before dotenv mutates
 
-let pool;
+const { createClient } = require('@supabase/supabase-js');
 
-if (env.DATABASE_URL || env.PGHOST || env.PGHOSTADDR) {
-  try {
-    const { Pool } = require('pg');
-    const config = {};
-    if (env.DATABASE_URL) {
-      config.connectionString = env.DATABASE_URL;
-    } else {
-      config.host = env.PGHOST;
-      config.port = env.PGPORT ? parseInt(env.PGPORT, 10) : 5432;
-      config.user = env.PGUSER;
-      config.password = env.PGPASSWORD;
-      config.database = env.PGDATABASE;
-    }
-    pool = new Pool(config);
-    // Simple test to surface connection errors later (not executed here)
-  } catch (err) {
-    // If pg isn't available, fall back to mock below
-    console.warn('pg not available or failed to load, falling back to mock pool', err.message || err);
+const supabaseUrl = _env.SUPABASE_URL;
+const supabaseKey = _env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('[DB] SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing in .env');
+  console.error('[DB] Get them from: Supabase Dashboard → Project Settings → API');
+}
+
+const supabase = createClient(supabaseUrl || '', supabaseKey || '', {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+});
+
+// Test connectivity at startup so misconfiguration shows immediately.
+(async () => {
+  const { error } = await supabase.from('users').select('id').limit(1);
+  if (error) {
+    console.error('[DB] Supabase connectivity test failed:', error.message);
+    console.error('[DB] Verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env');
+    console.error('[DB] Also make sure the schema has been applied (Backend/database/schema.sql)');
+  } else {
+    console.log('[DB] Supabase connected successfully via HTTPS.');
   }
-}
+})();
 
-if (!pool) {
-  // Mock pool for local/dev when a real DB isn't configured or `pg` isn't installed.
-  pool = {
-    async query(sql, params) {
-      // Very small heuristic: if the app checks time, return now
-      if (typeof sql === 'string' && /SELECT\s+NOW\(\)/i.test(sql)) {
-        return { rows: [{ now: new Date().toISOString() }] };
-      }
-      return { rows: [] };
-    },
-    async end() {
-      return;
-    }
-  };
-}
-
-module.exports = { pool };
+module.exports = { supabase };

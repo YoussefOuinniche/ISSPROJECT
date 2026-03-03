@@ -1,113 +1,111 @@
 
 
-const { query } = require('../config/database');
+const { supabase } = require('../config/database');
 
 class Profile {
   // Create a new profile
   static async create(userId, profileData) {
     const { domain, title, experienceLevel, bio } = profileData;
-    const text = `
-      INSERT INTO profiles (user_id, domain, title, experience_level, bio)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `;
-    const values = [userId, domain, title, experienceLevel, bio];
-    const result = await query(text, values);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert({ user_id: userId, domain, title, experience_level: experienceLevel, bio })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Find profile by user ID
   static async findByUserId(userId) {
-    const text = 'SELECT * FROM profiles WHERE user_id = $1';
-    const result = await query(text, [userId]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
   }
 
   // Find profile by ID
   static async findById(id) {
-    const text = 'SELECT * FROM profiles WHERE id = $1';
-    const result = await query(text, [id]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return data;
   }
 
   // Update profile
   static async update(userId, updates) {
-    const fields = [];
-    const values = [];
-    let paramCount = 1;
-
+    const dbUpdates = {};
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {
-        // Convert camelCase to snake_case for database columns
         const dbKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-        fields.push(`${dbKey} = $${paramCount}`);
-        values.push(updates[key]);
-        paramCount++;
+        dbUpdates[dbKey] = updates[key];
       }
     });
-
-    if (fields.length === 0) {
-      throw new Error('No fields to update');
-    }
-
-    values.push(userId);
-    const text = `
-      UPDATE profiles 
-      SET ${fields.join(', ')}
-      WHERE user_id = $${paramCount}
-      RETURNING *
-    `;
-    
-    const result = await query(text, values);
-    return result.rows[0];
+    if (Object.keys(dbUpdates).length === 0) throw new Error('No fields to update');
+    const { data, error } = await supabase
+      .from('profiles')
+      .update(dbUpdates)
+      .eq('user_id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Update last analysis timestamp
   static async updateLastAnalysis(userId) {
-    const text = `
-      UPDATE profiles 
-      SET last_analysis_at = NOW()
-      WHERE user_id = $1
-      RETURNING *
-    `;
-    const result = await query(text, [userId]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ last_analysis_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Delete profile
   static async delete(userId) {
-    const text = 'DELETE FROM profiles WHERE user_id = $1 RETURNING *';
-    const result = await query(text, [userId]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('profiles')
+      .delete()
+      .eq('user_id', userId)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
-  // Get profile with user information
+  // Get profile with user information (PostgREST embedded join)
   static async getFullProfile(userId) {
-    const text = `
-      SELECT 
-        p.*,
-        u.email,
-        u.full_name,
-        u.created_at as user_created_at
-      FROM profiles p
-      JOIN users u ON p.user_id = u.id
-      WHERE p.user_id = $1
-    `;
-    const result = await query(text, [userId]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, users(email, full_name, created_at)')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    const { users: user, ...profile } = data;
+    return { ...profile, email: user?.email, full_name: user?.full_name, user_created_at: user?.created_at };
   }
 
-  // Get all profiles (admin function)
+  // Get all profiles (admin)
   static async findAll(limit = 50, offset = 0) {
-    const text = `
-      SELECT p.*, u.email, u.full_name
-      FROM profiles p
-      JOIN users u ON p.user_id = u.id
-      ORDER BY p.created_at DESC
-      LIMIT $1 OFFSET $2
-    `;
-    const result = await query(text, [limit, offset]);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*, users(email, full_name)')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return (data || []).map(row => {
+      const { users: user, ...profile } = row;
+      return { ...profile, email: user?.email, full_name: user?.full_name };
+    });
   }
 }
 
