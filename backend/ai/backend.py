@@ -227,6 +227,11 @@ class FreeAnalysisRequest(BaseModel):
     target_role: str
 
 
+class ResearchRequest(BaseModel):
+    """Query the IT jobs research pipeline."""
+    question: str = Field(..., min_length=5)
+
+
 # FastAPI application & middleware
 
 @asynccontextmanager
@@ -500,6 +505,29 @@ async def analyze_free(req: FreeAnalysisRequest):
         f"Target role: {req.target_role}\n\n"
         "Provide a complete analysis."
     )
+    result = chat_json(FREE_ANALYSIS_SYSTEM, user_prompt)
+    return {"success": True, "data": result}
+
+
+@app.post("/research")
+async def research(req: ResearchRequest):
+    """
+    Answer an IT career / job market question using live-scraped data.
+
+    Calls the scraper pipeline (BLS OOH → Remotive → HN Who's Hiring?)
+    and passes the aggregated context to the local LLM to generate an answer.
+    """
+    # Lazy import avoids any circular-import issue at startup
+    from scraper import main as scraper_main  # noqa: PLC0415
+
+    try:
+        answer = scraper_main(req.question)
+    except Exception as exc:
+        logger.error("Scraper pipeline error: %s", exc)
+        raise HTTPException(
+            status_code=503, detail=f"Scraper pipeline failed: {exc}"
+        )
+    return {"success": True, "answer": answer}
     result = chat_json(FREE_ANALYSIS_SYSTEM, user_prompt)
     return {"success": True, "data": result}
 
