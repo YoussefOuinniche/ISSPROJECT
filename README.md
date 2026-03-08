@@ -1,124 +1,198 @@
-## SkillPulse : AI-Powered Career Development & Upskilling Platform
+# SkillPulse — AI-Powered Career Development & Upskilling Platform
 
-## Project Overview
+## Overview
 
-SkillPulse is an intelligent mobile application designed to bridge the gap between IT students, junior professionals, and the evolving job market. The platform leverages AI to analyze user profiles, identify skill gaps, and provide personalized learning pathways that align with current industry demands. By focusing on continuous upskilling and career development, the system helps users build competitive profiles while navigating the rapidly changing technology landscape.
+SkillPulse bridges the gap between IT students, junior professionals, and the evolving job market. The platform leverages AI to analyze user profiles, identify skill gaps, and deliver personalized learning pathways aligned with current industry demands.
 
-## Core Objective
+---
 
-The primary mission is to **empower IT professionals through intelligent upskilling**, enabling them to:
+## Architecture
 
-- Understand their current skill positioning in the job market
-- Identify critical skill gaps preventing them from landing desired roles
-- Access personalized, step-by-step learning roadmaps
-- Track their professional development progress over time
+```
+┌─────────────────────┐     REST API      ┌──────────────────────┐
+│   React Admin UI    │ ◄───────────────► │  Node.js / Express   │
+│  (Vite + Tailwind)  │                   │     Backend API       │
+└─────────────────────┘                   └──────────┬───────────┘
+                                                     │
+                                          ┌──────────▼───────────┐
+                                          │     PostgreSQL DB     │
+                                          └──────────────────────┘
+                                                     │
+                                          ┌──────────▼───────────┐
+                                          │  Python FastAPI (AI)  │
+                                          │  RAG · TF-IDF · LLM  │
+                                          └──────────────────────┘
+```
 
-## System Capabilities
+---
 
-The platform will provide comprehensive career development support through:
+## Tech Stack
 
-### 1. **Intelligent Profile Analysis**
+| Layer | Technology |
+|---|---|
+| **Admin Frontend** | React 18, Vite, Tailwind CSS, React Router v6, Axios |
+| **Backend API** | Node.js, Express 4, CommonJS |
+| **Database** | PostgreSQL (via `pg` driver) |
+| **Authentication** | JWT (`jsonwebtoken`), bcrypt password hashing |
+| **Validation** | `express-validator` |
+| **AI Service** | Python 3, FastAPI, Uvicorn |
+| **RAG / NLP** | `scikit-learn` TF-IDF, `pypdf`, DuckDuckGo search fallback |
+| **LLM Interface** | OpenAI-compatible client (Ollama local LLM) |
 
-- Multi-dimensional skills assessment through structured questionnaires (if needed)
-- Skills taxonomy mapping across programming languages, frameworks, databases, cloud platforms, DevOps tools, and emerging technologies
+---
 
-### 2. **Job Market Intelligence**
+## Project Structure
 
-- Real-time job matching based on user competencies
-- Match scoring algorithm that quantifies alignment with job requirements
-- Trending skills analysis to highlight in-demand competencies
-- Role evolution insights showing how positions are transforming with AI adoption
+```
+├── Backend/
+│   ├── app.js                  # Express entry point (port 5000)
+│   ├── config/
+│   │   └── database.js         # PostgreSQL pool (mock fallback for dev)
+│   ├── routes/
+│   │   ├── Auth.js             # /api/auth
+│   │   ├── User.js             # /api/user
+│   │   ├── Skills.js           # /api/skills
+│   │   ├── Trends.js           # /api/trends
+│   │   └── Public.js           # /api/public
+│   ├── controllers/            # Route handler logic
+│   ├── models/                 # DB model helpers
+│   ├── middleware/             # auth, errorHandler, validate
+│   ├── database/
+│   │   └── schema.sql          # PostgreSQL schema
+│   └── ai/
+│       ├── backend.py          # FastAPI AI service
+│       ├── rag.py              # RAG pipeline
+│       ├── requirements.txt    # Python dependencies
+│       └── Articles/           # Knowledge base documents
+└── interface/
+    ├── src/
+    │   ├── pages/              # Dashboard, Analytics, Users, Settings, etc.
+    │   ├── components/         # Shared UI components
+    │   ├── api.js              # Axios API client
+    │   └── App.jsx             # Router root
+    └── vite.config.js
+```
 
-### 3. **Personalized Learning Pathways**
+---
 
-- AI-generated roadmaps that sequence skill acquisition logically
-- Adaptive learning plans based on current knowledge and target roles
-- Resource recommendations (courses, tutorials, documentation)
-- Time estimates and milestone tracking for skill development
+## API Endpoints
 
-### 4. **Progress Tracking & Motivation**
+### Authentication — `/api/auth`
+| Method | Path | Description |
+|---|---|---|
+| POST | `/register` | Register new user |
+| POST | `/login` | Login and receive JWT |
+| POST | `/refresh-token` | Refresh access token |
+| POST | `/forgot-password` | Send password reset email |
+| POST | `/reset-password` | Reset with token |
+| GET | `/me` | Get current user (protected) |
+| POST | `/logout` | Invalidate session (protected) |
 
-- Skill acquisition milestones and completion tracking
-- Visual progress indicators showing journey from current to target state
-- Achievement recognition to maintain learning momentum
+### User — `/api/user` *(all protected)*
+| Method | Path | Description |
+|---|---|---|
+| GET/PUT/POST | `/profile` | Get or upsert user profile |
+| PUT | `/update` | Update account details |
+| DELETE | `/account` | Delete account |
+| GET/POST | `/skills` | List or add user skills |
+| PUT/DELETE | `/skills/:skillId` | Update or remove a skill |
+| GET | `/skill-gaps` | Computed skill gap analysis |
+| GET | `/recommendations` | Personalized learning recommendations |
+| GET | `/dashboard` | Aggregated dashboard data |
 
-## Scope of Work
+### Skills — `/api/skills`
+| Method | Path | Access |
+|---|---|---|
+| GET | `/` `/search` `/categories` `/:id` `/:id/stats` | Public |
+| POST/PUT/DELETE | `/` `/bulk` `/:id` | Admin (protected) |
 
-- Develop cross-platform mobile application using React Native Expo
-- Create intuitive user interfaces for profile setup
-- Implement seamless API integration with backend services
-- Ensure responsive, mobile-first design optimized for learning on-the-go
-- Build robust API infrastructure using Node.js (Express)
-- Design and implement a MongoDB database schema for users
-- Develop RESTful endpoints for authentication, roadmap generation, and analytics
-- Construct comprehensive IT skills taxonomy covering modern tech stacks
-- Build adaptive learning roadmap generator using skills gap analysis
-- Design project recommendation system that maps missing skills
-- Implement an algorithm for identifying trending and emerging skills
-- Develop web-based administrative interface for platform management
-- Create job posting management system (add/edit/delete/curate)
-- Build analytics dashboards showing:
-    - Most sought-after job roles
-    - Top skill gaps across the user base
-    - Learning pathway completion rates
-    - Emerging skill trends
-- Implement data quality tools for job posting curation and validation
+### Trends — `/api/trends`
+| Method | Path | Access |
+|---|---|---|
+| GET | `/` `/recent` `/search` `/domains` `/:id` | Public |
+| POST/PUT/DELETE | `/` `/bulk` `/:id` | Admin (protected) |
 
-## Technologies Used
+---
 
-### **Frontend**
+## Getting Started
 
-- **Mobile App**: React Native Expo
-- **Admin Dashboard**: React.js for web interface
+### Prerequisites
+- Node.js ≥ 18
+- PostgreSQL ≥ 14
+- Python ≥ 3.10
+- Ollama (for local LLM inference)
 
-### **Backend**
+### 1. Database Setup
+```sql
+-- Run the schema
+psql -U <user> -d <dbname> -f Backend/database/schema.sql
+```
 
-- **Server**: Node.js with Express
-- **Database**: MongoDB for flexible document storage
-- **Authentication**: JWT-based secure authentication
+### 2. Backend API
+```bash
+cd Backend
+cp .env.example .env      # configure DATABASE_URL, JWT_SECRET, etc.
+npm install
+npm start                  # runs on http://localhost:5000
+```
 
-### **AI & Intelligence**
+Required `.env` variables:
+```
+DATABASE_URL=postgresql://user:password@localhost:5432/skillpulse
+JWT_SECRET=your_jwt_secret
+JWT_REFRESH_SECRET=your_refresh_secret
+PORT=5000
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:5173
+```
 
-- **Matching Algorithms**: Custom scoring algorithms for skill-job alignment
-- **Recommendation Engine**: Rule-based and data-driven approach for personalized pathways
+### 3. AI Service
+```bash
+cd Backend/ai
+pip install -r requirements.txt
+uvicorn backend:app --reload --port 8000
+```
 
-### **Additional Tools**
+### 4. Admin Frontend
+```bash
+cd interface
+npm install
+npm run dev                # runs on http://localhost:5173
+```
 
-- **Data Visualization**: Chart libraries for analytics dashboards
-- **Version Control**: GitHub for collaborative development
+---
 
-## Expected Impact
+## Core Features
 
-### **For Job Seekers**
+### Intelligent Profile Analysis
+- Skills taxonomy across programming languages, frameworks, databases, cloud platforms, and DevOps tools
+- User skill self-assessment and gap computation
 
-- **Clarity on Career Direction**: Understand exactly what skills are needed for target roles
-- **Efficient Learning**: Follow structured pathways instead of random skill acquisition
-- **Portfolio Development**: Build demonstrable projects that attract employers
-- **Confidence Building**: Track measurable progress toward career goals
+### Job Market Intelligence
+- Trending skills tracking by domain
+- Skill demand analytics across the user base
 
-### **For the IT Industry**
+### AI-Powered Recommendations
+- RAG pipeline combining local PDF articles with DuckDuckGo web search
+- TF-IDF cosine similarity for document retrieval
+- Ollama-backed LLM response generation
 
-- **Reduced Skill Gaps**: Better-prepared candidates entering the workforce
-- **Talent Pipeline**: Identification of motivated learners committed to growth
-- **Market Intelligence**: Aggregate data on skill demand and supply trends
+### Admin Dashboard
+- User management and analytics
+- Skill and trend CRUD management
+- Platform-wide learning pathway analytics
 
-### **For Workforce Sustainability**
+---
 
-- **Continuous Upskilling Culture**: Promotes lifelong learning mindset
-- **Adaptation to AI Era**: Helps professionals stay relevant as AI transforms roles
-- **Reduced Unemployment**: Equips individuals to pivot and reskill proactively
+## Health Check
 
-## Final Deliverables
+```
+GET /health
+→ { "success": true, "database": "connected", "timestamp": "..." }
+```
 
-- Fully functional mobile application (iOS/Android)
-- Backend API with comprehensive documentation
-- Curated job dataset with diverse IT roles
-- AI-powered recommendation engine
-- Web-based administrative dashboard
-- Project documentation, including architecture diagrams
-- Demo video showcasing end-to-end user journey
-- Final project report with insights and future roadmap
+---
 
 ## Keywords
 
-AI-powered upskilling, career development platform, skill gap analysis, personalized learning pathways, IT workforce development, job matching algorithm, portfolio building, professional skill assessment, adaptive learning roadmaps, mobile career platform
+AI-powered upskilling · career development · skill gap analysis · personalized learning pathways · IT workforce development · RAG · PostgreSQL · FastAPI · React · Node.js

@@ -1,5 +1,5 @@
-const Skill = require('../models/Skill');
-const UserSkill = require('../models/Userskill');
+// pull initialized models from central index so static helpers are available
+const { Skill, UserSkill } = require('../models');
 
 class SkillController {
   // Get all skills

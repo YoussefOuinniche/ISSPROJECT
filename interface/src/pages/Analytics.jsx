@@ -1,327 +1,175 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './Analytics.css';
+import api from '../api';
+import AnimatedButton from '../components/ui/AnimatedButton';
+import MotionCard from '../components/ui/MotionCard';
 
 const Analytics = () => {
-  const [selectedPeriod, setSelectedPeriod] = useState('7d');
-  const [selectedMetric, setSelectedMetric] = useState('users');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [metrics, setMetrics] = useState({ users: 0, profiles: 0, userSkills: 0, trends: 0, avgSkillsPerUser: 0 });
+  const [roleBreakdown, setRoleBreakdown] = useState([]);
+  const [proficiencyBreakdown, setProficiencyBreakdown] = useState([]);
+  const [topSkillCategories, setTopSkillCategories] = useState([]);
+  const [topGapDomains, setTopGapDomains] = useState([]);
 
-  const metrics = [
-    {
-      title: 'Page Views',
-      value: '245.8K',
-      change: '+18.2%',
-      icon: 'visibility',
-      color: 'blue'
-    },
-    {
-      title: 'Unique Visitors',
-      value: '89.4K',
-      change: '+12.5%',
-      icon: 'person',
-      color: 'green'
-    },
-    {
-      title: 'Avg. Session',
-      value: '4m 32s',
-      change: '+8.1%',
-      icon: 'schedule',
-      color: 'purple'
-    },
-    {
-      title: 'Bounce Rate',
-      value: '42.3%',
-      change: '-5.2%',
-      icon: 'exit_to_app',
-      color: 'red'
+  const loadAnalytics = async () => {
+    try {
+      setError('');
+      const res = await api.get('/api/public/admin/analytics');
+      const data = res?.data?.data;
+      if (data) {
+        setMetrics(data.metrics || {});
+        setRoleBreakdown(data.roleBreakdown || []);
+        setProficiencyBreakdown(data.proficiencyBreakdown || []);
+        setTopSkillCategories(data.topSkillCategories || []);
+        setTopGapDomains(data.topGapDomains || []);
+      }
+    } catch (err) {
+      console.error('Failed to load analytics data', err);
+      setError('Failed to load analytics data from database.');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const topPages = [
-    { page: '/dashboard', views: '45.2K', time: '5m 12s', rate: '38%' },
-    { page: '/products', views: '38.7K', time: '3m 45s', rate: '42%' },
-    { page: '/pricing', views: '32.4K', time: '4m 20s', rate: '35%' },
-    { page: '/about', views: '28.9K', time: '2m 58s', rate: '48%' },
-    { page: '/contact', views: '24.1K', time: '3m 30s', rate: '40%' }
-  ];
+  useEffect(() => {
+    loadAnalytics();
+  }, []);
 
-  const trafficSources = [
-    { source: 'Organic Search', visitors: '52.3K', percentage: 58, color: 'bg-blue-500' },
-    { source: 'Direct', visitors: '28.4K', percentage: 32, color: 'bg-green-500' },
-    { source: 'Social Media', visitors: '12.7K', percentage: 14, color: 'bg-purple-500' },
-    { source: 'Referral', visitors: '8.9K', percentage: 10, color: 'bg-orange-500' },
-    { source: 'Email', visitors: '6.1K', percentage: 7, color: 'bg-pink-500' }
-  ];
+  const totalRoles = useMemo(() => roleBreakdown.reduce((sum, row) => sum + row.count, 0), [roleBreakdown]);
+  const totalProficiency = useMemo(() => proficiencyBreakdown.reduce((sum, row) => sum + row.count, 0), [proficiencyBreakdown]);
+  const maxCategory = useMemo(() => Math.max(1, ...topSkillCategories.map((row) => row.count)), [topSkillCategories]);
+  const maxGap = useMemo(() => Math.max(1, ...topGapDomains.map((row) => row.count)), [topGapDomains]);
 
-  const deviceStats = [
-    { device: 'Desktop', percentage: 62, count: '55.4K' },
-    { device: 'Mobile', percentage: 32, count: '28.6K' },
-    { device: 'Tablet', percentage: 6, count: '5.4K' }
+  const metricCards = [
+    { title: 'Users', value: metrics.users ?? 0, icon: 'group', iconClass: 'text-cyan-400', bgClass: 'bg-cyan-500/10' },
+    { title: 'Profiles', value: metrics.profiles ?? 0, icon: 'badge', iconClass: 'text-blue-400', bgClass: 'bg-blue-500/10' },
+    { title: 'User Skills', value: metrics.userSkills ?? 0, icon: 'neurology', iconClass: 'text-purple-400', bgClass: 'bg-purple-500/10' },
+    { title: 'Trends', value: metrics.trends ?? 0, icon: 'trending_up', iconClass: 'text-green-400', bgClass: 'bg-green-500/10' },
+    { title: 'Avg Skills/User', value: metrics.avgSkillsPerUser ?? 0, icon: 'calculate', iconClass: 'text-orange-400', bgClass: 'bg-orange-500/10' },
   ];
 
   return (
-    <div className="min-h-screen bg-background-light dark:bg-background-dark">
-      {/* Header */}
-      <div className="border-b border-slate-200 dark:border-[#292e38] bg-white dark:bg-[#1a1f2e] px-6 py-4">
+    <div className="min-h-screen bg-[#080c14]">
+      <div className="border-b border-white/5 bg-[#0f1623]/60 backdrop-blur-sm px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Analytics</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-              Track and analyze your platform performance
-            </p>
+            <h1 className="text-2xl font-bold text-white">Analytics</h1>
+            <p className="text-sm text-slate-400 mt-0.5">All indicators derived from current database rows</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
-              {['24h', '7d', '30d', '90d'].map((period) => (
-                <button
-                  key={period}
-                  onClick={() => setSelectedPeriod(period)}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    selectedPeriod === period
-                      ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
-                      : 'text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  {period}
-                </button>
-              ))}
-            </div>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors">
-              <span className="material-symbols-outlined text-xl">download</span>
-              Export Report
-            </button>
-          </div>
+          <AnimatedButton
+            onClick={loadAnalytics}
+            variant="ghost"
+            className="text-slate-300"
+          >
+            <span className="material-symbols-outlined text-xl">refresh</span>
+            Refresh
+          </AnimatedButton>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="p-6">
-        {/* Key Metrics */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {metrics.map((metric, index) => (
-            <div
-              key={index}
-              className="bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-lg transition-shadow"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div
-                  className={`p-3 rounded-lg ${
-                    metric.color === 'blue'
-                      ? 'bg-blue-500/10'
-                      : metric.color === 'green'
-                      ? 'bg-green-500/10'
-                      : metric.color === 'purple'
-                      ? 'bg-purple-500/10'
-                      : 'bg-red-500/10'
-                  }`}
-                >
-                  <span
-                    className={`material-symbols-outlined text-2xl ${
-                      metric.color === 'blue'
-                        ? 'text-blue-500'
-                        : metric.color === 'green'
-                        ? 'text-green-500'
-                        : metric.color === 'purple'
-                        ? 'text-purple-500'
-                        : 'text-red-500'
-                    }`}
-                  >
-                    {metric.icon}
-                  </span>
+      <div className="p-6 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+          {metricCards.map((card) => (
+            <MotionCard key={card.title} whileHover={{ y: -4 }} className="rounded-2xl border border-white/10 bg-[#0f1623]/80 p-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl ${card.bgClass}`}>
+                  <span className={`material-symbols-outlined text-xl ${card.iconClass}`}>{card.icon}</span>
                 </div>
-                <span
-                  className={`text-sm font-medium ${
-                    metric.change.startsWith('+') ? 'text-green-500' : 'text-red-500'
-                  }`}
-                >
-                  {metric.change}
-                </span>
+                <div>
+                  <p className="text-xs text-slate-500">{card.title}</p>
+                  <p className="text-2xl font-bold text-white tabular-nums">{loading ? '—' : card.value}</p>
+                </div>
               </div>
-              <h3 className="text-sm text-slate-500 dark:text-slate-400 mb-1">
-                {metric.title}
-              </h3>
-              <p className="text-3xl font-bold text-slate-900 dark:text-white">
-                {metric.value}
-              </p>
-            </div>
+            </MotionCard>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Chart Area */}
-          <div className="lg:col-span-2 bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-                  Traffic Overview
-                </h2>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                  Visitor trends for the selected period
-                </p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedMetric('users')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    selectedMetric === 'users'
-                      ? 'bg-primary text-white'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  Users
-                </button>
-                <button
-                  onClick={() => setSelectedMetric('sessions')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    selectedMetric === 'sessions'
-                      ? 'bg-primary text-white'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  Sessions
-                </button>
-              </div>
-            </div>
-            {/* Chart Placeholder */}
-            <div className="h-80 flex items-center justify-center bg-slate-50 dark:bg-[#111621] rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700">
-              <div className="text-center">
-                <span className="material-symbols-outlined text-6xl text-slate-400">
-                  trending_up
-                </span>
-                <p className="text-slate-500 dark:text-slate-400 mt-2">
-                  Traffic chart visualization
-                </p>
-              </div>
-            </div>
-          </div>
+        {error && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>}
 
-          {/* Traffic Sources */}
-          <div className="bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
-              Traffic Sources
-            </h2>
-            <div className="space-y-4">
-              {trafficSources.map((source, index) => (
-                <div key={index}>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      {source.source}
-                    </span>
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
-                      {source.visitors}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                    <div
-                      className={`${source.color} h-2 rounded-full transition-all duration-300`}
-                      style={{ width: `${source.percentage}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-xs text-slate-400 mt-1 block">
-                    {source.percentage}%
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-          {/* Top Pages */}
-          <div className="bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
-              Top Pages
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="border-b border-slate-200 dark:border-slate-800">
-                  <tr>
-                    <th className="text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase pb-3">
-                      Page
-                    </th>
-                    <th className="text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase pb-3">
-                      Views
-                    </th>
-                    <th className="text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase pb-3">
-                      Avg. Time
-                    </th>
-                    <th className="text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase pb-3">
-                      Bounce
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {topPages.map((page, index) => (
-                    <tr key={index}>
-                      <td className="py-3 text-sm text-slate-900 dark:text-white font-medium">
-                        {page.page}
-                      </td>
-                      <td className="py-3 text-sm text-slate-700 dark:text-slate-300 text-right">
-                        {page.views}
-                      </td>
-                      <td className="py-3 text-sm text-slate-700 dark:text-slate-300 text-right">
-                        {page.time}
-                      </td>
-                      <td className="py-3 text-sm text-slate-700 dark:text-slate-300 text-right">
-                        {page.rate}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Device Stats */}
-          <div className="bg-white dark:bg-[#1a1f2e] rounded-xl border border-slate-200 dark:border-slate-800 p-6">
-            <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-6">
-              Device Breakdown
-            </h2>
-            <div className="space-y-6">
-              {deviceStats.map((device, index) => (
-                <div key={index}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <span className="material-symbols-outlined text-slate-400">
-                        {device.device === 'Desktop'
-                          ? 'computer'
-                          : device.device === 'Mobile'
-                          ? 'smartphone'
-                          : 'tablet'}
-                      </span>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                        {device.device}
-                      </span>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div className="rounded-2xl border border-white/10 bg-[#0f1623]/80 p-6">
+            <h2 className="text-lg font-bold text-white mb-5">Role Breakdown</h2>
+            <div className="space-y-3">
+              {(loading ? [] : roleBreakdown).map((row) => {
+                const pct = totalRoles ? Math.round((row.count / totalRoles) * 100) : 0;
+                return (
+                  <div key={row.name}>
+                    <div className="flex items-center justify-between mb-1.5 text-sm">
+                      <span className="text-slate-300 capitalize">{row.name}</span>
+                      <span className="text-slate-500">{row.count} ({pct}%)</span>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                        {device.count}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {device.percentage}%
-                      </p>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-cyan-500" style={{ width: `${pct}%` }} />
                     </div>
                   </div>
-                  <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-                    <div
-                      className="bg-primary h-2 rounded-full transition-all duration-300"
-                      style={{ width: `${device.percentage}%` }}
-                    ></div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
+              {!loading && roleBreakdown.length === 0 && <p className="text-sm text-slate-500">No role data found.</p>}
             </div>
+          </div>
 
-            {/* Total */}
-            <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                  Total Devices
-                </span>
-                <span className="text-lg font-bold text-slate-900 dark:text-white">
-                  89.4K
-                </span>
-              </div>
+          <div className="rounded-2xl border border-white/10 bg-[#0f1623]/80 p-6">
+            <h2 className="text-lg font-bold text-white mb-5">Proficiency Levels</h2>
+            <div className="space-y-3">
+              {(loading ? [] : proficiencyBreakdown).map((row) => {
+                const pct = totalProficiency ? Math.round((row.count / totalProficiency) * 100) : 0;
+                return (
+                  <div key={row.name}>
+                    <div className="flex items-center justify-between mb-1.5 text-sm">
+                      <span className="text-slate-300 capitalize">{row.name}</span>
+                      <span className="text-slate-500">{row.count} ({pct}%)</span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-purple-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {!loading && proficiencyBreakdown.length === 0 && <p className="text-sm text-slate-500">No proficiency data found.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-[#0f1623]/80 p-6">
+            <h2 className="text-lg font-bold text-white mb-5">Top Skill Categories</h2>
+            <div className="space-y-3">
+              {(loading ? [] : topSkillCategories).map((row) => {
+                const pct = Math.round((row.count / maxCategory) * 100);
+                return (
+                  <div key={row.name}>
+                    <div className="flex items-center justify-between mb-1.5 text-sm">
+                      <span className="text-slate-300">{row.name}</span>
+                      <span className="text-slate-500">{row.count}</span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-green-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {!loading && topSkillCategories.length === 0 && <p className="text-sm text-slate-500">No skill category data found.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-[#0f1623]/80 p-6">
+            <h2 className="text-lg font-bold text-white mb-5">Top Skill Gap Domains</h2>
+            <div className="space-y-3">
+              {(loading ? [] : topGapDomains).map((row) => {
+                const pct = Math.round((row.count / maxGap) * 100);
+                return (
+                  <div key={row.name}>
+                    <div className="flex items-center justify-between mb-1.5 text-sm">
+                      <span className="text-slate-300">{row.name}</span>
+                      <span className="text-slate-500">{row.count}</span>
+                    </div>
+                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-orange-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+              {!loading && topGapDomains.length === 0 && <p className="text-sm text-slate-500">No skill gap domain data found.</p>}
             </div>
           </div>
         </div>

@@ -7,6 +7,8 @@ import Users from './pages/Users';
 import Content from './pages/Content';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import Profile from './pages/Profile';
+import ErrorBoundary from './components/ErrorBoundary';
 import { isAuthenticated as checkAuth, clearAuthTokens } from './utils/auth';
 import api from './api';
 
@@ -56,8 +58,11 @@ function App() {
   // Show loading state while checking authentication
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background-light dark:bg-background-dark">
-        <div className="text-slate-600 dark:text-slate-400">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#080c14]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-2 border-cyan-500/30 border-t-cyan-500 animate-spin" />
+          <p className="text-slate-500 text-sm">Loading SkillPulse...</p>
+        </div>
       </div>
     );
   }
@@ -79,14 +84,17 @@ function App() {
         element={
           isAuthenticated ? (
             <Layout onLogout={handleLogout}>
-              <Routes>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/users" element={<Users />} />
-                <Route path="/content" element={<Content />} />
-                <Route path="/analytics" element={<Analytics />} />
-                <Route path="/settings" element={<Settings />} />
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              </Routes>
+              <ErrorBoundary>
+                <Routes>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/users" element={<Users />} />
+                  <Route path="/content" element={<Content />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                </Routes>
+              </ErrorBoundary>
             </Layout>
           ) : (
             <Navigate to="/login" replace />

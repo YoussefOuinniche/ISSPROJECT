@@ -1,192 +1,176 @@
-const { query } = require('../config/database');
+const { supabase } = require('../config/database');
 
 class Recommendation {
   // Create a new recommendation
   static async create(userId, recommendationData) {
     const { type, title, content, skillName, skillId, trendTitle, trendId } = recommendationData;
-    const text = `
-      INSERT INTO recommendations (user_id, type, title, content, skill_name, skill_id, trend_title, trend_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
-    `;
-    const values = [userId, type, title, content, skillName || null, skillId || null, trendTitle || null, trendId || null];
-    const result = await query(text, values);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('recommendations')
+      .insert({
+        user_id: userId, type, title, content,
+        skill_name: skillName || null, skill_id: skillId || null,
+        trend_title: trendTitle || null, trend_id: trendId || null,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Get all recommendations for a user
   static async findByUserId(userId, limit = 50, offset = 0) {
-    const text = `
-      SELECT 
-        r.*,
-        s.name as skill_full_name,
-        s.category as skill_category,
-        t.title as trend_full_title,
-        t.domain as trend_domain
-      FROM recommendations r
-      LEFT JOIN skills s ON r.skill_id = s.id
-      LEFT JOIN trends t ON r.trend_id = t.id
-      WHERE r.user_id = $1
-      ORDER BY r.created_at DESC
-      LIMIT $2 OFFSET $3
-    `;
-    const result = await query(text, [userId, limit, offset]);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('recommendations')
+      .select('*, skills(name, category), trends(title, domain)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (error) throw error;
+    return (data || []).map(r => _flattenRec(r));
   }
 
   // Get recommendations by type
   static async findByUserAndType(userId, type, limit = 20) {
-    const text = `
-      SELECT 
-        r.*,
-        s.name as skill_full_name,
-        s.category as skill_category,
-        t.title as trend_full_title,
-        t.domain as trend_domain
-      FROM recommendations r
-      LEFT JOIN skills s ON r.skill_id = s.id
-      LEFT JOIN trends t ON r.trend_id = t.id
-      WHERE r.user_id = $1 AND r.type = $2
-      ORDER BY r.created_at DESC
-      LIMIT $3
-    `;
-    const result = await query(text, [userId, type, limit]);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('recommendations')
+      .select('*, skills(name, category), trends(title, domain)')
+      .eq('user_id', userId)
+      .eq('type', type)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data || []).map(r => _flattenRec(r));
   }
 
   // Find recommendation by ID
   static async findById(id) {
-    const text = `
-      SELECT 
-        r.*,
-        s.name as skill_full_name,
-        s.category as skill_category,
-        t.title as trend_full_title,
-        t.domain as trend_domain
-      FROM recommendations r
-      LEFT JOIN skills s ON r.skill_id = s.id
-      LEFT JOIN trends t ON r.trend_id = t.id
-      WHERE r.id = $1
-    `;
-    const result = await query(text, [id]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('recommendations')
+      .select('*, skills(name, category), trends(title, domain)')
+      .eq('id', id)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? _flattenRec(data) : null;
   }
 
   // Update recommendation
   static async update(id, updates) {
-    const fields = [];
-    const values = [];
-    let paramCount = 1;
-
+    const dbUpdates = {};
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {
         const dbKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
-        fields.push(`${dbKey} = $${paramCount}`);
-        values.push(updates[key]);
-        paramCount++;
+        dbUpdates[dbKey] = updates[key];
       }
     });
-
-    if (fields.length === 0) {
-      throw new Error('No fields to update');
-    }
-
-    values.push(id);
-    const text = `
-      UPDATE recommendations 
-      SET ${fields.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING *
-    `;
-    
-    const result = await query(text, values);
-    return result.rows[0];
+    if (Object.keys(dbUpdates).length === 0) throw new Error('No fields to update');
+    const { data, error } = await supabase
+      .from('recommendations')
+      .update(dbUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Delete recommendation
   static async delete(id) {
-    const text = 'DELETE FROM recommendations WHERE id = $1 RETURNING *';
-    const result = await query(text, [id]);
-    return result.rows[0];
+    const { data, error } = await supabase
+      .from('recommendations')
+      .delete()
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
   }
 
   // Delete all recommendations for a user
   static async deleteAllByUserId(userId) {
-    const text = 'DELETE FROM recommendations WHERE user_id = $1';
-    const result = await query(text, [userId]);
-    return result.rowCount;
+    const { error, count } = await supabase
+      .from('recommendations')
+      .delete()
+      .eq('user_id', userId);
+    if (error) throw error;
+    return count;
   }
 
   // Delete recommendations by type
   static async deleteByUserAndType(userId, type) {
-    const text = 'DELETE FROM recommendations WHERE user_id = $1 AND type = $2';
-    const result = await query(text, [userId, type]);
-    return result.rowCount;
+    const { error, count } = await supabase
+      .from('recommendations')
+      .delete()
+      .eq('user_id', userId)
+      .eq('type', type);
+    if (error) throw error;
+    return count;
   }
 
-  // Get recommendation counts by type
+  // Get recommendation counts by type (computed in JS)
   static async getRecommendationStats(userId) {
-    const text = `
-      SELECT 
-        type,
-        COUNT(*) as count
-      FROM recommendations
-      WHERE user_id = $1
-      GROUP BY type
-      ORDER BY count DESC
-    `;
-    const result = await query(text, [userId]);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('recommendations')
+      .select('type')
+      .eq('user_id', userId);
+    if (error) throw error;
+    const counts = {};
+    (data || []).forEach(r => { counts[r.type] = (counts[r.type] || 0) + 1; });
+    return Object.entries(counts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
   }
 
   // Get recent recommendations
   static async getRecentRecommendations(userId, days = 7, limit = 10) {
-    const text = `
-      SELECT 
-        r.*,
-        s.name as skill_full_name,
-        t.title as trend_full_title
-      FROM recommendations r
-      LEFT JOIN skills s ON r.skill_id = s.id
-      LEFT JOIN trends t ON r.trend_id = t.id
-      WHERE r.user_id = $1 
-      AND r.created_at >= NOW() - INTERVAL '${days} days'
-      ORDER BY r.created_at DESC
-      LIMIT $2
-    `;
-    const result = await query(text, [userId, limit]);
-    return result.rows;
+    const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+    const { data, error } = await supabase
+      .from('recommendations')
+      .select('*, skills(name), trends(title)')
+      .eq('user_id', userId)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    return (data || []).map(r => ({
+      ...r,
+      skill_full_name: r.skills?.name,
+      trend_full_title: r.trends?.title,
+      skills: undefined,
+      trends: undefined,
+    }));
   }
 
   // Bulk create recommendations
   static async bulkCreate(userId, recommendations) {
-    const values = [];
-    const placeholders = [];
-    
-    recommendations.forEach((rec, index) => {
-      const offset = index * 8;
-      placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`);
-      values.push(
-        userId,
-        rec.type,
-        rec.title,
-        rec.content,
-        rec.skillName || null,
-        rec.skillId || null,
-        rec.trendTitle || null,
-        rec.trendId || null
-      );
-    });
-
-    const text = `
-      INSERT INTO recommendations (user_id, type, title, content, skill_name, skill_id, trend_title, trend_id)
-      VALUES ${placeholders.join(', ')}
-      RETURNING *
-    `;
-    
-    const result = await query(text, values);
-    return result.rows;
+    const { data, error } = await supabase
+      .from('recommendations')
+      .insert(recommendations.map(rec => ({
+        user_id: userId,
+        type: rec.type,
+        title: rec.title,
+        content: rec.content,
+        skill_name: rec.skillName || null,
+        skill_id: rec.skillId || null,
+        trend_title: rec.trendTitle || null,
+        trend_id: rec.trendId || null,
+      })))
+      .select();
+    if (error) throw error;
+    return data || [];
   }
+}
+
+// Helper: flatten embedded join fields onto the recommendation row
+function _flattenRec(r) {
+  return {
+    ...r,
+    skill_full_name: r.skills?.name,
+    skill_category: r.skills?.category,
+    trend_full_title: r.trends?.title,
+    trend_domain: r.trends?.domain,
+    skills: undefined,
+    trends: undefined,
+  };
 }
 
 module.exports = Recommendation;
