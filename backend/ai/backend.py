@@ -60,6 +60,11 @@ def chat_json(system_prompt: str, user_prompt: str) -> dict | list:
     if cleaned.endswith("```"):
         cleaned = cleaned.rsplit("```", 1)[0]
     cleaned = cleaned.strip()
+
+    import re as _re  # noqa: PLC0415
+    # Remove trailing commas before ] or } — a common small-model mistake
+    cleaned = _re.sub(r",\s*([}\]])", r"\1", cleaned)
+
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
@@ -68,8 +73,10 @@ def chat_json(system_prompt: str, user_prompt: str) -> dict | list:
             start = cleaned.find(start_char)
             end = cleaned.rfind(end_char)
             if start != -1 and end != -1 and end > start:
+                candidate = cleaned[start : end + 1]
+                candidate = _re.sub(r",\s*([}\]])", r"\1", candidate)
                 try:
-                    return json.loads(cleaned[start : end + 1])
+                    return json.loads(candidate)
                 except json.JSONDecodeError:
                     continue
         logger.warning("Could not parse LLM JSON. Raw response:\n%s", raw)
@@ -230,6 +237,12 @@ class FreeAnalysisRequest(BaseModel):
 class ResearchRequest(BaseModel):
     """Query the IT jobs research pipeline."""
     question: str = Field(..., min_length=5)
+
+
+class JobDescriptionRequest(BaseModel):
+    """Generate a structured IT job description with AI-integration analysis."""
+    role: str = Field(..., min_length=3, description="IT job role to analyse (must be IT domain)")
+    per_source_limit: int = Field(5, ge=1, le=10, description="Max results per scraper source")
 
 
 # FastAPI application & middleware
@@ -528,8 +541,189 @@ async def research(req: ResearchRequest):
             status_code=503, detail=f"Scraper pipeline failed: {exc}"
         )
     return {"success": True, "answer": answer}
-    result = chat_json(FREE_ANALYSIS_SYSTEM, user_prompt)
-    return {"success": True, "data": result}
+
+
+# ── IT-domain keyword fast-path guard ────────────────────────────────────────
+# A broad set of IT-related keywords used for a cheap pre-check before the
+# more expensive LLM domain-validation step.
+_IT_KEYWORDS = {
+    "software", "developer", "engineer", "devops", "data", "cloud", "network",
+    "security", "infrastructure", "architect", "database", "backend", "frontend",
+    "fullstack", "full-stack", "mobile", "web", " ai ", "ml ", " llm", "machine learning",
+    "deep learning", "cybersecurity", "sysadmin", "system admin", "it support",
+    "programmer", "python", "javascript", "typescript", "java", "golang", "rust",
+    "kubernetes", "docker", "aws", "azure", "gcp", "qa", "tester", "test engineer",
+    "product manager", "scrum", "agile", "api", "microservices", "platform engineer",
+    "site reliability", "sre", "technical lead", "tech lead", "cto", "ciso", "cio",
+    "solution architect", "solutions architect", "it consultant", "information technology",
+    "data scientist", "data analyst", "data engineer", "ml engineer", "ai engineer",
+    "ux engineer", "ui developer", "embedded", "firmware", "blockchain", "crypto",
+    "devsecops", "fintech engineer", "database admin", "dba", "erp", "crm developer",
+}
+
+
+def _looks_like_it_role(role: str) -> bool:
+    """Quick keyword pre-check — True if role string contains an IT keyword."""
+    r = role.lower()
+    return any(kw in r for kw in _IT_KEYWORDS)
+
+
+# ── Part-1 prompt: domain check + both job descriptions ─────────────────────
+JOB_DESC_SYSTEM_PART1 = """You are an expert IT workforce strategist.
+
+DOMAIN CHECK: Is the given role part of IT (software, data, cloud, security, network,
+DevOps, AI/ML, QA, embedded, blockchain, ERP/CRM, IT support, architecture, etc.)?
+If NOT IT, respond ONLY with:
+{"is_it_role": false, "error": "Role is not in the IT domain."}
+
+If IT, respond ONLY with valid JSON:
+{
+  "is_it_role": true,
+  "job_without_ai": {
+    "title": "Canonical IT job title",
+    "description": "2-sentence overview WITHOUT AI tooling",
+    "tasks": [
+      {"task": "Task description", "time_estimate": "X h/day"},
+      {"task": "...", "time_estimate": "..."}
+    ]
+  },
+  "job_with_ai": {
+    "title": "Same title - AI-Augmented",
+    "description": "2-sentence overview WITH AI tools integrated",
+    "tasks": [
+      {"task": "AI-enhanced task", "time_estimate": "X h/day (was Y h)"},
+      {"task": "...", "time_estimate": "..."}
+    ]
+  }
+}
+Include exactly 5 tasks per job. Return ONLY the JSON, no extra text."""
+
+# ── Part-2 prompt: analysis sections (gaps, recommendations, strategies) ─────
+JOB_DESC_SYSTEM_PART2 = """You are an expert AI-integration consultant for IT teams.
+
+Given an IT role and live market trends, produce ONLY this JSON:
+{
+  "skill_gaps": [
+    "Gap 1 that emerges when adopting AI workflows",
+    "Gap 2", "Gap 3", "Gap 4"
+  ],
+  "work_responsibility_transformations": [
+    "How responsibility X shifts from manual to AI-augmented",
+    "...", "...", "..."
+  ],
+  "ai_integration_recommendations": [
+    "Specific AI tool or practice to adopt and why",
+    "...", "...", "..."
+  ],
+  "workforce_development_strategies": [
+    "Concrete upskilling/reskilling strategy",
+    "...", "...", "..."
+  ],
+  "practical_advice_for_teams": [
+    "Day-to-day actionable advice for teams",
+    "...", "...", "..."
+  ]
+}
+At least 4 items per list. Promote balanced human-AI collaboration.
+Return ONLY the JSON, no extra text."""
+
+
+@app.post("/generate-job-description")
+async def generate_job_description(req: JobDescriptionRequest):
+    """
+    Generate a structured IT job description with a full AI-integration analysis.
+
+    Pipeline:
+      1. Fast keyword pre-check on the role name.
+      2. Scrape live IT job-market data from BLS OOH, Remotive, and HN.
+      3. Ask the local LLM (gemma3:1b) to validate the IT domain and produce the
+         7-section structured output grounded in the scraped trends.
+
+    Raises:
+        400 — role is not in the IT domain (as determined by the LLM).
+        503 — scraper or LLM unavailable.
+    """
+    from scraper import scrape_it_jobs_data  # noqa: PLC0415
+
+    role = req.role.strip()
+
+    # ── Fast pre-check ───────────────────────────────────────────────────────
+    # If the role clearly contains no IT-related keyword we can reject it
+    # immediately without calling the scraper or the LLM.
+    if not _looks_like_it_role(role):
+        # Still defer to the LLM for the authoritative domain decision —
+        # the keyword list is intentionally conservative to avoid false negatives.
+        logger.info("Role %r passed no keyword pre-check; delegating to LLM.", role)
+
+    # ── Scrape live IT trends ────────────────────────────────────────────────
+    try:
+        raw_results = scrape_it_jobs_data(role, per_source_limit=req.per_source_limit)
+    except Exception as exc:
+        logger.error("Scraper failed for role %r: %s", role, exc)
+        raw_results = []  # degrade gracefully; LLM will work from general knowledge
+
+    # Build a compact, token-efficient context block
+    import textwrap as _textwrap  # noqa: PLC0415
+    context_lines: list[str] = []
+    for idx, item in enumerate(raw_results[:15], start=1):
+        snippet = _textwrap.shorten(item.get("body", ""), width=500, placeholder="…")
+        context_lines.append(
+            f"[{idx}] {item.get('title', 'Result')} | {item.get('href', '')}\n{snippet}"
+        )
+    context_block = (
+        "\n\n".join(context_lines)
+        if context_lines
+        else "No live trend data available — rely on general IT industry knowledge."
+    )
+
+    base_prompt = (
+        f"Role to analyse: {role}\n\n"
+        f"Live IT job-market trends (scraped from BLS OOH, Remotive, HN Hiring):\n\n"
+        f"{context_block}\n\n"
+    )
+
+    # ── LLM call 1: domain validation + job descriptions ─────────────────────
+    part1 = chat_json(JOB_DESC_SYSTEM_PART1, base_prompt + "Generate the job descriptions now.")
+    # Normalise: small models (gemma3:1b) sometimes wrap the object in an array
+    if isinstance(part1, list):
+        part1 = next((x for x in part1 if isinstance(x, dict)), {})
+
+    # ── Domain validation gate ────────────────────────────────────────────────
+    if not part1.get("is_it_role", True):
+        raise HTTPException(
+            status_code=400,
+            detail=part1.get(
+                "error",
+                f"The role '{role}' is not in the IT domain. "
+                "This endpoint only analyses IT roles.",
+            ),
+        )
+
+    # ── LLM call 2: analysis sections ────────────────────────────────────────
+    part2 = chat_json(JOB_DESC_SYSTEM_PART2, base_prompt + "Generate the analysis sections now.")
+    if isinstance(part2, list):
+        part2 = next((x for x in part2 if isinstance(x, dict)), {})
+
+    return {
+        "success": True,
+        "role": role,
+        "scraped_sources": len(raw_results),
+        "data": {
+            "job_without_ai": part1.get("job_without_ai"),
+            "job_with_ai": part1.get("job_with_ai"),
+            "skill_gaps": part2.get("skill_gaps", []),
+            "work_responsibility_transformations": part2.get(
+                "work_responsibility_transformations", []
+            ),
+            "ai_integration_recommendations": part2.get(
+                "ai_integration_recommendations", []
+            ),
+            "workforce_development_strategies": part2.get(
+                "workforce_development_strategies", []
+            ),
+            "practical_advice_for_teams": part2.get("practical_advice_for_teams", []),
+        },
+    }
 
 
 @app.get("/models")

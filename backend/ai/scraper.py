@@ -64,7 +64,7 @@ logger = logging.getLogger("skillpulse-scraper")
 _HEADERS: dict[str, str] = {
     "User-Agent": (
         "SkillPulse-Research-Bot/1.0 "
-        "(academic project — IT career research; "
+        "(academic project - IT career research; "
         "source: github.com/skillpulse)"
     ),
     "Accept": "text/html,application/json,*/*;q=0.8",
