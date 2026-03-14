@@ -1,15 +1,3 @@
-"""
-test_job_description.py
-=======================
-End-to-end test for the /generate-job-description endpoint.
-
-Usage (with the backend server already running on port 8000):
-    python test_job_description.py
-
-Or run directly (starts the FastAPI app in-process, no server needed):
-    python test_job_description.py --direct
-"""
-
 import argparse
 import json
 import sys
@@ -32,6 +20,17 @@ def _sub(text: str) -> None:
     print(f"  {_SUB[2:]}")
 
 
+def _paragraph(label: str, text: str, indent: int = 2) -> None:
+    pad = " " * indent
+    wrapped = textwrap.fill(
+        str(text),
+        width=72,
+        initial_indent=f"{pad}{label}",
+        subsequent_indent=" " * len(f"{pad}{label}"),
+    )
+    print(wrapped)
+
+
 def _bullet(items: list, indent: int = 4) -> None:
     pad = " " * indent
     for item in items:
@@ -42,7 +41,6 @@ def _bullet(items: list, indent: int = 4) -> None:
 
 def _task_table(tasks: list) -> None:
     if not tasks:
-        print("    (none)")
         return
     col_w = 46
     print(f"    {'Task':<{col_w}}  Time Estimate")
@@ -62,6 +60,37 @@ def _task_table(tasks: list) -> None:
             print(f"    {line}")
 
 
+def _comparison_report(report: dict) -> None:
+    if not report:
+        return
+
+    introduction = report.get("introduction")
+    if introduction:
+        _paragraph("Introduction: ", introduction)
+
+    for point in report.get("comparison_points", []):
+        _sub(point.get("dimension", "Comparison Point"))
+        analysis = point.get("analysis")
+        if analysis:
+            _paragraph("Analysis: ", analysis, indent=4)
+
+    summary = report.get("summary")
+    if summary:
+        print()
+        _paragraph("Summary: ", summary)
+
+
+def _resolve_role(role: str | None) -> str:
+    if role and role.strip():
+        return role.strip()
+
+    while True:
+        user_role = input("Enter the IT job role to analyse: ").strip()
+        if user_role:
+            return user_role
+        print("[ERROR] Please enter a non-empty IT job role.\n")
+
+
 def print_result(data: dict, role: str, scraped_sources: int) -> None:
     """Pretty-print the full structured output."""
 
@@ -73,47 +102,61 @@ def print_result(data: dict, role: str, scraped_sources: int) -> None:
     # ── 1. Job Description WITHOUT AI ────────────────────────────────────────
     jwa = data.get("job_without_ai") or {}
     _heading("1. JOB DESCRIPTION (without AI integration)")
-    print(f"  Title      : {jwa.get('title', '—')}")
-    print()
-    desc = textwrap.fill(jwa.get("description", "—"), width=68,
-                         initial_indent="  Description: ",
-                         subsequent_indent="               ")
-    print(desc)
-    print()
-    print("  Tasks & Time Estimates:")
-    _task_table(jwa.get("tasks", []))
+    if jwa.get("title"):
+        print(f"  Title      : {jwa.get('title')}")
+    if jwa.get("description"):
+        print()
+        desc = textwrap.fill(jwa.get("description"), width=68,
+                             initial_indent="  Description: ",
+                             subsequent_indent="               ")
+        print(desc)
+    if jwa.get("tasks"):
+        print()
+        print("  Tasks & Time Estimates:")
+        _task_table(jwa.get("tasks", []))
 
     # ── 2. Job Description WITH AI ────────────────────────────────────────────
     jwai = data.get("job_with_ai") or {}
     _heading("2. JOB DESCRIPTION (with AI integration)")
-    print(f"  Title      : {jwai.get('title', '—')}")
-    print()
-    desc2 = textwrap.fill(jwai.get("description", "—"), width=68,
-                          initial_indent="  Description: ",
-                          subsequent_indent="               ")
-    print(desc2)
-    print()
-    print("  Tasks & Time Estimates:")
-    _task_table(jwai.get("tasks", []))
+    if jwai.get("title"):
+        print(f"  Title      : {jwai.get('title')}")
+    if jwai.get("description"):
+        print()
+        desc2 = textwrap.fill(jwai.get("description"), width=68,
+                              initial_indent="  Description: ",
+                              subsequent_indent="               ")
+        print(desc2)
+    if jwai.get("tasks"):
+        print()
+        print("  Tasks & Time Estimates:")
+        _task_table(jwai.get("tasks", []))
 
-    # ── 3. Skill Gaps ─────────────────────────────────────────────────────────
-    _heading("3. SKILL GAPS IDENTIFICATION")
+    # ── 3. Comparative Analysis Report ───────────────────────────────────────
+    _heading("3. COMPARATIVE ANALYSIS REPORT")
+    _comparison_report(data.get("comparative_analysis_report", {}))
+
+    # ── 4. Skill Gaps ─────────────────────────────────────────────────────────
+    _heading("4. SKILL GAPS IDENTIFICATION")
     _bullet(data.get("skill_gaps", []))
 
-    # ── 4. Work Responsibility Transformations ────────────────────────────────
-    _heading("4. POSSIBLE TRANSFORMATIONS IN WORK RESPONSIBILITIES")
+    # ── 5. Work Responsibility Transformations ────────────────────────────────
+    _heading("5. POSSIBLE TRANSFORMATIONS IN WORK RESPONSIBILITIES")
     _bullet(data.get("work_responsibility_transformations", []))
 
-    # ── 5. AI Integration Recommendations ────────────────────────────────────
-    _heading("5. RECOMMENDATIONS FOR AI INTEGRATION")
+    # ── 6. AI Integration Recommendations ────────────────────────────────────
+    _heading("6. RECOMMENDATIONS FOR AI INTEGRATION")
     _bullet(data.get("ai_integration_recommendations", []))
 
-    # ── 6. Workforce Development Strategies ──────────────────────────────────
-    _heading("6. STRATEGIES FOR WORKFORCE DEVELOPMENT AND UPSKILLING")
+    # ── 7. Workforce Development Strategies ──────────────────────────────────
+    _heading("7. STRATEGIES FOR WORKFORCE DEVELOPMENT AND UPSKILLING")
     _bullet(data.get("workforce_development_strategies", []))
 
-    # ── 7. Practical Advice for Teams ────────────────────────────────────────
-    _heading("7. PRACTICAL ADVICE FOR TEAMS")
+    # ── 8. Workforce Sustainability Impact ───────────────────────────────────
+    _heading("8. IMPACT ON WORKFORCE SUSTAINABILITY")
+    _bullet(data.get("workforce_sustainability_impact", []))
+
+    # ── 9. Practical Advice for Teams ────────────────────────────────────────
+    _heading("9. PRACTICAL ADVICE FOR TEAMS")
     _bullet(data.get("practical_advice_for_teams", []))
 
     print(f"\n{_SEP}\n")
@@ -167,7 +210,6 @@ def run_direct(role: str) -> None:
     """
     import asyncio
     import os
-    import sys
 
     # Ensure the ai/ directory is on the path so backend.py can import scraper
     ai_dir = os.path.dirname(os.path.abspath(__file__))
@@ -195,12 +237,12 @@ def run_direct(role: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Test /generate-job-description with role='AI Engineer'."
+        description="Test /generate-job-description with a terminal-provided IT role."
     )
     parser.add_argument(
         "--role",
-        default="AI Engineer",
-        help="IT job role to analyse (default: 'AI Engineer')",
+        default=None,
+        help="IT job role to analyse. If omitted, the script prompts in the terminal.",
     )
     parser.add_argument(
         "--direct",
@@ -213,8 +255,9 @@ if __name__ == "__main__":
         help="Base URL of the running FastAPI server (default: http://localhost:8000)",
     )
     args = parser.parse_args()
+    role = _resolve_role(args.role)
 
     if args.direct:
-        run_direct(args.role)
+        run_direct(role)
     else:
-        run_via_http(args.role, base_url=args.url)
+        run_via_http(role, base_url=args.url)

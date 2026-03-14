@@ -1,53 +1,16 @@
 """
-scraper.py — IT Jobs & Career Research Pipeline
-=================================================
-This is the main pipeline module.  It gathers the latest IT job market data
-from three public, ethically-accessible sources, then passes that context to
-the local LLM (via backend.chat) to answer the user's query.
-
-Data sources:
-
-  1. Bureau of Labor Statistics – Computer & IT Occupations
-     URL  : https://www.bls.gov/ooh/computer-and-information-technology/home.htm
-     Type : BeautifulSoup HTML scraping
-     ToS  : U.S. government public-domain work (17 U.S.C. § 105) — no
-            restrictions on programmatic access.
-
-  2. Remotive.io public REST API
-     URL  : https://remotive.com/api/remote-jobs
-     Type : JSON API (no credentials required)
-     ToS  : Remotive provides this endpoint specifically for public use.
-
-  3. Hacker News "Who is Hiring?" (official Firebase + Algolia APIs)
-     URL  : https://hacker-news.firebaseio.com/v1/ & https://hn.algolia.com/api/
-     Type : JSON APIs (no credentials required)
-     ToS  : Both APIs are explicitly published for public consumption.
-
-All HTTP requests include a descriptive User-Agent and a configurable timeout.
-Each source is scraped independently; an error in one source does not prevent
-results from the others.
-
-Pipeline:
-    scrape_it_jobs_data(query)          — aggregate raw results from all sources
-    answer_with_scraped_context(query)  — scrape + pass context to local LLM
-    main(query)                         — top-level entry point (same as above)
-
-Quick usage:
------------
-    from scraper import main
-
-    answer = main("What Python skills are most in demand in 2025?")
-    print(answer)
+Sources : 
+* https://www.bls.gov/ooh/computer-and-information-technology/home.htm
+* https://www.hiringlab.org/fr/
+* https://www.naceweb.org/job-market/trends-and-predictions
 """
 
-import logging
-import re
-import textwrap
-import time
-from typing import Optional
-
-import requests
-from bs4 import BeautifulSoup
+import logging # for internal logging of scraper activity and errors
+import re # for regex-based HTML parsing fallbacks
+import textwrap # for formatting long text blocks in console output
+from typing import Optional # for type hints
+import requests # for making HTTP requests to scrape data from the web
+from bs4 import BeautifulSoup # for parsing HTML content and extracting text and links
 
 # ---------------------------------------------------------------------------
 # Module logger
@@ -59,8 +22,6 @@ logger = logging.getLogger("skillpulse-scraper")
 # Shared HTTP configuration
 # ---------------------------------------------------------------------------
 
-# A descriptive User-Agent is considered best practice for bots so that
-# website operators can identify and contact the requester if needed.
 _HEADERS: dict[str, str] = {
     "User-Agent": (
         "SkillPulse-Research-Bot/1.0 "
@@ -74,31 +35,10 @@ _HEADERS: dict[str, str] = {
 # Seconds to wait before giving up on a single HTTP request
 _REQUEST_TIMEOUT: int = 15
 
-# Polite delay (seconds) between consecutive Firebase API calls in the HN scraper
-_HN_COMMENT_DELAY: float = 0.15
 
-
-# ---------------------------------------------------------------------------
 # Low-level HTTP helper
-# ---------------------------------------------------------------------------
 
-
-def _get(
-    url: str,
-    params: Optional[dict] = None,
-    headers: Optional[dict] = None,
-) -> Optional[requests.Response]:
-    """
-    Perform a polite, error-handled GET request.
-
-    Args:
-        url:     Target URL.
-        params:  Optional query-string parameters.
-        headers: Optional extra headers to merge with the default set.
-
-    Returns:
-        A :class:`requests.Response` on success, ``None`` on any failure.
-    """
+def _get(url: str,params: Optional[dict] = None,headers: Optional[dict] = None,) -> Optional[requests.Response]: # Perform a polite, error-handled GET request
     merged_headers = dict(_HEADERS)
     if headers:
         merged_headers.update(headers)
@@ -125,46 +65,12 @@ def _get(
 
     return None
 
-
-def _strip_html(html: str) -> str:
-    """
-    Remove all HTML tags from *html* and collapse whitespace.
-
-    Args:
-        html: Raw HTML string.
-
-    Returns:
-        Plain-text string with normalised whitespace.
-    """
-    text = BeautifulSoup(html, "html.parser").get_text(separator=" ")
-    return re.sub(r"\s+", " ", text).strip()
-
-
-# ===========================================================================
-# Source 1 — Bureau of Labor Statistics (BLS) Occupational Outlook Handbook
-# ===========================================================================
-
 _BLS_OOH_URL = (
     "https://www.bls.gov/ooh/computer-and-information-technology/home.htm"
 )
 
 
-def scrape_bls_it_occupations() -> list[dict]:
-    """
-    Scrape IT occupation data from the BLS Occupational Outlook Handbook.
-
-    The BLS OOH Computer & IT page lists all tracked IT occupations with:
-      - Required entry-level education
-      - Median annual pay
-      - Projected 10-year job-growth outlook
-
-    This is public-domain U.S. government data — no ToS restrictions.
-
-    Returns:
-        List of dicts, each with keys ``title``, ``href``, and ``body``.
-        Returns an empty list if the page structure has changed or the
-        request fails.
-    """
+def scrape_bls_it_occupations() -> list[dict]: # Scrape IT occupation data from the BLS Occupational Outlook Handbook
     logger.info("Scraping BLS OOH Computer & IT Occupations page")
 
     response = _get(_BLS_OOH_URL)
@@ -174,8 +80,6 @@ def scrape_bls_it_occupations() -> list[dict]:
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    # The OOH page contains a table whose rows describe each occupation.
-    # Typical column order: Occupation | Education | Pay | Outlook
     table = soup.find("table")
     if not table:
         logger.warning(
@@ -225,277 +129,155 @@ def scrape_bls_it_occupations() -> list[dict]:
     return results
 
 
-# ===========================================================================
-# Source 2 — Remotive.io public REST API
-# ===========================================================================
-
-_REMOTIVE_API_URL = "https://remotive.com/api/remote-jobs"
-
-# Maximum characters to include from a job description
-_REMOTIVE_DESC_LIMIT = 500
+_HIRING_LAB_URL = "https://www.hiringlab.org/fr/"
 
 
-def scrape_remotive_jobs(keyword: str = "", limit: int = 10) -> list[dict]:
-    """
-    Fetch remote IT job listings from the Remotive.io public API.
+def scrape_hiring_lab(limit: int = 10) -> list[dict]: # Scrape research articles from the Indeed Hiring Lab French edition
+    logger.info("Scraping Indeed Hiring Lab (FR): %s", _HIRING_LAB_URL)
 
-    Remotive provides a free, unauthenticated REST API for remote jobs.
-    Full API documentation: https://remotive.com/api/remote-jobs
+    response = _get(_HIRING_LAB_URL)
+    if response is None:
+        logger.warning("Hiring Lab request failed; skipping this source.")
+        return []
 
-    The ``software-dev`` category covers software engineering, DevOps,
-    data engineering, and related IT roles.
+    soup = BeautifulSoup(response.text, "html.parser")
 
-    Args:
-        keyword: Optional keyword forwarded to the API's ``search`` param
-                 to pre-filter results server-side.
-        limit:   Maximum number of job records to return.
+    results: list[dict] = []
 
-    Returns:
-        List of dicts with keys ``title``, ``href``, and ``body``.
-        Body combines company name, required skills/tags, and a plain-text
-        snippet of the job description.
-    """
-    logger.info(
-        "Fetching Remotive jobs — keyword=%r, limit=%d", keyword, limit
+    # The Hiring Lab page uses <article> elements for each post card.
+    # Each card contains a heading with a link and an optional excerpt paragraph.
+    articles = soup.find_all("article")
+    if not articles:
+        # Fallback: look for any <h2> or <h3> that contains a link — a common
+        # pattern on CMS-driven research sites when semantic article tags are
+        articles = soup.find_all(["h2", "h3"])
+
+    for node in articles[:limit]:
+        # ── Extract title and href ──────────────────────────────────────────
+        link_tag = node.find("a") if node.name == "article" else (
+            node.find("a") or node
+        )
+        if link_tag is None or not link_tag.get_text(strip=True):
+            continue
+
+        title = link_tag.get_text(strip=True)
+        raw_href = link_tag.get("href", "")
+        href = (
+            raw_href if raw_href.startswith("http")
+            else f"https://www.hiringlab.org{raw_href}"
+        ) if raw_href else _HIRING_LAB_URL
+
+        # ── Extract article excerpt (best-effort) ───────────────────────────
+        excerpt = ""
+        if node.name == "article":
+            # Look for a <p> sibling or child that contains descriptive text
+            para = node.find("p")
+            if para:
+                excerpt = para.get_text(strip=True)
+
+        body = f"{title}. {excerpt}".strip(". ") if excerpt else title
+
+        results.append(
+            {"title": f"[Hiring Lab] {title}", "href": href, "body": body}
+        )
+
+    logger.info("Hiring Lab: found %d article(s)", len(results))
+    return results
+
+
+_NACE_URL = "https://www.naceweb.org/job-market/trends-and-predictions"
+
+def scrape_nace_trends(limit: int = 10) -> list[dict]: # Scrape job-market trend articles from the NACE Web research page
+    logger.info("Scraping NACE Web trends page: %s", _NACE_URL)
+
+    response = _get(_NACE_URL)
+    if response is None:
+        logger.warning("NACE Web request failed; skipping this source.")
+        return []
+
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    results: list[dict] = []
+
+    # NACE uses <article> or <li class="...item..."> elements for each listing.
+    # Try semantic article tags first, then list-item fallback.
+    nodes = soup.find_all("article") or soup.find_all(
+        "li", class_=re.compile(r"item", re.I)
     )
 
-    # Over-fetch to allow client-side deduplication / additional filtering
-    params: dict = {"category": "software-dev", "limit": limit * 3}
-    if keyword:
-        params["search"] = keyword
+    if not nodes:
+        # Last-resort fallback: any heading that wraps or precedes a link
+        nodes = soup.find_all(["h2", "h3", "h4"])
 
-    response = _get(_REMOTIVE_API_URL, params=params)
-    if response is None:
-        logger.warning("Remotive API request failed; skipping this source.")
-        return []
+    for node in nodes[:limit]:
+        # ── Title and href ──────────────────────────────────────────────────
+        link_tag = node.find("a")
+        if link_tag is None:
+            continue
 
-    try:
-        data = response.json()
-        raw_jobs: list[dict] = data.get("jobs", [])
-    except ValueError:
-        logger.error("Remotive API returned a non-JSON response.")
-        return []
+        title = link_tag.get_text(strip=True)
+        if not title:
+            continue
 
-    results: list[dict] = []
-    for job in raw_jobs[:limit]:
-        title = job.get("title", "Untitled Position")
-        company = job.get("company_name", "Unknown Company")
-        url = job.get("url", "")
-        tags = ", ".join(job.get("tags", []))
+        raw_href = link_tag.get("href", "")
+        href = (
+            raw_href if raw_href.startswith("http")
+            else f"https://www.naceweb.org{raw_href}"
+        ) if raw_href else _NACE_URL
 
-        # Strip HTML from the description field before including it
-        raw_desc = job.get("description", "")
-        description = _strip_html(raw_desc)[:_REMOTIVE_DESC_LIMIT]
+        # ── Excerpt (optional) ──────────────────────────────────────────────
+        excerpt = ""
+        para = node.find("p")
+        if para:
+            excerpt = para.get_text(strip=True)
+        # ── Publication date (optional, informational) ──────────────────────
+        date_tag = node.find(attrs={"class": re.compile(r"date|time", re.I)})
+        date_str = date_tag.get_text(strip=True) if date_tag else ""
 
-        body = (
-            f"{company} is hiring for '{title}'. "
-            f"Required skills / tags: {tags or 'not specified'}. "
-            f"{description}"
-        ).strip()
+        body_parts = [title]
+        if date_str:
+            body_parts.append(f"Published: {date_str}.")
+        if excerpt:
+            body_parts.append(excerpt)
+        body = " ".join(body_parts)
 
         results.append(
-            {
-                "title": f"[Remotive] {title} — {company}",
-                "href": url,
-                "body": body,
-            }
+            {"title": f"[NACE] {title}", "href": href, "body": body}
         )
 
-    logger.info("Remotive: returned %d job listing(s)", len(results))
+    logger.info("NACE Web: found %d article(s)", len(results))
     return results
 
-
-# ===========================================================================
-# Source 3 — Hacker News "Who is Hiring?" (Firebase + Algolia public APIs)
-# ===========================================================================
-
-_HN_ALGOLIA_SEARCH_URL = "https://hn.algolia.com/api/v1/search"
-_HN_FIREBASE_ITEM_URL = "https://hacker-news.firebaseio.com/v1/item/{}.json"
-
-# Maximum comment IDs to inspect when searching for keyword matches.
-# Increasing this finds more matches at the cost of more API calls.
-_HN_CANDIDATE_LIMIT = 100
-
-# Maximum snippet length (characters) for a single HN job post
-_HN_SNIPPET_LIMIT = 600
-
-
-def _find_latest_hn_hiring_thread_id() -> Optional[int]:
-    """
-    Use the Algolia HN search API to locate the most recent
-    "Ask HN: Who is Hiring?" thread.
-
-    Returns:
-        Integer item ID of the latest thread, or ``None`` on failure.
-    """
-    params = {
-        "query": "Ask HN: Who is Hiring?",
-        "tags": "ask_hn",
-        "hitsPerPage": 1,
-    }
-    response = _get(_HN_ALGOLIA_SEARCH_URL, params=params)
-    if response is None:
-        return None
-
-    try:
-        hits = response.json().get("hits", [])
-        if not hits:
-            logger.warning("Algolia HN search returned zero hits.")
-            return None
-        raw_id = hits[0].get("objectID")
-        return int(raw_id) if raw_id else None
-    except (ValueError, TypeError, KeyError) as exc:
-        logger.error("Failed to parse Algolia HN response: %s", exc)
-        return None
-
-
-def scrape_hn_hiring(keyword: str = "", limit: int = 10) -> list[dict]:
-    """
-    Fetch job posts from the latest "Ask HN: Who is Hiring?" thread.
-
-    Uses two official, publicly documented APIs:
-      - Hacker News Firebase API  (https://github.com/HackerNews/API)
-      - Algolia HN search API     (https://hn.algolia.com/api)
-
-    A short polite delay (_HN_COMMENT_DELAY) is inserted between each
-    Firebase item request to avoid hammering the API.
-
-    Args:
-        keyword: Case-insensitive keyword to filter post text.  Pass an
-                 empty string to return posts without filtering.
-        limit:   Maximum number of matching posts to return.
-
-    Returns:
-        List of dicts with keys ``title``, ``href``, and ``body``.
-    """
-    logger.info("Fetching HN 'Who is Hiring?' posts — keyword=%r", keyword)
-
-    thread_id = _find_latest_hn_hiring_thread_id()
-    if thread_id is None:
-        logger.warning("Could not locate the latest HN hiring thread.")
-        return []
-
-    logger.debug("Latest HN hiring thread ID: %d", thread_id)
-
-    # Fetch the thread item to obtain its top-level comment IDs ("kids")
-    thread_response = _get(_HN_FIREBASE_ITEM_URL.format(thread_id))
-    if thread_response is None:
-        logger.warning("Failed to fetch HN thread %d.", thread_id)
-        return []
-
-    try:
-        thread_data = thread_response.json()
-        kid_ids: list[int] = thread_data.get("kids", [])
-    except ValueError:
-        logger.error("Non-JSON response for HN thread %d.", thread_id)
-        return []
-
-    results: list[dict] = []
-    kw_lower = keyword.strip().lower()
-
-    # Iterate over comments; stop once we have enough matching results
-    for kid_id in kid_ids[:_HN_CANDIDATE_LIMIT]:
-        if len(results) >= limit:
-            break
-
-        time.sleep(_HN_COMMENT_DELAY)  # polite delay between API calls
-
-        comment_response = _get(_HN_FIREBASE_ITEM_URL.format(kid_id))
-        if comment_response is None:
-            continue
-
-        try:
-            comment = comment_response.json()
-        except ValueError:
-            continue
-
-        # Skip deleted / dead comments
-        if comment.get("deleted") or comment.get("dead"):
-            continue
-
-        raw_text: str = comment.get("text", "") or ""
-        plain_text = _strip_html(raw_text)
-
-        # Apply optional keyword filter
-        if kw_lower and kw_lower not in plain_text.lower():
-            continue
-
-        item_url = f"https://news.ycombinator.com/item?id={kid_id}"
-        snippet = plain_text[:_HN_SNIPPET_LIMIT]
-        if len(plain_text) > _HN_SNIPPET_LIMIT:
-            snippet += "…"
-
-        results.append(
-            {
-                "title": f"[HN Who's Hiring] Post #{kid_id}",
-                "href": item_url,
-                "body": snippet,
-            }
-        )
-
-    logger.info("HN hiring: returned %d post(s)", len(results))
-    return results
-
-
-# ===========================================================================
 # Orchestrator — aggregate all sources
-# ===========================================================================
 
-
-def scrape_it_jobs_data(
-    query: str,
-    per_source_limit: int = 5,
-) -> list[dict]:
-    """
-    Aggregate IT job and career data from all three supported sources.
-
-    Each source is queried independently.  A failure in one source does not
-    prevent results from the remaining sources.
-
-    Sources (queried in order):
-      1. BLS OOH  — authoritative US government occupational outlook data
-      2. Remotive — current remote IT job listings (public API)
-      3. HN       — community-sourced hiring posts (official API)
-
-    Args:
-        query:            The user's search query, used to filter Remotive
-                          and HN results.
-        per_source_limit: Maximum number of results to collect per source.
-
-    Returns:
-        Combined, ordered list of result dicts.  Each dict has the keys
-        ``title`` (str), ``href`` (str), and ``body`` (str).
-        Returns an empty list only if all three sources fail.
-    """
+def scrape_it_jobs_data(query: str,per_source_limit: int = 5,) -> list[dict]: # Aggregate IT job and career data from all three supported sources
     logger.info("Aggregating IT jobs data for query: %r", query)
 
     all_results: list[dict] = []
 
     # ── 1. BLS OOH ──────────────────────────────────────────────────────────
-    # BLS data is not query-specific but is always relevant for IT career
-    # questions; include a capped number of rows.
     try:
         bls = scrape_bls_it_occupations()
         all_results.extend(bls[:per_source_limit])
         logger.debug("BLS contributed %d result(s)", len(bls[:per_source_limit]))
-    except Exception as exc:  # broad catch to never crash the whole pipeline
+    except Exception as exc:  # broad catch: never crash the whole pipeline
         logger.error("Unexpected error in BLS scraper: %s", exc)
 
-    # ── 2. Remotive.io ──────────────────────────────────────────────────────
+    # ── 2. Indeed Hiring Lab ─────────────────────────────────────────────────
     try:
-        remotive = scrape_remotive_jobs(keyword=query, limit=per_source_limit)
-        all_results.extend(remotive)
-        logger.debug("Remotive contributed %d result(s)", len(remotive))
+        hl = scrape_hiring_lab(limit=per_source_limit)
+        all_results.extend(hl)
+        logger.debug("Hiring Lab contributed %d result(s)", len(hl))
     except Exception as exc:
-        logger.error("Unexpected error in Remotive scraper: %s", exc)
+        logger.error("Unexpected error in Hiring Lab scraper: %s", exc)
 
-    # ── 3. Hacker News ──────────────────────────────────────────────────────
+    # ── 3. NACE Web ──────────────────────────────────────────────────────────
     try:
-        hn = scrape_hn_hiring(keyword=query, limit=per_source_limit)
-        all_results.extend(hn)
-        logger.debug("HN contributed %d result(s)", len(hn))
+        nace = scrape_nace_trends(limit=per_source_limit)
+        all_results.extend(nace)
+        logger.debug("NACE Web contributed %d result(s)", len(nace))
     except Exception as exc:
-        logger.error("Unexpected error in HN scraper: %s", exc)
+        logger.error("Unexpected error in NACE Web scraper: %s", exc)
 
     logger.info(
         "IT jobs scrape complete: %d total result(s) from up to 3 sources",
@@ -504,38 +286,10 @@ def scrape_it_jobs_data(
     return all_results
 
 
-# ===========================================================================
 # LLM integration — pass scraped context to the local model
-# ===========================================================================
 
-# Maximum characters to include per result body in the LLM prompt
-_CONTEXT_SNIPPET_LIMIT = 600
-
-
-def answer_with_scraped_context(
-    query: str,
-    per_source_limit: int = 5,
-) -> str:
-    """
-    End-to-end pipeline: scrape IT jobs data, then answer *query* using the
-    local LLM with the scraped results as context.
-
-    Steps:
-      1. Call :func:`scrape_it_jobs_data` to gather results from BLS, Remotive,
-         and Hacker News.
-      2. Format the results into a numbered context block.
-      3. Send the context + query to the LLM via ``backend.chat``.
-
-    Args:
-        query:            The user's question or search string.
-        per_source_limit: Maximum results per individual source.
-
-    Returns:
-        LLM-generated answer string, or a plain message when no data was found.
-    """
-    # Import here to avoid a circular import at module load time
-    # (backend.py imports nothing from scraper.py at the top level)
-    from backend import chat  # noqa: PLC0415
+def answer_with_scraped_context(query: str,per_source_limit: int = 5,) -> str: # End-to-end pipeline: scrape IT jobs data, then answer *query* using the local LLM with the scraped results as context
+    from backend import chat  
 
     if not query or not query.strip():
         return "Please provide a non-empty query."
@@ -554,7 +308,7 @@ def answer_with_scraped_context(
     context_parts: list[str] = []
     for idx, item in enumerate(results, start=1):
         snippet = textwrap.shorten(
-            item.get("body", ""), width=_CONTEXT_SNIPPET_LIMIT, placeholder="…"
+            item.get("body", ""),placeholder="…"
         )
         href = item.get("href", "")
         title = item.get("title", f"Result {idx}")
@@ -565,9 +319,10 @@ def answer_with_scraped_context(
     system_prompt = (
         "You are SkillPulse AI, a knowledgeable assistant specialising in IT skills, "
         "career development, and technology job market trends. "
-        "You have been given real-time data scraped from authoritative sources: "
-        "the US Bureau of Labor Statistics, Remotive.io job listings, and "
-        "Hacker News 'Who is Hiring?' posts. "
+        "You have been given real-time data scraped from three authoritative sources: "
+        "the US Bureau of Labor Statistics Occupational Outlook Handbook, "
+        "the Indeed Hiring Lab research blog, and "
+        "the NACE Web job-market trends and predictions page. "
         "Answer the user's question using this data. "
         "Cite the source title or URL where relevant, and acknowledge uncertainty "
         "if the data does not fully cover the question."
@@ -586,25 +341,9 @@ def answer_with_scraped_context(
 
 
 def main(query: str, per_source_limit: int = 5) -> str:
-    """
-    Top-level entry point for the IT jobs research pipeline.
-
-    Equivalent to :func:`answer_with_scraped_context`; exposed as ``main``
-    for a familiar import pattern and for use by ``backend.py``.
-
-    Args:
-        query:            The user's question or search string.
-        per_source_limit: Maximum results per individual data source.
-
-    Returns:
-        LLM-generated answer string.
-    """
     return answer_with_scraped_context(query, per_source_limit=per_source_limit)
 
-
-# ---------------------------------------------------------------------------
 # CLI entry-point (for quick manual testing)
-# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import sys

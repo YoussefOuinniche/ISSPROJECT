@@ -1,47 +1,27 @@
 """
-tools.py — Callable tools for the SkillPulse AI agent
-======================================================
 Four tools that the LLM can invoke via OpenAI function-calling:
-
   1. tool_web_scrape      — live IT job data (BLS, Remotive, HN)
   2. tool_analyze_results — pandas-based insight extraction
   3. tool_generate_report — structured Markdown report formatter
   4. tool_generate_chart  — Matplotlib chart → base64 PNG
-
-Each function returns a plain dict so the caller can safely
-JSON-serialise it before sending it back to the model as a tool result.
 """
 
-import base64
-import io
-import logging
-from typing import Any
-
-import matplotlib
+import base64 # for encoding chart images
+import io     # for in-memory image buffers
+import logging # for error logging
+from typing import Any # for type hints
+import matplotlib # for chart rendering
 matplotlib.use("Agg")  # non-interactive backend — no display needed
-import matplotlib.pyplot as plt
-import pandas as pd
-
-from scraper import scrape_it_jobs_data
+import matplotlib.pyplot as plt # for plotting charts
+import pandas as pd # for data manipulation  
+from scraper import scrape_it_jobs_data # for tool_web_scrape
 
 logger = logging.getLogger("skillpulse-tools")
 
 
 # ── Tool 1: Web Scraping ──────────────────────────────────────────────────────
 
-def tool_web_scrape(query: str, per_source_limit: int = 5) -> dict:
-    """
-    Scrape live IT job-market data from three authoritative sources:
-    BLS Occupational Outlook Handbook, Remotive.io, and HN 'Who is Hiring?'.
-
-    Args:
-        query:            Search keyword or career question.
-        per_source_limit: Maximum results to collect per source (1–10).
-
-    Returns:
-        ``{"success": True, "count": N, "results": [...]}``
-        Each result has ``title``, ``href``, and ``body`` keys.
-    """
+def tool_web_scrape(query: str, per_source_limit: int = 5) -> dict: # Scrape live IT job-market data from three authoritative sources
     try:
         raw = scrape_it_jobs_data(query, per_source_limit=per_source_limit)
         # Truncate body to keep tool results concise in the prompt window
@@ -57,22 +37,7 @@ def tool_web_scrape(query: str, per_source_limit: int = 5) -> dict:
 
 # ── Tool 2: Analyze Results ───────────────────────────────────────────────────
 
-def tool_analyze_results(data: list[dict], analysis_type: str = "frequency") -> dict:
-    """
-    Derive insights from scraped or skill data using pandas.
-
-    analysis_type options:
-      - ``frequency`` : count tech-keyword occurrences across all body text
-      - ``gap``        : average gap_level by domain + top-5 critical gaps
-      - ``trend``      : source distribution and total result count
-
-    Args:
-        data:          List of record dicts (e.g. scraped results or skill gaps).
-        analysis_type: One of "frequency", "gap", or "trend".
-
-    Returns:
-        Dict with ``success`` flag and analysis-specific keys.
-    """
+def tool_analyze_results(data: list[dict], analysis_type: str = "frequency") -> dict: # Derive insights from scraped or skill data using pandas.
     try:
         df = pd.DataFrame(data)
         if df.empty:
@@ -141,24 +106,7 @@ def tool_analyze_results(data: list[dict], analysis_type: str = "frequency") -> 
 
 # ── Tool 3: Generate Report ───────────────────────────────────────────────────
 
-def tool_generate_report(
-    title: str,
-    sections: list[dict],
-    user_name: str = "User",
-    target_role: str = "",
-) -> dict:
-    """
-    Format analysis findings into a structured Markdown report.
-
-    Args:
-        title:       Document title (will be rendered as an H1 heading).
-        sections:    List of ``{"heading": str, "content": str}`` dicts.
-        user_name:   Name of the person the report is prepared for.
-        target_role: Target job role to include in the header metadata.
-
-    Returns:
-        ``{"success": True, "report": "<markdown string>", "word_count": N}``
-    """
+def tool_generate_report(title: str,sections: list[dict],user_name: str = "User",target_role: str = "",) -> dict: #     Format analysis findings into a structured Markdown report
     try:
         lines: list[str] = [f"# {title}", ""]
 
@@ -187,13 +135,6 @@ def tool_generate_report(
 
 # ── Tool 4: Generate Chart ────────────────────────────────────────────────────
 
-_COLOR_MAPS: dict[str, Any] = {
-    "viridis": plt.cm.viridis,
-    "plasma": plt.cm.plasma,
-    "coolwarm": plt.cm.coolwarm,
-    "Blues": plt.cm.Blues,
-}
-
 # Dark-theme palette consistent with the SkillPulse dashboard
 _BG_DARK = "#0f172a"
 _PANEL_DARK = "#1e293b"
@@ -203,39 +144,7 @@ _TEXT_WHITE = "#f8fafc"
 _ACCENT = "#38bdf8"
 
 
-def tool_generate_chart(
-    chart_type: str,
-    labels: list[str],
-    values: list[float],
-    title: str = "Chart",
-    x_label: str = "",
-    y_label: str = "",
-    color_scheme: str = "viridis",
-) -> dict:
-    """
-    Render a data-visualisation chart and return it as a base64-encoded PNG.
-
-    Supported chart types:
-      - ``bar``            : vertical bar chart
-      - ``horizontal_bar`` : horizontal bar chart (good for long labels)
-      - ``pie``            : pie / donut chart
-      - ``line``           : line chart with filled area
-
-    The chart is styled with a dark theme that matches the SkillPulse UI.
-
-    Args:
-        chart_type:    One of "bar", "horizontal_bar", "pie", "line".
-        labels:        Category labels (one per data point).
-        values:        Numeric values (same length as labels).
-        title:         Chart title displayed at the top.
-        x_label:       Optional X-axis label.
-        y_label:       Optional Y-axis label.
-        color_scheme:  One of "viridis", "plasma", "coolwarm", "Blues".
-
-    Returns:
-        ``{"success": True, "image_base64": "<base64 PNG>", "mime_type": "image/png", ...}``
-        or ``{"success": False, "error": "<message>"}``
-    """
+def tool_generate_chart(chart_type: str,labels: list[str],values: list[float],title: str = "Chart",x_label: str = "",y_label: str = "",color_scheme: str = "viridis",) -> dict: #     Render a data-visualisation chart and return it as a base64-encoded PNG
     if chart_type not in ("bar", "horizontal_bar", "pie", "line"):
         return {"success": False, "error": f"Unsupported chart_type: '{chart_type}'. Use bar, horizontal_bar, pie, or line."}
 
@@ -246,7 +155,7 @@ def tool_generate_chart(
         return {"success": False, "error": f"'labels' ({len(labels)}) and 'values' ({len(values)}) must be the same length."}
 
     try:
-        cmap = _COLOR_MAPS.get(color_scheme, plt.cm.viridis)
+        cmap = getattr(plt.cm, color_scheme, plt.cm.viridis)
         n = max(len(labels) - 1, 1)
         colors = [cmap(i / n) for i in range(len(labels))]
 

@@ -14,23 +14,11 @@ python-dotenv>=1.0.0
 # Data validation (bundled with FastAPI, listed for clarity)
 pydantic>=2.0.0
 
-# RAG
-# PDF text extraction
-pypdf>=4.0.0
-
-# TF-IDF vectorisation and cosine similarity for local article retrieval
-scikit-learn>=1.4.0
-
-# DuckDuckGo web search fallback (secondary fallback in RAG pipeline)
-duckduckgo-search>=6.0.0
-
-# IT Jobs web scraper (scraper.py)
 # HTTP client for REST API calls and HTML fetching
 requests>=2.31.0
 # HTML parsing for BLS OOH scraping and HTML stripping
 beautifulsoup4>=4.12.0
 
-# Agentic tools (tools.py)
 # Data analysis and insight extraction
 pandas>=2.0.0
 # Chart generation (dark-themed PNG output)
