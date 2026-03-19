@@ -1,363 +1,423 @@
-"""
-Sources : 
-* https://www.bls.gov/ooh/computer-and-information-technology/home.htm
-* https://www.hiringlab.org/fr/
-* https://www.naceweb.org/job-market/trends-and-predictions
-"""
+# Sources I used to get data from:
+# https://www.bls.gov/ooh/computer-and-information-technology/home.htm
+# https://www.hiringlab.org/fr/
+# https://www.naceweb.org/job-market/trends-and-predictions
 
-import logging # for internal logging of scraper activity and errors
-import re # for regex-based HTML parsing fallbacks
-import textwrap # for formatting long text blocks in console output
-from typing import Optional # for type hints
-import requests # for making HTTP requests to scrape data from the web
-from bs4 import BeautifulSoup # for parsing HTML content and extracting text and links
+import requests
+from bs4 import BeautifulSoup
+import textwrap
+import sys
 
-# ---------------------------------------------------------------------------
-# Module logger
-# ---------------------------------------------------------------------------
-logger = logging.getLogger("skillpulse-scraper")
+# how long to wait for a website before giving up (in seconds)
+REQUEST_TIMEOUT = 15
 
-
-# ---------------------------------------------------------------------------
-# Shared HTTP configuration
-# ---------------------------------------------------------------------------
-
-_HEADERS: dict[str, str] = {
-    "User-Agent": (
-        "SkillPulse-Research-Bot/1.0 "
-        "(academic project - IT career research; "
-        "source: github.com/skillpulse)"
-    ),
-    "Accept": "text/html,application/json,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9",
-}
-
-# Seconds to wait before giving up on a single HTTP request
-_REQUEST_TIMEOUT: int = 15
+# the urls we are scraping from
+BLS_URL = "https://www.bls.gov/ooh/computer-and-information-technology/home.htm"
+HIRING_LAB_URL = "https://www.hiringlab.org/fr/"
+NACE_URL = "https://www.naceweb.org/job-market/trends-and-predictions"
 
 
-# Low-level HTTP helper
-
-def _get(url: str,params: Optional[dict] = None,headers: Optional[dict] = None,) -> Optional[requests.Response]: # Perform a polite, error-handled GET request
-    merged_headers = dict(_HEADERS)
-    if headers:
-        merged_headers.update(headers)
+# --- HELPER: make a get request to a website ---
+def make_request(url, params=None):
+    # i looked up what headers to send so websites dont block us
+    my_headers = {
+        "User-Agent": "SkillPulse-Research-Bot/1.0 (academic project - IT career research)",
+        "Accept": "text/html,application/json,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
 
     try:
-        response = requests.get(
-            url,
-            headers=merged_headers,
-            params=params,
-            timeout=_REQUEST_TIMEOUT,
-        )
+        response = requests.get(url, headers=my_headers, params=params, timeout=REQUEST_TIMEOUT)
+        # raise_for_status throws an error if the website returned 404 or 500 etc
         response.raise_for_status()
         return response
+
     except requests.exceptions.Timeout:
-        logger.warning("Request timed-out: %s", url)
-    except requests.exceptions.HTTPError as exc:
-        logger.warning(
-            "HTTP %s error for: %s", exc.response.status_code, url
-        )
-    except requests.exceptions.ConnectionError as exc:
-        logger.error("Connection error for %s: %s", url, exc)
-    except requests.exceptions.RequestException as exc:
-        logger.error("Request failed for %s: %s", url, exc)
+        print("Warning: request timed out for url:", url)
+        return None
 
-    return None
+    except requests.exceptions.HTTPError as error:
+        print("Warning: HTTP error for url:", url, "error:", error)
+        return None
 
-_BLS_OOH_URL = (
-    "https://www.bls.gov/ooh/computer-and-information-technology/home.htm"
-)
+    except requests.exceptions.ConnectionError as error:
+        print("Error: could not connect to:", url, "error:", error)
+        return None
+
+    except Exception as error:
+        print("Error: request failed for:", url, "error:", error)
+        return None
 
 
-def scrape_bls_it_occupations() -> list[dict]: # Scrape IT occupation data from the BLS Occupational Outlook Handbook
-    logger.info("Scraping BLS OOH Computer & IT Occupations page")
+# --- SCRAPE BLS (bureau of labor statistics) ---
+def scrape_bls():
+    print("Scraping BLS website...")
 
-    response = _get(_BLS_OOH_URL)
+    response = make_request(BLS_URL)
     if response is None:
-        logger.warning("BLS OOH request failed; skipping this source.")
+        print("Warning: BLS request failed, skipping.")
         return []
 
+    # parse the html
     soup = BeautifulSoup(response.text, "html.parser")
 
+    # find the table on the page
     table = soup.find("table")
-    if not table:
-        logger.warning(
-            "BLS page structure may have changed — occupation table not found."
-        )
+    if table is None:
+        print("Warning: could not find table on BLS page, maybe the site changed.")
         return []
 
-    results: list[dict] = []
+    results = []
+
+    # go through each row in the table
     rows = table.find_all("tr")
 
-    for row in rows[1:]:  # skip the header row
+    # skip first row because it's the header
+    i = 1
+    while i < len(rows):
+        row = rows[i]
         cells = row.find_all("td")
+
+        # skip rows that don't have enough columns
         if len(cells) < 2:
+            i = i + 1
             continue
 
-        # ── Occupation name & link ──────────────────────────────────────────
-        occ_cell = cells[0]
-        occ_name = occ_cell.get_text(strip=True)
+        # get the job name from first cell
+        first_cell = cells[0]
+        job_name = first_cell.get_text(strip=True)
 
-        link_tag = occ_cell.find("a")
-        occ_href = ""
-        if link_tag and link_tag.get("href"):
-            raw_href = link_tag["href"]
-            occ_href = (
-                raw_href
-                if raw_href.startswith("http")
-                else f"https://www.bls.gov{raw_href}"
-            )
+        # try to get the link
+        link_tag = first_cell.find("a")
+        job_link = ""
+        if link_tag is not None:
+            raw_link = link_tag.get("href", "")
+            if raw_link.startswith("http"):
+                job_link = raw_link
+            else:
+                job_link = "https://www.bls.gov" + raw_link
 
-        # ── Supporting columns (gracefully tolerate missing columns) ────────
-        education = cells[1].get_text(strip=True) if len(cells) > 1 else "N/A"
-        median_pay = cells[2].get_text(strip=True) if len(cells) > 2 else "N/A"
-        job_outlook = cells[3].get_text(strip=True) if len(cells) > 3 else "N/A"
+        # get the other columns if they exist
+        education = "N/A"
+        median_pay = "N/A"
+        job_outlook = "N/A"
 
-        body = (
-            f"Occupation: {occ_name}. "
-            f"Entry-level education required: {education}. "
-            f"Median annual pay: {median_pay}. "
-            f"10-year job outlook: {job_outlook}."
-        )
+        if len(cells) > 1:
+            education = cells[1].get_text(strip=True)
+        if len(cells) > 2:
+            median_pay = cells[2].get_text(strip=True)
+        if len(cells) > 3:
+            job_outlook = cells[3].get_text(strip=True)
 
-        results.append(
-            {"title": f"[BLS OOH] {occ_name}", "href": occ_href, "body": body}
-        )
+        # build a text description
+        body = "Occupation: " + job_name + ". "
+        body = body + "Entry-level education required: " + education + ". "
+        body = body + "Median annual pay: " + median_pay + ". "
+        body = body + "10-year job outlook: " + job_outlook + "."
 
-    logger.info("BLS OOH: found %d occupation(s)", len(results))
+        # add to our results list
+        result = {
+            "title": "[BLS OOH] " + job_name,
+            "href": job_link,
+            "body": body
+        }
+        results.append(result)
+
+        i = i + 1
+
+    print("BLS: found", len(results), "occupation(s)")
     return results
 
 
-_HIRING_LAB_URL = "https://www.hiringlab.org/fr/"
+# --- SCRAPE HIRING LAB ---
+def scrape_hiring_lab(limit):
+    print("Scraping Hiring Lab website...")
 
-
-def scrape_hiring_lab(limit: int = 10) -> list[dict]: # Scrape research articles from the Indeed Hiring Lab French edition
-    logger.info("Scraping Indeed Hiring Lab (FR): %s", _HIRING_LAB_URL)
-
-    response = _get(_HIRING_LAB_URL)
+    response = make_request(HIRING_LAB_URL)
     if response is None:
-        logger.warning("Hiring Lab request failed; skipping this source.")
+        print("Warning: Hiring Lab request failed, skipping.")
         return []
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    results: list[dict] = []
+    results = []
 
-    # The Hiring Lab page uses <article> elements for each post card.
-    # Each card contains a heading with a link and an optional excerpt paragraph.
+    # try to find article tags first
     articles = soup.find_all("article")
-    if not articles:
-        # Fallback: look for any <h2> or <h3> that contains a link — a common
-        # pattern on CMS-driven research sites when semantic article tags are
+
+    # if no articles found, try headings instead
+    if len(articles) == 0:
         articles = soup.find_all(["h2", "h3"])
 
-    for node in articles[:limit]:
-        # ── Extract title and href ──────────────────────────────────────────
-        link_tag = node.find("a") if node.name == "article" else (
-            node.find("a") or node
-        )
-        if link_tag is None or not link_tag.get_text(strip=True):
+    count = 0
+    for node in articles:
+        # stop when we have enough results
+        if count >= limit:
+            break
+
+        # get the link inside the article or heading
+        link_tag = node.find("a")
+
+        if link_tag is None:
             continue
 
         title = link_tag.get_text(strip=True)
-        raw_href = link_tag.get("href", "")
-        href = (
-            raw_href if raw_href.startswith("http")
-            else f"https://www.hiringlab.org{raw_href}"
-        ) if raw_href else _HIRING_LAB_URL
+        if title == "":
+            continue
 
-        # ── Extract article excerpt (best-effort) ───────────────────────────
+        # build the full url
+        raw_link = link_tag.get("href", "")
+        if raw_link == "":
+            job_link = HIRING_LAB_URL
+        elif raw_link.startswith("http"):
+            job_link = raw_link
+        else:
+            job_link = "https://www.hiringlab.org" + raw_link
+
+        # try to get a paragraph of text
         excerpt = ""
         if node.name == "article":
-            # Look for a <p> sibling or child that contains descriptive text
             para = node.find("p")
-            if para:
+            if para is not None:
                 excerpt = para.get_text(strip=True)
 
-        body = f"{title}. {excerpt}".strip(". ") if excerpt else title
+        # build body text
+        if excerpt != "":
+            body = title + ". " + excerpt
+        else:
+            body = title
 
-        results.append(
-            {"title": f"[Hiring Lab] {title}", "href": href, "body": body}
-        )
+        result = {
+            "title": "[Hiring Lab] " + title,
+            "href": job_link,
+            "body": body
+        }
+        results.append(result)
 
-    logger.info("Hiring Lab: found %d article(s)", len(results))
+        count = count + 1
+
+    print("Hiring Lab: found", len(results), "article(s)")
     return results
 
 
-_NACE_URL = "https://www.naceweb.org/job-market/trends-and-predictions"
+# --- SCRAPE NACE WEB ---
+def scrape_nace(limit):
+    print("Scraping NACE website...")
 
-def scrape_nace_trends(limit: int = 10) -> list[dict]: # Scrape job-market trend articles from the NACE Web research page
-    logger.info("Scraping NACE Web trends page: %s", _NACE_URL)
-
-    response = _get(_NACE_URL)
+    response = make_request(NACE_URL)
     if response is None:
-        logger.warning("NACE Web request failed; skipping this source.")
+        print("Warning: NACE request failed, skipping.")
         return []
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    results: list[dict] = []
+    results = []
 
-    # NACE uses <article> or <li class="...item..."> elements for each listing.
-    # Try semantic article tags first, then list-item fallback.
-    nodes = soup.find_all("article") or soup.find_all(
-        "li", class_=re.compile(r"item", re.I)
-    )
+    # try article tags first
+    nodes = soup.find_all("article")
 
-    if not nodes:
-        # Last-resort fallback: any heading that wraps or precedes a link
+    # try list items if no articles
+    if len(nodes) == 0:
+        all_li = soup.find_all("li")
+        # filter to ones that look like article items (have "item" in class name)
+        nodes = []
+        for li in all_li:
+            classes = li.get("class", [])
+            for class_name in classes:
+                if "item" in class_name.lower():
+                    nodes.append(li)
+                    break
+
+    # last resort: just use headings
+    if len(nodes) == 0:
         nodes = soup.find_all(["h2", "h3", "h4"])
 
-    for node in nodes[:limit]:
-        # ── Title and href ──────────────────────────────────────────────────
+    count = 0
+    for node in nodes:
+        if count >= limit:
+            break
+
+        # get the link
         link_tag = node.find("a")
         if link_tag is None:
             continue
 
         title = link_tag.get_text(strip=True)
-        if not title:
+        if title == "":
             continue
 
-        raw_href = link_tag.get("href", "")
-        href = (
-            raw_href if raw_href.startswith("http")
-            else f"https://www.naceweb.org{raw_href}"
-        ) if raw_href else _NACE_URL
+        # build full url
+        raw_link = link_tag.get("href", "")
+        if raw_link == "":
+            job_link = NACE_URL
+        elif raw_link.startswith("http"):
+            job_link = raw_link
+        else:
+            job_link = "https://www.naceweb.org" + raw_link
 
-        # ── Excerpt (optional) ──────────────────────────────────────────────
+        # try to get excerpt
         excerpt = ""
         para = node.find("p")
-        if para:
+        if para is not None:
             excerpt = para.get_text(strip=True)
-        # ── Publication date (optional, informational) ──────────────────────
-        date_tag = node.find(attrs={"class": re.compile(r"date|time", re.I)})
-        date_str = date_tag.get_text(strip=True) if date_tag else ""
 
-        body_parts = [title]
-        if date_str:
-            body_parts.append(f"Published: {date_str}.")
-        if excerpt:
-            body_parts.append(excerpt)
-        body = " ".join(body_parts)
+        # try to get a date (look for elements with "date" or "time" in class)
+        date_text = ""
+        all_elements = node.find_all(True)  # find all tags inside the node
+        for element in all_elements:
+            classes = element.get("class", [])
+            for class_name in classes:
+                if "date" in class_name.lower() or "time" in class_name.lower():
+                    date_text = element.get_text(strip=True)
+                    break
 
-        results.append(
-            {"title": f"[NACE] {title}", "href": href, "body": body}
-        )
+        # build body text
+        body = title
+        if date_text != "":
+            body = body + " Published: " + date_text + "."
+        if excerpt != "":
+            body = body + " " + excerpt
 
-    logger.info("NACE Web: found %d article(s)", len(results))
+        result = {
+            "title": "[NACE] " + title,
+            "href": job_link,
+            "body": body
+        }
+        results.append(result)
+
+        count = count + 1
+
+    print("NACE: found", len(results), "article(s)")
     return results
 
-# Orchestrator — aggregate all sources
 
-def scrape_it_jobs_data(query: str,per_source_limit: int = 5,) -> list[dict]: # Aggregate IT job and career data from all three supported sources
-    logger.info("Aggregating IT jobs data for query: %r", query)
+# --- COMBINE ALL SOURCES ---
+def scrape_it_jobs_data(query, per_source_limit):
+    print("Gathering IT jobs data for query:", query)
 
-    all_results: list[dict] = []
+    all_results = []
 
-    # ── 1. BLS OOH ──────────────────────────────────────────────────────────
+    # get bls data
     try:
-        bls = scrape_bls_it_occupations()
-        all_results.extend(bls[:per_source_limit])
-        logger.debug("BLS contributed %d result(s)", len(bls[:per_source_limit]))
-    except Exception as exc:  # broad catch: never crash the whole pipeline
-        logger.error("Unexpected error in BLS scraper: %s", exc)
+        bls_results = scrape_bls()
+        # only take up to the limit
+        added = 0
+        for item in bls_results:
+            if added >= per_source_limit:
+                break
+            all_results.append(item)
+            added = added + 1
+    except Exception as error:
+        print("Error in BLS scraper:", error)
 
-    # ── 2. Indeed Hiring Lab ─────────────────────────────────────────────────
+    # get hiring lab data
     try:
-        hl = scrape_hiring_lab(limit=per_source_limit)
-        all_results.extend(hl)
-        logger.debug("Hiring Lab contributed %d result(s)", len(hl))
-    except Exception as exc:
-        logger.error("Unexpected error in Hiring Lab scraper: %s", exc)
+        hl_results = scrape_hiring_lab(per_source_limit)
+        for item in hl_results:
+            all_results.append(item)
+    except Exception as error:
+        print("Error in Hiring Lab scraper:", error)
 
-    # ── 3. NACE Web ──────────────────────────────────────────────────────────
+    # get nace data
     try:
-        nace = scrape_nace_trends(limit=per_source_limit)
-        all_results.extend(nace)
-        logger.debug("NACE Web contributed %d result(s)", len(nace))
-    except Exception as exc:
-        logger.error("Unexpected error in NACE Web scraper: %s", exc)
+        nace_results = scrape_nace(per_source_limit)
+        for item in nace_results:
+            all_results.append(item)
+    except Exception as error:
+        print("Error in NACE scraper:", error)
 
-    logger.info(
-        "IT jobs scrape complete: %d total result(s) from up to 3 sources",
-        len(all_results),
-    )
+    print("Total results gathered:", len(all_results))
     return all_results
 
 
-# LLM integration — pass scraped context to the local model
+# --- CALL THE LLM WITH SCRAPED DATA ---
+def answer_with_scraped_context(query, per_source_limit):
+    # import our backend chat function
+    from backend import call_llm
 
-def answer_with_scraped_context(query: str,per_source_limit: int = 5,) -> str: # End-to-end pipeline: scrape IT jobs data, then answer *query* using the local LLM with the scraped results as context
-    from backend import chat  
-
-    if not query or not query.strip():
+    # check query is not empty
+    if query is None or query.strip() == "":
         return "Please provide a non-empty query."
 
-    logger.info("Starting scraper pipeline for query: %r", query)
+    print("Starting scraper pipeline for query:", query)
 
-    results = scrape_it_jobs_data(query, per_source_limit=per_source_limit)
+    results = scrape_it_jobs_data(query, per_source_limit)
 
-    if not results:
-        return (
-            "I could not retrieve IT job market data from any source right now. "
-            "Please try again later."
-        )
+    if len(results) == 0:
+        return "I could not retrieve IT job market data from any source right now. Please try again later."
 
-    # Build a numbered context block from the scraped results
-    context_parts: list[str] = []
-    for idx, item in enumerate(results, start=1):
-        snippet = textwrap.shorten(
-            item.get("body", ""),placeholder="…"
-        )
+    # build a numbered list of results to give to the llm
+    context_parts = []
+    number = 1
+    for item in results:
+        body = item.get("body", "")
+        # shorten body so it doesnt get too long
+        short_body = textwrap.shorten(body, width=300, placeholder="...")
         href = item.get("href", "")
-        title = item.get("title", f"Result {idx}")
-        context_parts.append(f"[{idx}] {title}\nURL: {href}\n{snippet}")
+        title = item.get("title", "Result " + str(number))
 
-    context_text = "\n\n".join(context_parts)
+        context_line = "[" + str(number) + "] " + title + "\n"
+        context_line = context_line + "URL: " + href + "\n"
+        context_line = context_line + short_body
 
+        context_parts.append(context_line)
+        number = number + 1
+
+    # join all context parts with blank lines between them
+    context_text = ""
+    for part in context_parts:
+        if context_text != "":
+            context_text = context_text + "\n\n"
+        context_text = context_text + part
+
+    # write the prompts
     system_prompt = (
-        "You are SkillPulse AI, a knowledgeable assistant specialising in IT skills, "
-        "career development, and technology job market trends. "
-        "You have been given real-time data scraped from three authoritative sources: "
-        "the US Bureau of Labor Statistics Occupational Outlook Handbook, "
-        "the Indeed Hiring Lab research blog, and "
-        "the NACE Web job-market trends and predictions page. "
+        "You are SkillPulse AI, a helpful assistant for IT skills and career development. "
+        "You have been given data scraped from three sources: "
+        "the US Bureau of Labor Statistics, the Indeed Hiring Lab, and NACE Web. "
         "Answer the user's question using this data. "
-        "Cite the source title or URL where relevant, and acknowledge uncertainty "
-        "if the data does not fully cover the question."
+        "Mention the source when it helps, and be honest if the data does not cover the question."
     )
 
-    user_prompt = (
-        f"Scraped IT job market context:\n\n{context_text}\n\n"
-        f"Question: {query}\n\n"
-        "Please provide a clear, accurate, and helpful answer based on the context above."
-    )
+    user_prompt = "Scraped IT job market context:\n\n"
+    user_prompt = user_prompt + context_text + "\n\n"
+    user_prompt = user_prompt + "Question: " + query + "\n\n"
+    user_prompt = user_prompt + "Please give a clear and helpful answer based on the context above."
 
-    logger.info(
-        "Sending %d scraped result(s) to LLM for query: %r", len(results), query
-    )
-    return chat(system_prompt, user_prompt)
+    print("Sending", len(results), "results to LLM for query:", query)
+
+    answer = call_llm(system_prompt, user_prompt)
+    return answer
 
 
-def main(query: str, per_source_limit: int = 5) -> str:
-    return answer_with_scraped_context(query, per_source_limit=per_source_limit)
+# --- MAIN FUNCTION ---
+def main(query, per_source_limit=5):
+    return answer_with_scraped_context(query, per_source_limit)
 
-# CLI entry-point (for quick manual testing)
 
+# --- RUN FROM COMMAND LINE ---
 if __name__ == "__main__":
-    import sys
+    # get query from command line arguments if given
+    if len(sys.argv) > 1:
+        # join all arguments after the script name
+        search_query = ""
+        i = 1
+        while i < len(sys.argv):
+            if search_query != "":
+                search_query = search_query + " "
+            search_query = search_query + sys.argv[i]
+            i = i + 1
+    else:
+        search_query = "Python developer"
 
-    logging.basicConfig(
-        level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s"
-    )
+    print("")
+    print("Querying IT jobs pipeline for:", search_query)
+    print("")
 
-    search_query = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Python developer"
-    print(f"\nQuerying IT jobs pipeline for: {search_query!r}\n")
+    result = main(search_query)
 
-    answer = main(search_query)
-
-    print("\n" + "=" * 70)
+    print("")
+    print("=" * 70)
     print("ANSWER")
     print("=" * 70)
-    print(answer)
+    print(result)
