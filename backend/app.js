@@ -5,7 +5,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-const { supabase } = require('./config/database');
+const { checkDatabaseConnection } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 
 // Import routes
@@ -77,24 +77,32 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ─────────────────────────────────────────
 
 app.get('/health', async (req, res) => {
-  try {
-    const { error } = await supabase.from('users').select('id').limit(1);
-    if (error) throw error;
+  const db = await checkDatabaseConnection({ retries: 0 });
+  if (db.ok) {
     res.status(200).json({
       success: true,
       message: 'Server is healthy',
-      timestamp: result.rows[0].now,
+      timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
       database: 'connected',
+      details: {
+        reason: db.reason,
+        attempts: db.attempts,
+        checkDurationMs: db.durationMs,
+      },
     });
-  } catch (error) {
-    res.status(503).json({
-      success: false,
-      message: 'Server is unhealthy',
-      database: 'disconnected',
-      error: process.env.NODE_ENV === 'production' ? 'Internal error' : error.message,
-    });
+    return;
   }
+
+  res.status(503).json({
+    success: false,
+    message: 'Server is unhealthy',
+    database: 'disconnected',
+    reason: db.reason,
+    hint: db.hint,
+    attempts: db.attempts,
+    error: process.env.NODE_ENV === 'production' ? 'Internal error' : db.errorMessage,
+  });
 });
 
 // ─────────────────────────────────────────
@@ -126,6 +134,8 @@ app.use(errorHandler);
 // ─────────────────────────────────────────
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
+const DB_STARTUP_RETRIES = parseInt(process.env.DB_STARTUP_RETRIES || '6', 10);
+const DB_STARTUP_RETRY_DELAY_MS = parseInt(process.env.DB_STARTUP_RETRY_DELAY_MS || '10000', 10);
 
 const server = app.listen(PORT, () => {
   console.log(`
@@ -136,6 +146,24 @@ const server = app.listen(PORT, () => {
 ║   Status: Running ✓                    ║
 ╚════════════════════════════════════════╝
   `);
+
+  // Warm-up DB check helps detect paused projects and bad credentials at startup.
+  (async () => {
+    const db = await checkDatabaseConnection({
+      retries: Math.max(0, DB_STARTUP_RETRIES),
+      retryDelayMs: Math.max(0, DB_STARTUP_RETRY_DELAY_MS),
+    });
+
+    if (db.ok) {
+      console.log(`[DB] Connected successfully (attempt ${db.attempts}).`);
+      return;
+    }
+
+    console.error(`[DB] Connectivity check failed after ${db.attempts} attempt(s).`);
+    console.error(`[DB] Reason: ${db.reason}`);
+    console.error(`[DB] Hint: ${db.hint}`);
+    console.error(`[DB] Error: ${db.errorMessage}`);
+  })();
 });
 
 // ─────────────────────────────────────────
@@ -144,16 +172,9 @@ const server = app.listen(PORT, () => {
 
 const shutdown = (signal) => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
-  server.close(async () => {
+  server.close(() => {
     console.log('HTTP server closed.');
-    try {
-      await pool.end();
-      console.log('Database pool closed.');
-    } catch (err) {
-      console.error('Error closing database pool:', err.message);
-    } finally {
-      process.exit(0);
-    }
+    process.exit(0);
   });
 
   // Force exit if graceful shutdown takes too long

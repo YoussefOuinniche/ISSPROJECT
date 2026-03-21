@@ -7,6 +7,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node app.js",
+    "healthcheck": "node scripts/check-health.js",
+    "db:status": "node scripts/check-supabase-status.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
