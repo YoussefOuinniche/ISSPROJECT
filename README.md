@@ -191,36 +191,6 @@ GET /health
 → { "success": true, "database": "connected", "timestamp": "..." }
 ```
 
-### Pause Detection And Monitoring
-
-Run these from the `Backend` folder:
-
-```bash
-npm run db:status
-```
-
-What it checks:
-- DNS resolution for the `SUPABASE_URL` host
-- Supabase REST API reachability
-- Credential validity using `SUPABASE_SERVICE_ROLE_KEY`
-- Basic schema/table probe on `users` (or `DB_HEALTH_TABLE`)
-
-For local or remote endpoint checks:
-
-```bash
-npm run healthcheck
-```
-
-Optional environment overrides:
-- `HEALTHCHECK_URL` (default `http://localhost:4000/health`)
-- `HEALTHCHECK_TIMEOUT_MS` (default `15000`)
-- `HEALTHCHECK_EXPECT_DB` (default `true`)
-
-GitHub Actions monitor:
-- Workflow file: `.github/workflows/health-monitor.yml`
-- Schedule: every 10 minutes
-- Required secret: `HEALTHCHECK_URL` (your deployed backend health endpoint)
-
 ---
 
 ## Keywords

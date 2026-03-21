@@ -28,130 +28,16 @@ const supabase = createClient(supabaseUrl || '', supabaseKey || '', {
   },
 });
 
-const DEFAULT_HEALTH_TABLE = (_env.DB_HEALTH_TABLE || 'users').trim() || 'users';
-
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const classifyConnectivityError = (error) => {
-  const message = String(error?.message || error || 'Unknown database error');
-  const normalized = message.toLowerCase();
-
-  if (
-    normalized.includes('enotfound') ||
-    normalized.includes('getaddrinfo') ||
-    normalized.includes('dns') ||
-    normalized.includes('name resolution')
-  ) {
-    return {
-      reason: 'dns_resolution_failed',
-      hint: 'SUPABASE_URL host cannot be resolved. Verify the project URL and local DNS/network.',
-    };
+// Test connectivity at startup so misconfiguration shows immediately.
+(async () => {
+  const { error } = await supabase.from('users').select('id').limit(1);
+  if (error) {
+    console.error('[DB] Supabase connectivity test failed:', error.message);
+    console.error('[DB] Verify SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env');
+    console.error('[DB] Also make sure the schema has been applied (Backend/database/schema.sql)');
+  } else {
+    console.log('[DB] Supabase connected successfully via HTTPS.');
   }
+})();
 
-  if (normalized.includes('paused')) {
-    return {
-      reason: 'project_paused',
-      hint: 'Supabase project appears paused. Resume it in the Supabase dashboard, then retry.',
-    };
-  }
-
-  if (
-    normalized.includes('fetch failed') ||
-    normalized.includes('etimedout') ||
-    normalized.includes('econnreset') ||
-    normalized.includes('network')
-  ) {
-    return {
-      reason: 'network_or_paused',
-      hint: 'Network issue or cold-start/pause state. Retry shortly and confirm project is active.',
-    };
-  }
-
-  if (
-    normalized.includes('invalid api key') ||
-    normalized.includes('invalid jwt') ||
-    normalized.includes('jwt') ||
-    normalized.includes('permission denied')
-  ) {
-    return {
-      reason: 'credentials_or_permission_issue',
-      hint: 'Verify SUPABASE_SERVICE_ROLE_KEY and API permissions for this project.',
-    };
-  }
-
-  if (normalized.includes('relation') && normalized.includes('does not exist')) {
-    return {
-      reason: 'schema_missing_or_mismatch',
-      hint: 'Schema objects are missing. Apply Backend/database/schema.sql to the active Supabase project.',
-    };
-  }
-
-  return {
-    reason: 'unknown_connectivity_issue',
-    hint: 'Check Supabase project status, credentials, and schema setup.',
-  };
-};
-
-const checkDatabaseConnection = async (options = {}) => {
-  const table = (options.table || DEFAULT_HEALTH_TABLE).trim() || DEFAULT_HEALTH_TABLE;
-  const retries = Number.isFinite(Number(options.retries)) ? Number(options.retries) : 0;
-  const retryDelayMs = Number.isFinite(Number(options.retryDelayMs)) ? Number(options.retryDelayMs) : 1000;
-  const maxAttempts = Math.max(1, retries + 1);
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const startedAt = Date.now();
-
-    try {
-      const { error } = await supabase
-        .from(table)
-        .select('id', { head: true, count: 'exact' })
-        .limit(1);
-
-      if (error) throw error;
-
-      return {
-        ok: true,
-        reason: 'connected',
-        hint: 'Supabase reachable',
-        attempts: attempt,
-        table,
-        durationMs: Date.now() - startedAt,
-      };
-    } catch (error) {
-      const classification = classifyConnectivityError(error);
-      const isLastAttempt = attempt === maxAttempts;
-
-      if (isLastAttempt) {
-        return {
-          ok: false,
-          reason: classification.reason,
-          hint: classification.hint,
-          attempts: attempt,
-          table,
-          durationMs: Date.now() - startedAt,
-          errorMessage: String(error?.message || error || 'Unknown database error'),
-        };
-      }
-
-      if (retryDelayMs > 0) {
-        await wait(retryDelayMs);
-      }
-    }
-  }
-
-  return {
-    ok: false,
-    reason: 'unknown_connectivity_issue',
-    hint: 'Unexpected DB check flow',
-    attempts: maxAttempts,
-    table,
-    durationMs: 0,
-    errorMessage: 'DB check ended unexpectedly.',
-  };
-};
-
-module.exports = {
-  supabase,
-  checkDatabaseConnection,
-  classifyConnectivityError,
-};
+module.exports = { supabase };
