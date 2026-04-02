@@ -1,7 +1,10 @@
 import axios from 'axios';
+import { refreshSessionToken } from './api/authGenerated';
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
+// Legacy axios client kept for non-migrated route groups.
+// Auth routes are now handled through generated client wrappers.
 const api = axios.create({
   baseURL,
   headers: {
@@ -38,11 +41,9 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (refreshToken) {
-          const response = await axios.post(`${baseURL}/api/auth/refresh-token`, {
-            refreshToken
-          });
+          const response = await refreshSessionToken(refreshToken);
 
-          const { token, refreshToken: newRefreshToken } = response.data.data;
+          const { token, refreshToken: newRefreshToken } = response.data;
           localStorage.setItem('token', token);
           localStorage.setItem('refreshToken', newRefreshToken);
 

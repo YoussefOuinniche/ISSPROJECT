@@ -1,8 +1,8 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
 import './Users.css';
-import api from '../api';
 import AnimatedButton from '../components/ui/AnimatedButton';
 import MotionCard from '../components/ui/MotionCard';
+import { useUsers } from '../hooks/useUsers';
 
 const roleColor = {
   admin:  'text-orange-400 bg-orange-500/10 border-orange-500/20',
@@ -11,33 +11,17 @@ const roleColor = {
 
 const Users = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const usersQuery = useUsers({ query: searchQuery, role: 'all', page: 1, pageSize: 500 });
 
-  const loadUsers = useCallback(async () => {
-    try {
-      setError(null);
-      const res = await api.get('/api/public/admin/users');
-      if (res?.data?.data) setUsers(res.data.data);
-    } catch (err) {
-      console.error('Failed to load users', err);
-      setError('Failed to load users from server.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const users = usersQuery.data?.items || [];
+  const loading = usersQuery.isLoading;
+  const error = usersQuery.error?.message || null;
 
-  useEffect(() => { loadUsers(); }, [loadUsers]);
+  const filteredUsers = users;
 
-  const filteredUsers = users.filter(u =>
-    (u.full_name || u.email).toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const totalUsers = users.length;
-  const admins     = users.filter(u => u.role === 'admin').length;
-  const regular    = users.filter(u => u.role !== 'admin').length;
+  const totalUsers = usersQuery.data?.total ?? users.length;
+  const admins = users.filter((u) => u.role === 'admin').length;
+  const regular = users.filter((u) => u.role !== 'admin').length;
 
   const getInitials = (name, email) => {
     if (name) return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
@@ -53,7 +37,9 @@ const Users = () => {
     'from-indigo-500 to-violet-600',
   ];
 
-  const tempUser = null; void tempUser; // placeholder
+  const loadUsers = useCallback(async () => {
+    await usersQuery.refetch();
+  }, [usersQuery]);
 
   return (
     <div className="min-h-screen bg-[#080c14]">

@@ -1,43 +1,6 @@
-const { DataTypes } = require('sequelize');
-
-module.exports = (sequelize) => {
-  const Profile = sequelize.define('Profile', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    user_id: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'users', key: 'id' },
-    },
-    domain: {
-      type: DataTypes.STRING,
-    },
-    title: {
-      type: DataTypes.STRING,
-    },
-    experience_level: {
-      type: DataTypes.STRING,
-    },
-    bio: {
-      type: DataTypes.TEXT,
-    },
-    last_analysis_at: {
-      type: DataTypes.DATE,
-    },
-  }, {
-    tableName: 'profiles',
-    timestamps: true,
-    createdAt: 'created_at',
-    updatedAt: 'updated_at',
-  });
-
 const { supabase } = require('../config/database');
 
 class Profile {
-  // Create a new profile
   static async create(userId, profileData) {
     const { domain, title, experienceLevel, bio } = profileData;
     const { data, error } = await supabase
@@ -49,7 +12,6 @@ class Profile {
     return data;
   }
 
-  // Find profile by user ID
   static async findByUserId(userId) {
     const { data, error } = await supabase
       .from('profiles')
@@ -60,7 +22,6 @@ class Profile {
     return data;
   }
 
-  // Find profile by ID
   static async findById(id) {
     const { data, error } = await supabase
       .from('profiles')
@@ -71,16 +32,17 @@ class Profile {
     return data;
   }
 
-  // Update profile
   static async update(userId, updates) {
     const dbUpdates = {};
-    Object.keys(updates).forEach(key => {
+    Object.keys(updates).forEach((key) => {
       if (updates[key] !== undefined) {
         const dbKey = key.replace(/([A-Z])/g, '_$1').toLowerCase();
         dbUpdates[dbKey] = updates[key];
       }
     });
+
     if (Object.keys(dbUpdates).length === 0) throw new Error('No fields to update');
+
     const { data, error } = await supabase
       .from('profiles')
       .update(dbUpdates)
@@ -91,7 +53,6 @@ class Profile {
     return data;
   }
 
-  // Update last analysis timestamp
   static async updateLastAnalysis(userId) {
     const { data, error } = await supabase
       .from('profiles')
@@ -103,7 +64,6 @@ class Profile {
     return data;
   }
 
-  // Delete profile
   static async delete(userId) {
     const { data, error } = await supabase
       .from('profiles')
@@ -115,7 +75,6 @@ class Profile {
     return data;
   }
 
-  // Get profile with user information (PostgREST embedded join)
   static async getFullProfile(userId) {
     const { data, error } = await supabase
       .from('profiles')
@@ -124,11 +83,16 @@ class Profile {
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
+
     const { users: user, ...profile } = data;
-    return { ...profile, email: user?.email, full_name: user?.full_name, user_created_at: user?.created_at };
+    return {
+      ...profile,
+      email: user?.email,
+      full_name: user?.full_name,
+      user_created_at: user?.created_at,
+    };
   }
 
-  // Get all profiles (admin)
   static async findAll(limit = 50, offset = 0) {
     const { data, error } = await supabase
       .from('profiles')
@@ -136,7 +100,8 @@ class Profile {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (error) throw error;
-    return (data || []).map(row => {
+
+    return (data || []).map((row) => {
       const { users: user, ...profile } = row;
       return { ...profile, email: user?.email, full_name: user?.full_name };
     });

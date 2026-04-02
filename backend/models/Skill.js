@@ -123,25 +123,4 @@ class Skill {
   }
 }
 
-  Skill.findByName = async function (name) {
-    return await this.findOne({ where: { name } });
-  };
-
-  // override create to accept (name, category)
-  const originalCreate = Skill.create.bind(Skill);
-  Skill.create = async function (name, category) {
-    return originalCreate({ name, category });
-  };
-
-  Skill.update = async function (id, updates) {
-    const [count] = await this.update(updates, { where: { id } });
-    if (!count) return null;
-    return this.findByPk(id);
-  };
-
-  Skill.delete = async function (id) {
-    return await this.destroy({ where: { id } });
-  };
-
-  return Skill;
-};
+module.exports = Skill;

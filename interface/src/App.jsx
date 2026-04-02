@@ -10,7 +10,7 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import ErrorBoundary from './components/ErrorBoundary';
 import { isAuthenticated as checkAuth, clearAuthTokens } from './utils/auth';
-import api from './api';
+import { getCurrentSessionUser, logoutSession } from './api/authGenerated';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -21,8 +21,8 @@ function App() {
     const checkAuthentication = async () => {
       if (checkAuth()) {
         try {
-          // Verify token is still valid by calling /me endpoint
-          await api.get('/api/auth/me');
+          // Verify token is still valid by calling the generated auth client
+          await getCurrentSessionUser();
           setIsAuthenticated(true);
         } catch (error) {
           // Token invalid, clear auth
@@ -44,8 +44,7 @@ function App() {
 
   const handleLogout = async () => {
     try {
-      // Call logout endpoint
-      await api.post('/api/auth/logout');
+      await logoutSession();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {

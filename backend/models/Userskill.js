@@ -71,9 +71,9 @@ class UserSkill {
       .eq('user_id', userId)
       .eq('skill_id', skillId)
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
-    return data;
+    return data || null;
   }
 
   // Delete user skill
@@ -84,9 +84,9 @@ class UserSkill {
       .eq('user_id', userId)
       .eq('skill_id', skillId)
       .select()
-      .single();
+      .maybeSingle();
     if (error) throw error;
-    return data;
+    return data || null;
   }
 
   // Delete all skills for a user
@@ -138,17 +138,4 @@ class UserSkill {
   }
 }
 
-  UserSkill.update = async function (userId, skillId, updates) {
-    const [count] = await this.sequelize.models.UserSkill.update(updates, {
-      where: { user_id: userId, skill_id: skillId },
-    });
-    if (!count) return null;
-    return this.findOne({ where: { user_id: userId, skill_id: skillId } });
-  };
-
-  UserSkill.delete = async function (userId, skillId) {
-    return await this.destroy({ where: { user_id: userId, skill_id: skillId } });
-  };
-
-  return UserSkill;
-};
+module.exports = UserSkill;

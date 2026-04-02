@@ -2,20 +2,74 @@ import os # for environment variable handling and file paths
 import json # for parsing and handling JSON data
 import time # for timing functions
 import textwrap # for compact scraped context formatting
+import hmac
 from openai import OpenAI # for interacting with the LLM (Ollama)
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
 import uvicorn
 
 
+# Load shared backend env first, then optional local AI env overrides.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, "..", ".env"))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+
+def _env_int(name, default):
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+
+def _env_float(name, default):
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return float(raw)
+    except Exception:
+        return default
+
+
+def _env_bool(name, default=False):
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_list(name, default=None):
+    raw = os.getenv(name)
+    if raw is None or str(raw).strip() == "":
+        return default or []
+    values = [part.strip() for part in str(raw).split(",") if part.strip()]
+    return values if values else (default or [])
+
+
 # --- SETTINGS ---
-OLLAMA_URL = "http://localhost:11434/v1" # base URL for Ollama API (includes /v1)
-OLLAMA_MODEL = "gemma3:1b" # model name
-TEMPERATURE = 0.7 # creativity level
-TIMEOUT = 300 # timeout in seconds
-DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres" # database connection string
-API_HOST = "0.0.0.0" 
-API_PORT = 8000 # port for the API server
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/v1") # base URL for Ollama API
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:1b") # model name
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama") # local ollama ignores key, cloud gateways may require one
+TEMPERATURE = _env_float("AI_TEMPERATURE", 0.7) # creativity level
+TIMEOUT = _env_int("AI_TIMEOUT_SECONDS", 300) # timeout in seconds
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres") # database connection string
+API_HOST = os.getenv("AI_HOST", "0.0.0.0")
+API_PORT = _env_int("AI_PORT", 8000) # port for the API server
+AI_RELOAD = _env_bool("AI_RELOAD", os.getenv("NODE_ENV", "development") != "production")
+AI_REQUIRE_AUTH = _env_bool("AI_REQUIRE_AUTH", True)
+AI_SERVICE_TOKEN = os.getenv("AI_SERVICE_TOKEN", "").strip()
+
+default_cors_origins = [] if AI_REQUIRE_AUTH else ["http://localhost:3000", "http://127.0.0.1:3000"]
+CORS_ORIGINS = _env_list("AI_CORS_ORIGINS", default_cors_origins)
+
+if AI_REQUIRE_AUTH and not AI_SERVICE_TOKEN:
+    raise RuntimeError("AI_REQUIRE_AUTH is enabled but AI_SERVICE_TOKEN is not set.")
 
 
 # fix ollama url
@@ -28,10 +82,14 @@ def fix_ollama_url(raw_url):
     return cleaned
 
 
+OLLAMA_URL = fix_ollama_url(OLLAMA_URL)
+
+
 # connect to database
 def connect_db():
     import psycopg2
     import psycopg2.extras
+    # Keep SQL in this service aligned with Backend/database/schema.sql.
     connection = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     return connection
 
@@ -154,7 +212,7 @@ def save_recommendations(user_id, recommendations):
 
 # CALL THE LLM
 def call_llm(system_prompt, user_prompt):
-    client = OpenAI(base_url=OLLAMA_URL, api_key="ollama")
+    client = OpenAI(base_url=OLLAMA_URL, api_key=OLLAMA_API_KEY)
 
     attempt = 0
     while attempt < 2:
@@ -927,7 +985,7 @@ def check_health():
     # check llm
     try:
         from openai import OpenAI
-        client = OpenAI(base_url=OLLAMA_URL, api_key="ollama")
+        client = OpenAI(base_url=OLLAMA_URL, api_key=OLLAMA_API_KEY)
         client.models.list()
         status["llm"] = "connected"
     except Exception:
@@ -958,10 +1016,33 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
+def _extract_bearer_token(request):
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return ""
+
+
+def _is_public_path(path):
+    return path == "/health"
+
+
+@app.middleware("http")
+async def service_auth_middleware(request: Request, call_next):
+    if not AI_REQUIRE_AUTH or _is_public_path(request.url.path) or request.method == "OPTIONS":
+        return await call_next(request)
+
+    presented = request.headers.get("x-ai-service-token", "").strip() or _extract_bearer_token(request)
+    if not presented or not hmac.compare_digest(presented, AI_SERVICE_TOKEN):
+        return JSONResponse(status_code=401, content={"detail": "Unauthorized AI service access"})
+
+    return await call_next(request)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=("*" not in CORS_ORIGINS),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1077,7 +1158,7 @@ async def generate_job_description_endpoint(payload: dict):
 @app.get("/models")
 async def models_endpoint():
     try:
-        client = OpenAI(base_url=OLLAMA_URL, api_key="ollama")
+        client = OpenAI(base_url=OLLAMA_URL, api_key=OLLAMA_API_KEY)
         models = client.models.list()
         return {
             "success": True,
@@ -1094,6 +1175,6 @@ if __name__ == "__main__":
         "backend:app",
         host=API_HOST,
         port=API_PORT,
-        reload=True,
+        reload=AI_RELOAD,
         log_level="info",
     )

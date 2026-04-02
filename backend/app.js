@@ -25,37 +25,41 @@ const app = express();
 app.use(helmet());
 
 // Global rate limiter – 100 requests per 15 minutes per IP
+const isProduction = process.env.NODE_ENV === 'production';
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: isProduction ? 100 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: 'Too many requests, please try again later.' },
+  message: {
+    success: false,
+    message: 'Too many requests, please try again later.',
+    hint: 'If this happens during development, check polling frequency or restart after cooldown.'
+  },
+  skip: (req) => req.path === '/health',
 });
 app.use(globalLimiter);
-
-// Stricter limiter for auth routes
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, message: 'Too many auth attempts, please try again later.' },
-});
 
 // ─────────────────────────────────────────
 //  CORS
 // ─────────────────────────────────────────
 
-const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+const defaultDevOrigins = 'http://localhost:3000,http://127.0.0.1:3000';
+const configuredOrigins =
+  process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? '' : defaultDevOrigins);
+
+const allowedOrigins = configuredOrigins
   .split(',')
-  .map((o) => o.trim());
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, Postman, curl)
       if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+
+      // In production, FRONTEND_URL should be explicitly set.
       callback(new Error(`CORS policy: origin ${origin} not allowed`));
     },
     credentials: true,
@@ -77,23 +81,46 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // ─────────────────────────────────────────
 
 app.get('/health', async (req, res) => {
+  const timestamp = new Date().toISOString();
+  const dbConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  const health = {
+    success: true,
+    message: 'Server is healthy',
+    timestamp,
+    environment: process.env.NODE_ENV || 'development',
+    app: {
+      status: 'up',
+    },
+    database: {
+      enabled: dbConfigured,
+      status: 'disabled',
+    },
+  };
+
+  if (!dbConfigured) {
+    return res.status(200).json(health);
+  }
+
   try {
     const { error } = await supabase.from('users').select('id').limit(1);
-    if (error) throw error;
-    res.status(200).json({
-      success: true,
-      message: 'Server is healthy',
-      timestamp: result.rows[0].now,
-      environment: process.env.NODE_ENV || 'development',
-      database: 'connected',
-    });
+
+    if (error) {
+      throw error;
+    }
+
+    health.database.status = 'up';
+    return res.status(200).json(health);
   } catch (error) {
-    res.status(503).json({
-      success: false,
-      message: 'Server is unhealthy',
-      database: 'disconnected',
-      error: process.env.NODE_ENV === 'production' ? 'Internal error' : error.message,
-    });
+    health.success = false;
+    health.message = 'Server is degraded';
+    health.database.status = 'down';
+
+    if (process.env.NODE_ENV !== 'production') {
+      health.database.error = error.message;
+    }
+
+    return res.status(503).json(health);
   }
 });
 
@@ -101,7 +128,7 @@ app.get('/health', async (req, res) => {
 //  API Routes
 // ─────────────────────────────────────────
 
-app.use('/api/auth',    authLimiter, authRoutes);
+app.use('/api/auth',    authRoutes);
 app.use('/api/user',    userRoutes);
 app.use('/api/skills',  skillRoutes);
 app.use('/api/trends',  trendRoutes);
@@ -127,6 +154,27 @@ app.use(errorHandler);
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
 
+const closeDatabaseResources = async () => {
+  // Supabase JS is primarily an HTTP client (no pg pool to close).
+  // Cleanup is only needed if realtime resources were created.
+  if (!supabase) {
+    console.log('Database client unavailable. Skipping database cleanup.');
+    return;
+  }
+
+  if (typeof supabase.removeAllChannels === 'function') {
+    try {
+      await supabase.removeAllChannels();
+      console.log('Supabase realtime channels closed.');
+    } catch (err) {
+      console.error('Error closing Supabase realtime channels:', err.message);
+    }
+    return;
+  }
+
+  console.log('No closable database resources found. Skipping database cleanup.');
+};
+
 const server = app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════╗
@@ -146,14 +194,9 @@ const shutdown = (signal) => {
   console.log(`\n${signal} received. Shutting down gracefully...`);
   server.close(async () => {
     console.log('HTTP server closed.');
-    try {
-      await pool.end();
-      console.log('Database pool closed.');
-    } catch (err) {
-      console.error('Error closing database pool:', err.message);
-    } finally {
-      process.exit(0);
-    }
+
+    await closeDatabaseResources();
+    process.exit(0);
   });
 
   // Force exit if graceful shutdown takes too long

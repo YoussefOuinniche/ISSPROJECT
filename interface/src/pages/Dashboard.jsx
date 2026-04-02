@@ -1,47 +1,40 @@
-﻿import React, { useState, useEffect, useCallback } from 'react';
+﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Dashboard.css';
 import api from '../api';
-import AnimatedButton from '../components/ui/AnimatedButton';
-import MotionCard from '../components/ui/MotionCard';
+import { Card } from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import KpiTile from '../components/product/KpiTile';
 import { useToast } from '../components/ui/Toast';
 
-// Animated skills bar chart
 const SkillsChart = ({ data }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="h-40 flex items-center justify-center text-slate-500 text-sm">
+      <div className="dashboard-empty">
         No skill data available
       </div>
     );
   }
-  const max = Math.max(...data.map(d => d.count));
-  const palette = [
-    'from-cyan-500 to-blue-500',
-    'from-purple-500 to-pink-500',
-    'from-green-500 to-emerald-400',
-    'from-orange-500 to-amber-400',
-    'from-rose-500 to-red-500',
-    'from-indigo-500 to-violet-500',
-  ];
+
+  const max = Math.max(...data.map((item) => item.count));
+
   return (
-    <div className="flex items-end gap-3 px-2" style={{ height: '140px' }}>
-      {data.map((d, i) => {
-        const pct = Math.max(6, Math.round((d.count / max) * 100));
+    <div className="dashboard-skill-chart">
+      {data.map((item, index) => {
+        const pct = Math.max(8, Math.round((item.count / max) * 100));
         return (
-          <div key={d.name} className="flex-1 flex flex-col items-center gap-1.5 group">
-            <span className="text-xs font-bold text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-              {d.count}
+          <div key={item.name} className="dashboard-skill-bar-wrap">
+            <span className="dashboard-skill-value">
+              {item.count}
             </span>
-            <div className="w-full relative" style={{ height: '100px' }}>
+            <div className="dashboard-skill-track">
               <div
-                className={`absolute bottom-0 left-0 right-0 rounded-t-lg bg-gradient-to-t ${palette[i % palette.length]}
-                            skill-bar opacity-80 group-hover:opacity-100 transition-opacity duration-200`}
+                className="dashboard-skill-fill"
                 style={{ height: `${pct}%` }}
               />
             </div>
-            <span className="text-[10px] text-slate-400 text-center leading-tight max-w-full truncate block">
-              {d.name}
+            <span className="dashboard-skill-label" title={item.name}>
+              {item.name}
             </span>
           </div>
         );
@@ -50,42 +43,50 @@ const SkillsChart = ({ data }) => {
   );
 };
 
-const colorMap = {
-  blue:   { gradient: 'from-blue-600/20 to-blue-900/10',    border: 'border-blue-500/20',   icon: 'text-blue-400',   badge: 'text-blue-300 bg-blue-500/10',   glow: 'hover:shadow-blue-500/10'   },
-  purple: { gradient: 'from-purple-600/20 to-purple-900/10', border: 'border-purple-500/20', icon: 'text-purple-400', badge: 'text-purple-300 bg-purple-500/10', glow: 'hover:shadow-purple-500/10' },
-  green:  { gradient: 'from-green-600/20 to-green-900/10',   border: 'border-green-500/20',  icon: 'text-green-400',  badge: 'text-green-300 bg-green-500/10',  glow: 'hover:shadow-green-500/10'  },
-  orange: { gradient: 'from-orange-600/20 to-orange-900/10', border: 'border-orange-500/20', icon: 'text-orange-400', badge: 'text-orange-300 bg-orange-500/10', glow: 'hover:shadow-orange-500/10' },
-};
-
-const activityColorMap = {
-  blue:   'bg-blue-500/10 text-blue-400',
-  orange: 'bg-orange-500/10 text-orange-400',
-  green:  'bg-green-500/10 text-green-400',
-  red:    'bg-red-500/10 text-red-400',
-};
-
 const Dashboard = () => {
   const navigate = useNavigate();
   const toast = useToast();
-  const [timeRange, setTimeRange] = useState('30d');
-  const [stats, setStats] = useState([]);
-  const [recentActivities, setRecentActivities] = useState([]);
+  const [summary, setSummary] = useState({
+    users: 0,
+    admins: 0,
+    profiles: 0,
+    skills: 0,
+    userSkills: 0,
+    trends: 0,
+    skillGaps: 0,
+    recommendations: 0,
+    aiGeneratedGaps: 0,
+  });
+  const [workflows, setWorkflows] = useState({
+    profileCoveragePct: 0,
+    avgSkillsPerUser: 0,
+    aiGeneratedGaps: 0,
+  });
+  const [recentUsers, setRecentUsers] = useState([]);
   const [skillsByCategory, setSkillsByCategory] = useState([]);
+  const [topGapDomains, setTopGapDomains] = useState([]);
+  const [aiService, setAiService] = useState({ enabled: false, status: 'disabled', model: null });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const loadDashboard = useCallback(async () => {
     try {
-      const res = await api.get('/api/public/dashboard');
+      setError('');
+      const res = await api.get('/api/public/admin/overview');
       if (res?.data?.data) {
-        const { stats, recentActivities, skillsByCategory } = res.data.data;
-        setStats(stats || []);
-        setRecentActivities(recentActivities || []);
-        setSkillsByCategory(skillsByCategory || []);
+        const payload = res.data.data;
+        setSummary(payload.summary || {});
+        setWorkflows(payload.workflows || {});
+        setRecentUsers(payload.recentUsers || []);
+        setSkillsByCategory(payload.distributions?.skillsByCategory || []);
+        setTopGapDomains(payload.distributions?.topGapDomains || []);
+        setAiService(payload.aiService || { enabled: false, status: 'disabled', model: null });
         setLastUpdated(new Date());
       }
     } catch (err) {
       console.error('Failed to load dashboard data', err);
+      setError(err?.response?.data?.message || 'Failed to load admin overview data');
     } finally {
       setLoading(false);
     }
@@ -103,13 +104,25 @@ const Dashboard = () => {
   }, [loadDashboard]);
 
   const exportCsv = () => {
-    if (!stats.length) {
+    if (!summary?.users && !summary?.skills) {
       toast.info('No dashboard data to export');
       return;
     }
     const rows = [
-      ['Title', 'Value', 'DisplayValue', 'Change', 'Label'],
-      ...stats.map((item) => [item.title, item.value, item.displayValue, item.change, item.changeLabel]),
+      ['Metric', 'Value'],
+      ['Total Users', summary.users ?? 0],
+      ['Administrators', summary.admins ?? 0],
+      ['Profiles', summary.profiles ?? 0],
+      ['Skills', summary.skills ?? 0],
+      ['User Skills', summary.userSkills ?? 0],
+      ['Trends', summary.trends ?? 0],
+      ['Skill Gaps', summary.skillGaps ?? 0],
+      ['Recommendations', summary.recommendations ?? 0],
+      ['Profile Coverage %', workflows.profileCoveragePct ?? 0],
+      ['Average Skills Per User', workflows.avgSkillsPerUser ?? 0],
+      ['AI Generated Gaps', workflows.aiGeneratedGaps ?? 0],
+      ['AI Service Status', aiService?.status || 'unknown'],
+      ['AI Model', aiService?.model || 'n/a'],
     ];
     const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -128,176 +141,255 @@ const Dashboard = () => {
     const map = {
       'Total Users': '/users',
       'Skills Tracked': '/content?type=Skill',
-      'Active Trends': '/analytics?focus=trends',
-      'Skill Gaps': '/analytics?focus=skill-gaps',
+      'Active Trends': '/content?type=Trend',
+      'Skill Gaps': '/content?type=Skill%20Gap',
     };
     const destination = map[title];
     if (destination) navigate(destination);
   };
 
-  return (
-    <div className="min-h-screen bg-[#080c14]">
-      {/* Page Header */}
-      <div className="border-b border-white/5 bg-[#0f1623]/60 backdrop-blur-sm px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Overview</h1>
-            <p className="text-sm text-slate-400 mt-0.5 flex items-center gap-2">
-              Real-time platform statistics
-              {lastUpdated && (
-                <span className="text-xs text-slate-600 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
-                  Updated {lastUpdated.toLocaleTimeString()}
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <AnimatedButton
-              onClick={loadDashboard}
-              disabled={loading}
-              variant="ghost"
-              className="text-slate-400"
-            >
-              <span className={`material-symbols-outlined text-xl ${loading ? 'animate-spin' : ''}`}>refresh</span>
-              Refresh
-            </AnimatedButton>
-            <AnimatedButton variant="gradient" className="text-white" onClick={exportCsv}>
-              <span className="material-symbols-outlined text-xl">downloading</span>
-              Export
-            </AnimatedButton>
-          </div>
-        </div>
-      </div>
+  const totalTrackedSkills = useMemo(
+    () => skillsByCategory.reduce((sum, item) => sum + Number(item.count || 0), 0),
+    [skillsByCategory],
+  );
 
-      <div className="p-6 space-y-6">
-        {/* Stat Cards */}
+  const stats = useMemo(() => ([
+    {
+      title: 'Total Users',
+      displayValue: Number(summary.users || 0).toLocaleString(),
+      change: `${summary.admins || 0} admins`,
+      changeLabel: 'active accounts',
+      icon: 'group',
+    },
+    {
+      title: 'Skills Tracked',
+      displayValue: Number(summary.skills || 0).toLocaleString(),
+      change: `${summary.userSkills || 0} mapped`,
+      changeLabel: 'user skill links',
+      icon: 'psychology',
+    },
+    {
+      title: 'Active Trends',
+      displayValue: Number(summary.trends || 0).toLocaleString(),
+      change: `${summary.recommendations || 0} recommendations`,
+      changeLabel: 'stored in database',
+      icon: 'trending_up',
+    },
+    {
+      title: 'Skill Gaps',
+      displayValue: Number(summary.skillGaps || 0).toLocaleString(),
+      change: `${summary.aiGeneratedGaps || 0} AI-tagged`,
+      changeLabel: 'reason begins with AI:',
+      icon: 'warning_amber',
+    },
+  ]), [summary]);
+
+  const workflowTiles = useMemo(() => ([
+    {
+      label: 'Profile Coverage',
+      value: `${workflows.profileCoveragePct || 0}%`,
+      description: 'users with profile rows',
+      icon: 'badge',
+    },
+    {
+      label: 'Average Skills/User',
+      value: `${workflows.avgSkillsPerUser || 0}`,
+      description: 'user_skills / users',
+      icon: 'balance',
+    },
+    {
+      label: 'AI Generated Gaps',
+      value: `${workflows.aiGeneratedGaps || 0}`,
+      description: 'skill_gaps reason like AI:%',
+      icon: 'auto_awesome',
+    },
+    {
+      label: 'AI Service',
+      value: (aiService?.status || 'unknown').toUpperCase(),
+      description: aiService?.model ? `model: ${aiService.model}` : 'health endpoint snapshot',
+      icon: 'hub',
+    },
+  ]), [workflows, aiService]);
+
+  const toneFromTitle = (title) => {
+    if (title.toLowerCase().includes('user')) return 'primary';
+    if (title.toLowerCase().includes('trend')) return 'success';
+    if (title.toLowerCase().includes('gap')) return 'warning';
+    return 'primary';
+  };
+
+  return (
+    <div className="dashboard-page">
+      <section className="dashboard-hero">
+        <div>
+          <p className="dashboard-eyebrow">Operations Console</p>
+          <h1 className="dashboard-title">Platform Overview</h1>
+          <p className="dashboard-subtitle">
+            Admin-only overview aligned to database aggregates and AI service health.
+          </p>
+        </div>
+        <div className="dashboard-actions">
+          <Button
+            variant="secondary"
+            onClick={loadDashboard}
+            loading={loading}
+            icon={<span className="material-symbols-outlined text-lg">refresh</span>}
+          >
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            onClick={exportCsv}
+            icon={<span className="material-symbols-outlined text-lg">download</span>}
+          >
+            Export CSV
+          </Button>
+        </div>
+      </section>
+
+      <section className="dashboard-meta-row">
+        <p className="dashboard-meta-item">
+          <span className="dashboard-dot" />
+          {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Waiting for first sync'}
+        </p>
+        <p className="dashboard-meta-item">Source: /api/public/admin/overview</p>
+      </section>
+
+      {error ? <p className="dashboard-error">{error}</p> : null}
+
+      <section className="dashboard-section">
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="dashboard-kpi-grid">
             {[...Array(4)].map((_, i) => (
-              <div key={i} className="rounded-2xl h-40 bg-white/5 animate-pulse" />
+              <div key={i} className="dashboard-skeleton" />
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {stats.map((stat, index) => {
-              const g = colorMap[stat.color] || colorMap.blue;
-              return (
-                <MotionCard
-                  key={index}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28, delay: index * 0.06 }}
-                  whileHover={{ y: -6 }}
-                  className={`relative rounded-2xl border ${g.border} bg-gradient-to-br ${g.gradient}
-                              hover:shadow-xl ${g.glow} hover:-translate-y-1.5
-                              transition-all duration-300 backdrop-blur-sm overflow-hidden
-                              group p-6 stat-card cursor-pointer`}
-                  onClick={() => onCardClick(stat.title)}
-                >
-                  <div className="absolute -top-6 -right-6 w-28 h-28 rounded-full blur-3xl
-                                  bg-white/5 group-hover:bg-white/10 transition-opacity duration-300" />
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
-                      <span className={`material-symbols-outlined text-2xl ${g.icon}`}>{stat.icon}</span>
-                    </div>
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${g.badge}`}>
-                      {stat.change}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-400 mb-1 font-medium">{stat.title}</p>
-                  <p className="text-3xl font-bold text-white tabular-nums">{stat.displayValue}</p>
-                  <p className="text-xs text-slate-600 mt-1.5">{stat.changeLabel}</p>
-                </MotionCard>
-              );
-            })}
+          <div className="dashboard-kpi-grid">
+            {stats.map((stat, index) => (
+              <KpiTile
+                key={`${stat.title}-${index}`}
+                title={stat.title}
+                value={stat.displayValue}
+                change={stat.change}
+                changeLabel={stat.changeLabel}
+                icon={stat.icon}
+                tone={toneFromTitle(stat.title)}
+                onClick={() => onCardClick(stat.title)}
+              />
+            ))}
           </div>
         )}
+      </section>
 
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Bar Chart */}
-          <div className="lg:col-span-2 rounded-2xl border border-white/5 bg-[#0f1623]/80 backdrop-blur-sm p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-bold text-white">Skills by Category</h2>
-                <p className="text-sm text-slate-400 mt-0.5">
-                  Distribution across {skillsByCategory.reduce((a, b) => a + b.count, 0)} tracked skills
-                </p>
-              </div>
-              <div className="flex gap-1 bg-white/5 p-1 rounded-xl border border-white/5">
-                {['30d', '90d', '1y'].map(r => (
-                  <AnimatedButton
-                    key={r}
-                    onClick={() => setTimeRange(r)}
-                    size="sm"
-                    variant={timeRange === r ? 'gradient' : 'ghost'}
-                    className={`text-xs font-semibold transition-all duration-200
-                      ${timeRange === r
-                        ? 'text-white shadow-sm shadow-cyan-500/20'
-                        : 'text-slate-500 hover:text-white'}`}
-                  >
-                    {r.toUpperCase()}
-                  </AnimatedButton>
-                ))}
-              </div>
+      <section className="dashboard-workflow-grid">
+        {workflowTiles.map((item) => (
+          <Card key={item.label} className="dashboard-workflow-card">
+            <div className="dashboard-workflow-head">
+              <p className="dashboard-workflow-label">{item.label}</p>
+              <span className="material-symbols-outlined" aria-hidden="true">{item.icon}</span>
             </div>
-            {loading ? (
-              <div className="h-40 bg-white/5 rounded-xl animate-pulse" />
-            ) : (
-              <SkillsChart data={skillsByCategory} />
-            )}
-            <div className="mt-4 flex items-center gap-3 flex-wrap">
-              {skillsByCategory.map((d, i) => (
-                <span key={d.name} className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <span className="w-2 h-2 rounded-sm inline-block" style={{
-                    background: ['#06b6d4','#a855f7','#10b981','#f97316','#ef4444','#6366f1'][i % 6]
-                  }} />
-                  {d.name} ({d.count})
-                </span>
-              ))}
+            <p className="dashboard-workflow-value">{loading ? '...' : item.value}</p>
+            <p className="dashboard-workflow-note">{item.description}</p>
+          </Card>
+        ))}
+      </section>
+
+      <section className="dashboard-content-grid">
+        <Card className="dashboard-main-card">
+          <div className="dashboard-card-head">
+            <div>
+              <h2 className="dashboard-card-title">Skills by Category</h2>
+              <p className="dashboard-card-subtitle">
+                Distribution across {totalTrackedSkills} tracked skills
+              </p>
+            </div>
+            <div className="dashboard-range-picker">
+              <span className="dashboard-data-badge">DB Snapshot</span>
             </div>
           </div>
 
-          {/* Recent Members */}
-          <div className="rounded-2xl border border-white/5 bg-[#0f1623]/80 backdrop-blur-sm p-6">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold text-white">Recent Members</h2>
-              <span className="text-xs font-medium text-slate-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/5 flex items-center gap-1.5">
-                Live <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+          {loading ? <div className="dashboard-skeleton dashboard-chart-skeleton" /> : <SkillsChart data={skillsByCategory} />}
+
+          <div className="dashboard-legend">
+            {skillsByCategory.map((item) => (
+              <span key={item.name} className="dashboard-legend-item">
+                <span className="dashboard-legend-dot" />
+                {item.name} ({item.count})
               </span>
+            ))}
+          </div>
+        </Card>
+
+        <div className="dashboard-rail">
+          <Card className="dashboard-side-card">
+            <div className="dashboard-card-head">
+              <div>
+                <h2 className="dashboard-card-title">Recent Members</h2>
+                <p className="dashboard-card-subtitle">Latest platform actions</p>
+              </div>
+              <span className="dashboard-live-badge">Live</span>
             </div>
+
             {loading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="h-12 bg-white/5 rounded-xl animate-pulse" />
+              <div className="dashboard-list-skeletons">
+                {[...Array(5)].map((_, index) => (
+                  <div key={index} className="dashboard-skeleton dashboard-row-skeleton" />
                 ))}
               </div>
             ) : (
-              <div className="space-y-2">
-                {recentActivities.map((activity, index) => (
-                  <div
-                    key={index}
-                    className="flex gap-3 p-2.5 rounded-xl hover:bg-white/5 border border-transparent
-                               hover:border-white/5 transition-all duration-200 group"
-                  >
-                    <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center
-                                    ${activityColorMap[activity.color] || activityColorMap.blue}
-                                    transition-transform duration-200 group-hover:scale-110`}>
-                      <span className="material-symbols-outlined text-base">{activity.icon}</span>
+              <div className="dashboard-activity-list">
+                {recentUsers.map((user, index) => (
+                  <article key={`${user.email}-${index}`} className="dashboard-activity-row">
+                    <div className="dashboard-activity-icon">
+                      <span className="material-symbols-outlined" aria-hidden="true">
+                        {user.role === 'admin' ? 'admin_panel_settings' : 'person_add'}
+                      </span>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">{activity.user}</p>
-                      <p className="text-xs text-slate-500 truncate">{activity.action}</p>
-                      <p className="text-xs text-slate-700 mt-0.5">{activity.time}</p>
+                    <div className="dashboard-activity-copy">
+                      <p className="dashboard-activity-user">{user.name}</p>
+                      <p className="dashboard-activity-action">
+                        {user.role === 'admin' ? 'joined as administrator' : 'joined as user'}
+                      </p>
                     </div>
+                    <p className="dashboard-activity-time">
+                      {new Date(user.created_at).toLocaleDateString('en-GB')}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card className="dashboard-side-card">
+            <div className="dashboard-card-head">
+              <div>
+                <h2 className="dashboard-card-title">Top Gap Domains</h2>
+                <p className="dashboard-card-subtitle">Domains with highest current gap records</p>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="dashboard-list-skeletons">
+                {[...Array(5)].map((_, index) => (
+                  <div key={index} className="dashboard-skeleton dashboard-row-skeleton" />
+                ))}
+              </div>
+            ) : topGapDomains.length === 0 ? (
+              <div className="dashboard-empty">No gap domain data available</div>
+            ) : (
+              <div className="dashboard-domain-list">
+                {topGapDomains.map((domain) => (
+                  <div key={domain.name} className="dashboard-domain-row">
+                    <p className="dashboard-domain-name">{domain.name}</p>
+                    <p className="dashboard-domain-count">{domain.count}</p>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </Card>
         </div>
-      </div>
+      </section>
     </div>
   );
 };

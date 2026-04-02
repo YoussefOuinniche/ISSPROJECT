@@ -36,10 +36,11 @@ class User {
     return data;
   }
 
-  // Find user by email (case-insensitive)
-  User.findByEmail = async function (email) {
-    return await this.findOne({ where: { email } });
-  };
+  // Verify a plaintext password against stored hash
+  static async verifyPassword(plainPassword, hashedPassword) {
+    if (!plainPassword || !hashedPassword) return false;
+    return bcrypt.compare(plainPassword, hashedPassword);
+  }
 
   // Update user
   static async update(id, updates) {

@@ -7,21 +7,26 @@ import requests
 from bs4 import BeautifulSoup
 import textwrap
 import sys
+import os
 
 # how long to wait for a website before giving up (in seconds)
-REQUEST_TIMEOUT = 15
+REQUEST_TIMEOUT = int(os.getenv("AI_SCRAPER_TIMEOUT", "15"))
 
 # the urls we are scraping from
-BLS_URL = "https://www.bls.gov/ooh/computer-and-information-technology/home.htm"
-HIRING_LAB_URL = "https://www.hiringlab.org/fr/"
-NACE_URL = "https://www.naceweb.org/job-market/trends-and-predictions"
+BLS_URL = os.getenv("AI_SCRAPER_BLS_URL", "https://www.bls.gov/ooh/computer-and-information-technology/home.htm")
+HIRING_LAB_URL = os.getenv("AI_SCRAPER_HIRING_LAB_URL", "https://www.hiringlab.org/fr/")
+NACE_URL = os.getenv("AI_SCRAPER_NACE_URL", "https://www.naceweb.org/job-market/trends-and-predictions")
+SCRAPER_USER_AGENT = os.getenv(
+    "AI_SCRAPER_USER_AGENT",
+    "SkillPulse-Research-Bot/1.0 (academic project - IT career research)",
+)
 
 
 # --- HELPER: make a get request to a website ---
 def make_request(url, params=None):
     # i looked up what headers to send so websites dont block us
     my_headers = {
-        "User-Agent": "SkillPulse-Research-Bot/1.0 (academic project - IT career research)",
+        "User-Agent": SCRAPER_USER_AGENT,
         "Accept": "text/html,application/json,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
     }

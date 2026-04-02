@@ -1,6 +1,26 @@
 const { User, Profile, UserSkill, SkillGap, Recommendation } = require('../models');
+const {
+  recomputeUserAnalysis,
+  requestAiSkillGapAnalysis,
+  requestAiRoadmap,
+  requestAiRecommendations,
+  requestAiCareerAdvice,
+  requestAiJobDescription,
+} = require('../services/analysisService');
+const { getUserDashboardSnapshot } = require('../services/dashboardService');
 
 class UserController {
+  static normalizeUuid(value) {
+    return String(value || '')
+      .trim()
+      .replace(/^"+|"+$/g, '');
+  }
+
+  static isUuid(value) {
+    // PostgreSQL uuid accepts any canonical 8-4-4-4-12 hex format, not only RFC versioned values.
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  }
+
   // Get user profile
   static async getProfile(req, res) {
     try {
@@ -113,12 +133,20 @@ class UserController {
   static async addSkill(req, res) {
     try {
       const userId = req.user.id;
-      const { skillId, proficiencyLevel, yearsOfExperience } = req.body;
+      const { proficiencyLevel, yearsOfExperience } = req.body;
+      const skillId = UserController.normalizeUuid(req.body.skillId);
 
       if (!skillId) {
         return res.status(400).json({
           success: false,
           message: 'Skill ID is required'
+        });
+      }
+
+      if (!UserController.isUuid(skillId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid skill ID format'
         });
       }
 
@@ -148,8 +176,45 @@ class UserController {
   static async updateSkill(req, res) {
     try {
       const userId = req.user.id;
-      const { skillId } = req.params;
-      const updates = req.body;
+      const skillId = UserController.normalizeUuid(req.params.skillId);
+
+      if (!UserController.isUuid(skillId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid skill ID format',
+          received: req.params.skillId
+        });
+      }
+
+      const updates = {};
+      if (req.body.proficiencyLevel !== undefined) {
+        const allowed = ['beginner', 'intermediate', 'advanced', 'expert'];
+        if (!allowed.includes(req.body.proficiencyLevel)) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid proficiency level'
+          });
+        }
+        updates.proficiencyLevel = req.body.proficiencyLevel;
+      }
+
+      if (req.body.yearsOfExperience !== undefined) {
+        const years = Number(req.body.yearsOfExperience);
+        if (!Number.isFinite(years) || years < 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'yearsOfExperience must be a non-negative number'
+          });
+        }
+        updates.yearsOfExperience = years;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No valid fields to update. Use proficiencyLevel and/or yearsOfExperience.'
+        });
+      }
 
       const userSkill = await UserSkill.update(userId, skillId, updates);
 
@@ -167,6 +232,12 @@ class UserController {
       });
     } catch (error) {
       console.error('Update skill error:', error);
+      if (error && error.code === '22P02') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid skill ID format'
+        });
+      }
       res.status(500).json({
         success: false,
         message: 'Error updating skill',
@@ -179,7 +250,15 @@ class UserController {
   static async removeSkill(req, res) {
     try {
       const userId = req.user.id;
-      const { skillId } = req.params;
+      const skillId = UserController.normalizeUuid(req.params.skillId);
+
+      if (!UserController.isUuid(skillId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid skill ID format',
+          received: req.params.skillId
+        });
+      }
 
       const deletedSkill = await UserSkill.delete(userId, skillId);
 
@@ -196,6 +275,12 @@ class UserController {
       });
     } catch (error) {
       console.error('Remove skill error:', error);
+      if (error && error.code === '22P02') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid skill ID format'
+        });
+      }
       res.status(500).json({
         success: false,
         message: 'Error removing skill',
@@ -267,24 +352,14 @@ class UserController {
     try {
       const userId = req.user.id;
 
-      // Fetch all user-related data in parallel
-      const [profile, skills, skillGaps, recommendations, gapStats] = await Promise.all([
-        Profile.getFullProfile(userId),
-        UserSkill.getUserSkills(userId),
-        SkillGap.findByUserId(userId),
-        Recommendation.getRecentRecommendations(userId, 7, 5),
-        SkillGap.getUserGapStats(userId)
-      ]);
+      const dashboard = await getUserDashboardSnapshot(userId, {
+        recentRecommendationDays: 7,
+        recentRecommendationLimit: 5,
+      });
 
       res.status(200).json({
         success: true,
-        data: {
-          profile,
-          skills,
-          skillGaps,
-          recentRecommendations: recommendations,
-          gapStatistics: gapStats
-        }
+        data: dashboard
       });
     } catch (error) {
       console.error('Get dashboard error:', error);
@@ -292,6 +367,146 @@ class UserController {
         success: false,
         message: 'Error fetching dashboard data',
         error: error.message
+      });
+    }
+  }
+
+  // Recompute AI-backed analysis and return persisted dashboard data
+  static async recomputeProfileAnalysis(req, res) {
+    try {
+      const userId = req.user.id;
+      const targetRole = typeof req.body?.targetRole === 'string' ? req.body.targetRole.trim() : undefined;
+
+      const result = await recomputeUserAnalysis(userId, {
+        targetRole: targetRole || undefined,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Profile analysis recomputed from AI and persisted',
+        data: result,
+      });
+    } catch (error) {
+      console.error('Recompute profile analysis error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error recomputing profile analysis',
+        error: error.message,
+      });
+    }
+  }
+
+  // Trigger AI skill-gap analysis for the current user.
+  static async analyzeSkillGapsWithAi(req, res) {
+    try {
+      const userId = req.user.id;
+      const targetRole = typeof req.body?.targetRole === 'string' ? req.body.targetRole.trim() : undefined;
+
+      const result = await requestAiSkillGapAnalysis(userId, targetRole || undefined);
+      res.status(200).json({
+        success: true,
+        message: 'AI skill-gap analysis completed',
+        data: result,
+      });
+    } catch (error) {
+      console.error('Analyze skill gaps with AI error:', error);
+      res.status(error?.statusCode || 502).json({
+        success: false,
+        message: 'Error running AI skill-gap analysis',
+        error: error.message,
+      });
+    }
+  }
+
+  // Generate a roadmap from AI for the current user.
+  static async generateRoadmapWithAi(req, res) {
+    try {
+      const userId = req.user.id;
+      const targetRole = typeof req.body?.targetRole === 'string' ? req.body.targetRole.trim() : undefined;
+      const timeframeMonths = Number(req.body?.timeframeMonths ?? 6);
+
+      const result = await requestAiRoadmap(userId, {
+        targetRole: targetRole || undefined,
+        timeframeMonths,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'AI roadmap generated',
+        data: result,
+      });
+    } catch (error) {
+      console.error('Generate roadmap with AI error:', error);
+      res.status(error?.statusCode || 502).json({
+        success: false,
+        message: 'Error generating AI roadmap',
+        error: error.message,
+      });
+    }
+  }
+
+  // Generate and persist AI recommendations for the current user.
+  static async generateRecommendationsWithAi(req, res) {
+    try {
+      const userId = req.user.id;
+      const count = Number(req.body?.count ?? 8);
+      const result = await requestAiRecommendations(userId, count);
+
+      res.status(200).json({
+        success: true,
+        message: 'AI recommendations generated',
+        data: result,
+      });
+    } catch (error) {
+      console.error('Generate recommendations with AI error:', error);
+      res.status(error?.statusCode || 502).json({
+        success: false,
+        message: 'Error generating AI recommendations',
+        error: error.message,
+      });
+    }
+  }
+
+  // Return AI career advice based on a user question.
+  static async getCareerAdviceWithAi(req, res) {
+    try {
+      const userId = req.user.id;
+      const question = String(req.body?.question || '').trim();
+      const result = await requestAiCareerAdvice(question, userId);
+
+      res.status(200).json({
+        success: true,
+        message: 'AI career advice generated',
+        data: result,
+      });
+    } catch (error) {
+      console.error('Get career advice with AI error:', error);
+      res.status(error?.statusCode || 502).json({
+        success: false,
+        message: 'Error getting AI career advice',
+        error: error.message,
+      });
+    }
+  }
+
+  // Generate IT job description content from AI.
+  static async generateJobDescriptionWithAi(req, res) {
+    try {
+      const role = String(req.body?.role || '').trim();
+      const perSourceLimit = Number(req.body?.perSourceLimit ?? 5);
+      const result = await requestAiJobDescription(role, perSourceLimit);
+
+      res.status(200).json({
+        success: true,
+        message: 'AI job description generated',
+        data: result,
+      });
+    } catch (error) {
+      console.error('Generate job description with AI error:', error);
+      res.status(error?.statusCode || 502).json({
+        success: false,
+        message: 'Error generating AI job description',
+        error: error.message,
       });
     }
   }

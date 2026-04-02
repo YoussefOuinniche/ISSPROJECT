@@ -1,6 +1,10 @@
 -- ============================================================
 -- SkillPulse - Full Database Schema + Seed Data
 -- Run this against your PostgreSQL / Supabase database
+--
+-- DATABASE OWNERSHIP NOTE:
+-- This file is the root schema authority for the legacy Backend + AI services.
+-- Apply structural changes here first, then align service queries/models.
 -- ============================================================
 
 -- Enable UUID generation

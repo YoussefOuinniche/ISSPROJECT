@@ -1,19 +1,46 @@
-// Models come from models/index.js which initializes Sequelize
+// Models come from models/index.js and use Supabase-backed model helpers.
 const { User, Profile } = require('../models');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
+const normalizeExpiresIn = (rawValue, fallbackValue) => {
+  if (typeof rawValue !== 'string') return fallbackValue;
+
+  const value = rawValue.trim();
+  if (!value) return fallbackValue;
+
+  if (/^\d+$/.test(value)) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return fallbackValue;
+    if (numeric >= 1000000) return Math.max(1, Math.floor(numeric / 1000));
+    return numeric;
+  }
+
+  if (/^\d+\s*(ms|s|m|h|d|w|y)$/i.test(value)) {
+    return value.replace(/\s+/g, '');
+  }
+
+  return fallbackValue;
+};
+
+const ACCESS_TOKEN_EXPIRES_IN = normalizeExpiresIn(process.env.JWT_EXPIRE, '1h');
+const REFRESH_TOKEN_EXPIRES_IN = normalizeExpiresIn(process.env.JWT_REFRESH_EXPIRE, '7d');
+const ACCESS_TOKEN_SECRET = process.env.JWT_SECRET?.trim() || 'dev_access_secret_change_me';
+const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET?.trim() || ACCESS_TOKEN_SECRET;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || '';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim() || '';
+
 // Generate JWT token — embeds role so middleware can enforce admin-only routes
 const generateToken = (userId, role) => {
-  return jwt.sign({ id: userId, role }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
+  return jwt.sign({ id: userId, role }, ACCESS_TOKEN_SECRET, {
+    expiresIn: ACCESS_TOKEN_EXPIRES_IN
   });
 };
 
 // Generate refresh token
 const generateRefreshToken = (userId, role) => {
-  return jwt.sign({ id: userId, role }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: process.env.JWT_REFRESH_EXPIRE
+  return jwt.sign({ id: userId, role }, REFRESH_TOKEN_SECRET, {
+    expiresIn: REFRESH_TOKEN_EXPIRES_IN
   });
 };
 
@@ -110,12 +137,17 @@ class AuthController {
         });
       }
 
-      // This panel is admin-only
-      if ((user.role || 'user') !== 'admin') {
-        return res.status(403).json({
-          success: false,
-          message: 'Access denied: admin credentials required'
-        });
+      // Optional extra protection for admin accounts only: if env credentials are configured,
+      // admin login must also match them.
+      if ((user.role || 'user') === 'admin' && ADMIN_EMAIL && ADMIN_PASSWORD) {
+        const emailMatches = String(email).toLowerCase() === ADMIN_EMAIL.toLowerCase();
+        const passwordMatches = password === ADMIN_PASSWORD;
+        if (!emailMatches || !passwordMatches) {
+          return res.status(401).json({
+            success: false,
+            message: 'Invalid admin credentials'
+          });
+        }
       }
 
       // Generate tokens
@@ -162,7 +194,7 @@ class AuthController {
       }
 
       // Verify refresh token
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET);
       
       // Fetch the user so we can re-embed the current role
       const user = await User.findById(decoded.id);
@@ -270,6 +302,53 @@ class AuthController {
       res.status(500).json({
         success: false,
         message: 'Error resetting password',
+        error: error.message
+      });
+    }
+  }
+
+  // Change password for authenticated user
+  static async changePassword(req, res) {
+    try {
+      const userId = req.user.id;
+      const { currentPassword, newPassword } = req.body;
+
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Current password and new password are required'
+        });
+      }
+
+      const user = await User.findById(userId);
+      if (!user?.email) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      const userWithPassword = await User.findByEmail(user.email);
+      const isCurrentPasswordValid = await User.verifyPassword(currentPassword, userWithPassword?.password_hash);
+
+      if (!isCurrentPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Current password is incorrect'
+        });
+      }
+
+      await User.resetPassword(userId, newPassword);
+
+      res.status(200).json({
+        success: true,
+        message: 'Password changed successfully'
+      });
+    } catch (error) {
+      console.error('Change password error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error changing password',
         error: error.message
       });
     }

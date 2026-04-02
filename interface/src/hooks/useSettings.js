@@ -1,26 +1,42 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  changePassword,
-  getSettings,
-  runAnalysis,
-  updateAdminAccount,
-  updateSettings,
-} from '../api/settings';
+  useChangePasswordAuth,
+  useGetAdminAccount,
+  useGetAdminSettings,
+  useRecomputeUserProfileAnalysis,
+  useUpdateAdminAccount,
+  useUpdateAdminSettings,
+} from '../../../Skill-Pulse-1/lib/api-client-react/src/index.ts';
+import { ensureGeneratedClientConfigured } from '../api/generatedClientConfig';
+
+ensureGeneratedClientConfigured();
 
 const SETTINGS_KEY = ['settings'];
 
 export function useSettings() {
   const queryClient = useQueryClient();
 
-  const query = useQuery({
-    queryKey: SETTINGS_KEY,
-    queryFn: getSettings,
-    retry: 1,
-    staleTime: 1000 * 30,
+  const settingsQuery = useGetAdminSettings({
+    query: {
+      queryKey: SETTINGS_KEY,
+      retry: 1,
+      staleTime: 1000 * 30,
+      select: (response) => response?.data || {},
+    },
   });
 
+  const accountQuery = useGetAdminAccount({
+    query: {
+      queryKey: ['admin-account'],
+      retry: 1,
+      staleTime: 1000 * 30,
+      select: (response) => response?.data || null,
+    },
+  });
+
+  const updateAdminRaw = useUpdateAdminAccount();
   const updateAdminMutation = useMutation({
-    mutationFn: updateAdminAccount,
+    mutationFn: (patch) => updateAdminRaw.mutateAsync({ data: patch }),
     onMutate: async (patch) => {
       await queryClient.cancelQueries({ queryKey: SETTINGS_KEY });
       const previous = queryClient.getQueryData(SETTINGS_KEY);
@@ -38,11 +54,13 @@ export function useSettings() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
+      queryClient.invalidateQueries({ queryKey: ['admin-account'] });
     },
   });
 
+  const updateAdminSettingsRaw = useUpdateAdminSettings();
   const updateProfileMutation = useMutation({
-    mutationFn: (currentProfile) => updateSettings({ currentProfile }),
+    mutationFn: (currentProfile) => updateAdminSettingsRaw.mutateAsync({ data: { currentProfile } }),
     onMutate: async (currentProfile) => {
       await queryClient.cancelQueries({ queryKey: SETTINGS_KEY });
       const previous = queryClient.getQueryData(SETTINGS_KEY);
@@ -63,20 +81,37 @@ export function useSettings() {
     },
   });
 
+  const changePasswordRaw = useChangePasswordAuth();
   const changePasswordMutation = useMutation({
-    mutationFn: changePassword,
+    mutationFn: (payload) =>
+      changePasswordRaw.mutateAsync({
+        data: {
+          currentPassword: payload.currentPassword,
+          newPassword: payload.newPassword,
+        },
+      }),
   });
 
+  const recomputeRaw = useRecomputeUserProfileAnalysis();
   const recomputeMutation = useMutation({
-    mutationFn: runAnalysis,
+    mutationFn: () => recomputeRaw.mutateAsync({ data: {} }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: SETTINGS_KEY });
     },
   });
 
+  const mergedData = {
+    ...(settingsQuery.data || {}),
+    currentUser: accountQuery.data || settingsQuery.data?.currentUser || null,
+  };
+
   return {
-    ...query,
-    refresh: () => query.refetch(),
+    ...settingsQuery,
+    data: mergedData,
+    isLoading: settingsQuery.isLoading || accountQuery.isLoading,
+    isRefetching: settingsQuery.isRefetching || accountQuery.isRefetching,
+    error: settingsQuery.error || accountQuery.error,
+    refresh: () => Promise.all([settingsQuery.refetch(), accountQuery.refetch()]),
     updateAdmin: updateAdminMutation,
     updateProfile: updateProfileMutation,
     changePassword: changePasswordMutation,

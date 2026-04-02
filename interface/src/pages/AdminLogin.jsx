@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api'; // Ensure this axios instance points to http://localhost:4000
+import { loginAdmin } from '../api/authGenerated';
 import { setAuthTokens, setUser } from '../utils/auth';
 import AnimatedButton from '../components/ui/AnimatedButton';
 import { useToast } from '../components/ui/Toast';
@@ -30,17 +30,13 @@ const AdminLogin = ({ onLogin }) => {
     }
 
     try {
-      // We call the auth login endpoint. 
-      // Note: If your axios 'api' instance already has a baseURL, 
-      // you just need '/api/auth/login'
-      const response = await api.post('/api/auth/login', {
+      const response = await loginAdmin({
         email: email.trim(),
         password: password
       });
 
-      // Based on your app.js, the backend returns { success: true, data: { ... } }
-      if (response.data && response.data.success) {
-        const { token, refreshToken, user } = response.data.data;
+      if (response && response.success) {
+        const { token, refreshToken, user } = response.data;
         
         // 1. Store tokens in LocalStorage/Cookies
         setAuthTokens(token, refreshToken);
@@ -54,11 +50,11 @@ const AdminLogin = ({ onLogin }) => {
         // 4. Redirect
         navigate('/dashboard');
       } else {
-        setError(response.data?.message || 'Login failed. Please try again.');
+        setError(response?.message || 'Login failed. Please try again.');
       }
     } catch (err) {
-      const status = err.response?.status;
-      const msg = err.response?.data?.message;
+      const status = err?.status;
+      const msg = err?.data?.message || err?.message;
 
       if (status === 403) {
         setError('This portal is for admin accounts only.');

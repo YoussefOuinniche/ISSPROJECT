@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import sys
 import textwrap
 
@@ -164,7 +165,7 @@ def print_result(data: dict, role: str, scraped_sources: int) -> None:
 
 # ── HTTP mode (default) ───────────────────────────────────────────────────────
 
-def run_via_http(role: str, base_url: str = "http://localhost:8000") -> None:
+def run_via_http(role: str, base_url: str | None = None) -> None:
     """Call the live FastAPI server and print the result."""
     try:
         import requests
@@ -172,15 +173,24 @@ def run_via_http(role: str, base_url: str = "http://localhost:8000") -> None:
         print("[ERROR] 'requests' is not installed. Run: pip install requests")
         sys.exit(1)
 
+    if base_url is None:
+        base_url = os.getenv("AI_TEST_BASE_URL", "http://localhost:8000")
+
+    request_timeout = int(os.getenv("AI_TEST_TIMEOUT_SECONDS", "300"))
+    service_token = os.getenv("AI_SERVICE_TOKEN", "").strip()
+
     url = f"{base_url}/generate-job-description"
     payload = {"role": role, "per_source_limit": 5}
+    headers = {"Content-Type": "application/json"}
+    if service_token:
+        headers["x-ai-service-token"] = service_token
 
     print(f"[INFO] POST {url}")
     print(f"[INFO] Payload: {json.dumps(payload)}")
     print("[INFO] Waiting for response (this may take 30-120 s with a local LLM)…\n")
 
     try:
-        resp = requests.post(url, json=payload, timeout=300)
+        resp = requests.post(url, json=payload, headers=headers, timeout=request_timeout)
     except requests.exceptions.ConnectionError:
         print(f"[ERROR] Cannot connect to {base_url}.")
         print("        Start the server first:  python backend.py")
@@ -251,7 +261,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--url",
-        default="http://localhost:8000",
+        default=os.getenv("AI_TEST_BASE_URL", "http://localhost:8000"),
         help="Base URL of the running FastAPI server (default: http://localhost:8000)",
     )
     args = parser.parse_args()

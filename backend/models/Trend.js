@@ -143,41 +143,4 @@ class Trend {
   }
 }
 
-  Trend.getDomains = async function () {
-    const rows = await this.findAll({
-      attributes: [
-        [this.sequelize.fn('DISTINCT', this.sequelize.col('domain')), 'domain'],
-      ],
-    });
-    return rows.map((r) => r.get('domain'));
-  };
-
-  Trend.getRecentTrends = async function (limit = 20) {
-    return await this.findAll({
-      order: [['created_at', 'DESC']],
-      limit,
-    });
-  };
-
-  // override create to accept object
-  const origCreate = Trend.create.bind(Trend);
-  Trend.create = async function (data) {
-    return origCreate(data);
-  };
-
-  Trend.update = async function (id, updates) {
-    const [count] = await this.update(updates, { where: { id } });
-    if (!count) return null;
-    return this.findByPk(id);
-  };
-
-  Trend.delete = async function (id) {
-    return await this.destroy({ where: { id } });
-  };
-
-  Trend.bulkCreate = async function (arr) {
-    return await this.bulkCreate(arr);
-  };
-
-  return Trend;
-};
+module.exports = Trend;

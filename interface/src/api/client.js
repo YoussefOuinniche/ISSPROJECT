@@ -1,4 +1,8 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
+
+// Deprecated for auth route group.
+// Use src/api/authGenerated.js for /api/auth/* integration.
+// This module remains for non-migrated admin/public route groups.
 
 function buildUrl(path, params) {
   const url = new URL(path, API_BASE_URL);

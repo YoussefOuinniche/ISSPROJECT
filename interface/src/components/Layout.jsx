@@ -2,16 +2,22 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Bell, LogOut, Menu, RefreshCcw, Search, Settings, UserCircle2 } from 'lucide-react';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useGetAdminNotifications,
+  useMarkAdminNotificationsReadAll,
+} from '../../../Skill-Pulse-1/lib/api-client-react/src/index.ts';
 import { cn } from '../utils/cn';
 import Button, { IconButton } from './ui/Button';
 import Dropdown from './ui/Dropdown';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { SearchInput } from './ui/Input';
-import { getNotifications, markAllNotificationsRead } from '../api/settings';
+import { ensureGeneratedClientConfigured } from '../api/generatedClientConfig';
 import { useToast } from './ui/Toast';
 import useSessionUser from '../hooks/useSessionUser';
 import './Logo3D.css';
+
+ensureGeneratedClientConfigured();
 
 const menuItems = [
   { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
@@ -44,21 +50,25 @@ export default function Layout({ children, onLogout }) {
   const avatarUrl = user?.avatarUrl || user?.avatar_url || '';
   const avatarColor = user?.avatarColor || '#22d3ee';
 
-  const notifications = useQuery({
-    queryKey: ['notifications'],
-    queryFn: getNotifications,
-    staleTime: 1000 * 20,
-    retry: 1,
+  const notifications = useGetAdminNotifications({
+    query: {
+      queryKey: ['notifications'],
+      staleTime: 1000 * 20,
+      retry: 1,
+      select: (response) => response?.data || [],
+    },
   });
 
-  const markAllRead = useMutation({
-    mutationFn: markAllNotificationsRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success('Notifications marked as read');
-    },
-    onError: (error) => {
-      toast.error(error?.message || 'Failed to update notifications');
+  const markAllRead = useMarkAdminNotificationsReadAll({
+    mutation: {
+      mutationKey: ['markAdminNotificationsReadAll'],
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['notifications'] });
+        toast.success('Notifications marked as read');
+      },
+      onError: (error) => {
+        toast.error(error?.message || 'Failed to update notifications');
+      },
     },
   });
 

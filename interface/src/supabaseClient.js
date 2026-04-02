@@ -1,5 +1,7 @@
 // supabaseClient.js - Frontend Supabase Connection
 // Use this file in your React frontend (interface/)
+// Ownership note: backend API remains the authoritative data access path.
+// Use this helper only for explicit direct-Supabase use cases.
 
 import { createClient } from '@supabase/supabase-js';
 
