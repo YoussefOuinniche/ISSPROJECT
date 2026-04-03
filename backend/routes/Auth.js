@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
 const rateLimit = require('express-rate-limit');
-const AuthController = require('../controllers/AuthController');
+const AuthController = require('../controllers/Authcontroller');
 const { protect } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 

@@ -21,6 +21,7 @@ ensureGeneratedClientConfigured();
 
 const menuItems = [
   { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
+  { path: '/chat', icon: 'chat', label: 'AI Assistant' },
   { path: '/users', icon: 'group', label: 'Users' },
   { path: '/content', icon: 'description', label: 'Content' },
   { path: '/analytics', icon: 'analytics', label: 'Analytics' },

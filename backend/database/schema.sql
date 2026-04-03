@@ -36,6 +36,11 @@ CREATE TABLE IF NOT EXISTS profiles (
     title               VARCHAR(255),
     experience_level    VARCHAR(50),   -- 'junior', 'mid', 'senior', 'lead'
     bio                 TEXT,
+    explicit_skills     JSONB DEFAULT '[]'::jsonb,
+    explicit_target_role VARCHAR(255),
+    explicit_education  TEXT,
+    explicit_experience TEXT,
+    explicit_preferences JSONB DEFAULT '{}'::jsonb,
     last_analysis_at    TIMESTAMP,
     created_at          TIMESTAMP DEFAULT NOW(),
     updated_at          TIMESTAMP DEFAULT NOW(),
@@ -123,6 +128,46 @@ CREATE TABLE IF NOT EXISTS recommendations (
     created_at  TIMESTAMP DEFAULT NOW(),
     updated_at  TIMESTAMP DEFAULT NOW()
 );
+
+-- ============================================================
+-- 9. CHAT_HISTORY
+-- ============================================================
+CREATE TABLE IF NOT EXISTS chat_history (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role        VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    message     TEXT NOT NULL,
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_history_user_created_at
+    ON chat_history (user_id, created_at DESC);
+
+-- ============================================================
+-- 10. USER_AI_PROFILE
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_ai_profile (
+    user_id      UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    profile_json JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+-- ============================================================
+-- 11. SKILL_TRENDS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS skill_trends (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill         VARCHAR(255) NOT NULL,
+    demand_score  NUMERIC(5,2) NOT NULL,
+    trend         VARCHAR(10) NOT NULL CHECK (trend IN ('up', 'down', 'stable')),
+    window_start  TIMESTAMP NOT NULL,
+    source_count  INTEGER NOT NULL DEFAULT 0,
+    created_at    TIMESTAMP DEFAULT NOW(),
+    updated_at    TIMESTAMP DEFAULT NOW(),
+    UNIQUE (skill, window_start)
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_trends_window_start
+    ON skill_trends (window_start DESC);
 
 -- ============================================================
 -- AUTO-UPDATE updated_at TRIGGER

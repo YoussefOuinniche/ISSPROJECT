@@ -9,6 +9,8 @@ import textwrap
 import sys
 import os
 
+from services.llm_service import build_messages, call_llm
+
 # how long to wait for a website before giving up (in seconds)
 REQUEST_TIMEOUT = int(os.getenv("AI_SCRAPER_TIMEOUT", "15"))
 
@@ -391,7 +393,7 @@ def answer_with_scraped_context(query, per_source_limit):
 
     print("Sending", len(results), "results to LLM for query:", query)
 
-    answer = call_llm(system_prompt, user_prompt)
+    answer = call_llm("chat", build_messages(system_prompt, user_prompt))
     return answer
 
 

@@ -1,398 +1,277 @@
-﻿import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import './Dashboard.css';
+﻿import React, { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { Sparkles, Target, AlertTriangle, ChevronRight, TrendingUp, Compass } from 'lucide-react';
 import api from '../api';
-import { Card } from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import KpiTile from '../components/product/KpiTile';
-import { useToast } from '../components/ui/Toast';
 
-const SkillsChart = ({ data }) => {
-  if (!data || data.length === 0) {
+const RadarChart = ({ data }) => {
+  if (!data || data.length < 3) return <div className="text-slate-500 text-sm text-center">Not enough data for radar chart</div>;
+
+  const size = 260;
+  const center = size / 2;
+  const radius = size / 2 - 40;
+  const numPoints = data.length;
+  const angleStep = (Math.PI * 2) / numPoints;
+  const maxVal = 100;
+
+  const getPoint = (value, index) => {
+    const r = (value / maxVal) * radius;
+    const theta = index * angleStep - Math.PI / 2;
+    return {
+      x: center + r * Math.cos(theta),
+      y: center + r * Math.sin(theta)
+    };
+  };
+
+  const dataPoints = data.map((d, i) => getPoint(d.level, i));
+  const dataPath = dataPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
+
+  return (
+    <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
+      {[0.2, 0.4, 0.6, 0.8, 1].map(level => {
+        const points = data.map((_, i) => getPoint(level * maxVal, i));
+        const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
+        return <path key={level} d={path} fill="none" stroke="#334155" strokeWidth="1" />;
+      })}
+      {data.map((_, i) => {
+        const edge = getPoint(maxVal, i);
+        return <line key={i} x1={center} y1={center} x2={edge.x} y2={edge.y} stroke="#334155" strokeWidth="1" />;
+      })}
+      <motion.path 
+        initial={{ pathLength: 0, opacity: 0 }} 
+        animate={{ pathLength: 1, opacity: 1 }} 
+        transition={{ duration: 1.5, ease: 'easeOut' }}
+        d={dataPath} 
+        fill="rgba(6, 182, 212, 0.2)" 
+        stroke="#06b6d4" 
+        strokeWidth="2" 
+      />
+      {data.map((d, i) => {
+        const edge = getPoint(maxVal * 1.15, i);
+        return (
+          <text key={i} x={edge.x} y={edge.y + 4} fill="#cbd5e1" fontSize="11" textAnchor="middle" fontWeight="500">
+            {d.name.length > 10 ? d.name.slice(0, 10) + '...' : d.name}
+          </text>
+        );
+      })}
+    </svg>
+  );
+};
+
+const ConfidenceMeter = ({ score }) => (
+  <div className="w-full">
+    <div className="flex justify-between items-end mb-2">
+      <span className="text-sm font-semibold text-slate-300">AI Confidence</span>
+      <span className="text-xs text-cyan-400 font-bold">{score}% match</span>
+    </div>
+    <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner">
+      <motion.div 
+        initial={{ width: 0 }} 
+        animate={{ width: `${score}%` }}
+        transition={{ duration: 1.2, ease: 'easeOut' }}
+        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400"
+      />
+    </div>
+  </div>
+);
+
+export default function Dashboard() {
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await api.get('/api/user/profile');
+        setProfile(res.data.data);
+      } catch (err) {
+        console.error('Dashboard fetch error:', err);
+        setError('Failed to load AI profile data');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, []);
+
+  if (loading) {
     return (
-      <div className="dashboard-empty">
-        No skill data available
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-2 border-cyan-500/30 border-t-cyan-500 animate-spin" />
       </div>
     );
   }
 
-  const max = Math.max(...data.map((item) => item.count));
+  const currentRole = profile?.currentRole || 'Software Engineer';
+  const targetRole = profile?.targetRole || 'Senior Engineer';
+  
+  const rawSkills = profile?.skills || [
+    { skill_name: 'JavaScript', proficiency_level: 'expert' },
+    { skill_name: 'React', proficiency_level: 'advanced' },
+    { skill_name: 'Node.js', proficiency_level: 'intermediate' },
+    { skill_name: 'Python', proficiency_level: 'beginner' },
+    { skill_name: 'Docker', proficiency_level: 'beginner' }
+  ];
+  
+  const levelMap = { 'expert': 100, 'advanced': 80, 'intermediate': 50, 'beginner': 25 };
+  const radarSkills = rawSkills.slice(0, 6).map(s => ({
+    name: s.skill_name || s.name,
+    level: levelMap[(s.proficiency_level || '').toLowerCase()] || 50
+  }));
+
+  const gaps = profile?.skillGaps || profile?.gaps || [
+    { skill_name: 'Kubernetes', domain: 'DevOps', gap_level: 4, reason: 'High demand in target role' },
+    { skill_name: 'System Design', domain: 'Architecture', gap_level: 5, reason: 'Required for Senior' }
+  ];
+
+  const recommendations = profile?.recommendations || [
+    { title: 'Master Container Orchestration', content: 'Consider the CKA certification.', type: 'course', priority: 'high' },
+    { title: 'Read Designing Data-Intensive Applications', content: 'Essential for system design rounds.', type: 'book', priority: 'medium' }
+  ];
+
+  const matchScore = profile?.aiConfidenceScore || profile?.matchScore || 65;
 
   return (
-    <div className="dashboard-skill-chart">
-      {data.map((item, index) => {
-        const pct = Math.max(8, Math.round((item.count / max) * 100));
-        return (
-          <div key={item.name} className="dashboard-skill-bar-wrap">
-            <span className="dashboard-skill-value">
-              {item.count}
-            </span>
-            <div className="dashboard-skill-track">
-              <div
-                className="dashboard-skill-fill"
-                style={{ height: `${pct}%` }}
-              />
-            </div>
-            <span className="dashboard-skill-label" title={item.name}>
-              {item.name}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
-
-const Dashboard = () => {
-  const navigate = useNavigate();
-  const toast = useToast();
-  const [summary, setSummary] = useState({
-    users: 0,
-    admins: 0,
-    profiles: 0,
-    skills: 0,
-    userSkills: 0,
-    trends: 0,
-    skillGaps: 0,
-    recommendations: 0,
-    aiGeneratedGaps: 0,
-  });
-  const [workflows, setWorkflows] = useState({
-    profileCoveragePct: 0,
-    avgSkillsPerUser: 0,
-    aiGeneratedGaps: 0,
-  });
-  const [recentUsers, setRecentUsers] = useState([]);
-  const [skillsByCategory, setSkillsByCategory] = useState([]);
-  const [topGapDomains, setTopGapDomains] = useState([]);
-  const [aiService, setAiService] = useState({ enabled: false, status: 'disabled', model: null });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [lastUpdated, setLastUpdated] = useState(null);
-
-  const loadDashboard = useCallback(async () => {
-    try {
-      setError('');
-      const res = await api.get('/api/public/admin/overview');
-      if (res?.data?.data) {
-        const payload = res.data.data;
-        setSummary(payload.summary || {});
-        setWorkflows(payload.workflows || {});
-        setRecentUsers(payload.recentUsers || []);
-        setSkillsByCategory(payload.distributions?.skillsByCategory || []);
-        setTopGapDomains(payload.distributions?.topGapDomains || []);
-        setAiService(payload.aiService || { enabled: false, status: 'disabled', model: null });
-        setLastUpdated(new Date());
-      }
-    } catch (err) {
-      console.error('Failed to load dashboard data', err);
-      setError(err?.response?.data?.message || 'Failed to load admin overview data');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDashboard();
-    const interval = setInterval(loadDashboard, 30000);
-    const onGlobalRefresh = () => loadDashboard();
-    window.addEventListener('skillpulse:refresh', onGlobalRefresh);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('skillpulse:refresh', onGlobalRefresh);
-    };
-  }, [loadDashboard]);
-
-  const exportCsv = () => {
-    if (!summary?.users && !summary?.skills) {
-      toast.info('No dashboard data to export');
-      return;
-    }
-    const rows = [
-      ['Metric', 'Value'],
-      ['Total Users', summary.users ?? 0],
-      ['Administrators', summary.admins ?? 0],
-      ['Profiles', summary.profiles ?? 0],
-      ['Skills', summary.skills ?? 0],
-      ['User Skills', summary.userSkills ?? 0],
-      ['Trends', summary.trends ?? 0],
-      ['Skill Gaps', summary.skillGaps ?? 0],
-      ['Recommendations', summary.recommendations ?? 0],
-      ['Profile Coverage %', workflows.profileCoveragePct ?? 0],
-      ['Average Skills Per User', workflows.avgSkillsPerUser ?? 0],
-      ['AI Generated Gaps', workflows.aiGeneratedGaps ?? 0],
-      ['AI Service Status', aiService?.status || 'unknown'],
-      ['AI Model', aiService?.model || 'n/a'],
-    ];
-    const csv = rows.map((row) => row.map((value) => `"${String(value ?? '').replaceAll('"', '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `dashboard-${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success('Dashboard CSV exported');
-  };
-
-  const onCardClick = (title) => {
-    const map = {
-      'Total Users': '/users',
-      'Skills Tracked': '/content?type=Skill',
-      'Active Trends': '/content?type=Trend',
-      'Skill Gaps': '/content?type=Skill%20Gap',
-    };
-    const destination = map[title];
-    if (destination) navigate(destination);
-  };
-
-  const totalTrackedSkills = useMemo(
-    () => skillsByCategory.reduce((sum, item) => sum + Number(item.count || 0), 0),
-    [skillsByCategory],
-  );
-
-  const stats = useMemo(() => ([
-    {
-      title: 'Total Users',
-      displayValue: Number(summary.users || 0).toLocaleString(),
-      change: `${summary.admins || 0} admins`,
-      changeLabel: 'active accounts',
-      icon: 'group',
-    },
-    {
-      title: 'Skills Tracked',
-      displayValue: Number(summary.skills || 0).toLocaleString(),
-      change: `${summary.userSkills || 0} mapped`,
-      changeLabel: 'user skill links',
-      icon: 'psychology',
-    },
-    {
-      title: 'Active Trends',
-      displayValue: Number(summary.trends || 0).toLocaleString(),
-      change: `${summary.recommendations || 0} recommendations`,
-      changeLabel: 'stored in database',
-      icon: 'trending_up',
-    },
-    {
-      title: 'Skill Gaps',
-      displayValue: Number(summary.skillGaps || 0).toLocaleString(),
-      change: `${summary.aiGeneratedGaps || 0} AI-tagged`,
-      changeLabel: 'reason begins with AI:',
-      icon: 'warning_amber',
-    },
-  ]), [summary]);
-
-  const workflowTiles = useMemo(() => ([
-    {
-      label: 'Profile Coverage',
-      value: `${workflows.profileCoveragePct || 0}%`,
-      description: 'users with profile rows',
-      icon: 'badge',
-    },
-    {
-      label: 'Average Skills/User',
-      value: `${workflows.avgSkillsPerUser || 0}`,
-      description: 'user_skills / users',
-      icon: 'balance',
-    },
-    {
-      label: 'AI Generated Gaps',
-      value: `${workflows.aiGeneratedGaps || 0}`,
-      description: 'skill_gaps reason like AI:%',
-      icon: 'auto_awesome',
-    },
-    {
-      label: 'AI Service',
-      value: (aiService?.status || 'unknown').toUpperCase(),
-      description: aiService?.model ? `model: ${aiService.model}` : 'health endpoint snapshot',
-      icon: 'hub',
-    },
-  ]), [workflows, aiService]);
-
-  const toneFromTitle = (title) => {
-    if (title.toLowerCase().includes('user')) return 'primary';
-    if (title.toLowerCase().includes('trend')) return 'success';
-    if (title.toLowerCase().includes('gap')) return 'warning';
-    return 'primary';
-  };
-
-  return (
-    <div className="dashboard-page">
-      <section className="dashboard-hero">
-        <div>
-          <p className="dashboard-eyebrow">Operations Console</p>
-          <h1 className="dashboard-title">Platform Overview</h1>
-          <p className="dashboard-subtitle">
-            Admin-only overview aligned to database aggregates and AI service health.
-          </p>
-        </div>
-        <div className="dashboard-actions">
-          <Button
-            variant="secondary"
-            onClick={loadDashboard}
-            loading={loading}
-            icon={<span className="material-symbols-outlined text-lg">refresh</span>}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="primary"
-            onClick={exportCsv}
-            icon={<span className="material-symbols-outlined text-lg">download</span>}
-          >
-            Export CSV
-          </Button>
-        </div>
-      </section>
-
-      <section className="dashboard-meta-row">
-        <p className="dashboard-meta-item">
-          <span className="dashboard-dot" />
-          {lastUpdated ? `Updated ${lastUpdated.toLocaleTimeString()}` : 'Waiting for first sync'}
+    <div className="p-4 md:p-8 max-w-7xl mx-auto font-display text-slate-100 min-h-[60vh]">
+      
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+          <Sparkles className="text-cyan-400" size={28} />
+          AI Profile Overview
+        </h1>
+        <p className="text-slate-400 mt-2 max-w-2xl">
+          Your dynamic career development dashboard, powered by real-time skill gap analysis and market intelligence.
         </p>
-        <p className="dashboard-meta-item">Source: /api/public/admin/overview</p>
-      </section>
+      </div>
 
-      {error ? <p className="dashboard-error">{error}</p> : null}
+      {error && (
+        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl flex items-center gap-3">
+          <AlertTriangle size={20} /> {error}
+        </div>
+      )}
 
-      <section className="dashboard-section">
-        {loading ? (
-          <div className="dashboard-kpi-grid">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="dashboard-skeleton" />
-            ))}
-          </div>
-        ) : (
-          <div className="dashboard-kpi-grid">
-            {stats.map((stat, index) => (
-              <KpiTile
-                key={`${stat.title}-${index}`}
-                title={stat.title}
-                value={stat.displayValue}
-                change={stat.change}
-                changeLabel={stat.changeLabel}
-                icon={stat.icon}
-                tone={toneFromTitle(stat.title)}
-                onClick={() => onCardClick(stat.title)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="dashboard-workflow-grid">
-        {workflowTiles.map((item) => (
-          <Card key={item.label} className="dashboard-workflow-card">
-            <div className="dashboard-workflow-head">
-              <p className="dashboard-workflow-label">{item.label}</p>
-              <span className="material-symbols-outlined" aria-hidden="true">{item.icon}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <div className="lg:col-span-1 flex flex-col gap-6">
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+            className="p-6 bg-slate-800/40 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Target size={100} />
             </div>
-            <p className="dashboard-workflow-value">{loading ? '...' : item.value}</p>
-            <p className="dashboard-workflow-note">{item.description}</p>
-          </Card>
-        ))}
-      </section>
-
-      <section className="dashboard-content-grid">
-        <Card className="dashboard-main-card">
-          <div className="dashboard-card-head">
-            <div>
-              <h2 className="dashboard-card-title">Skills by Category</h2>
-              <p className="dashboard-card-subtitle">
-                Distribution across {totalTrackedSkills} tracked skills
-              </p>
-            </div>
-            <div className="dashboard-range-picker">
-              <span className="dashboard-data-badge">DB Snapshot</span>
-            </div>
-          </div>
-
-          {loading ? <div className="dashboard-skeleton dashboard-chart-skeleton" /> : <SkillsChart data={skillsByCategory} />}
-
-          <div className="dashboard-legend">
-            {skillsByCategory.map((item) => (
-              <span key={item.name} className="dashboard-legend-item">
-                <span className="dashboard-legend-dot" />
-                {item.name} ({item.count})
-              </span>
-            ))}
-          </div>
-        </Card>
-
-        <div className="dashboard-rail">
-          <Card className="dashboard-side-card">
-            <div className="dashboard-card-head">
+            
+            <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+              <Compass className="text-emerald-400" size={20} />
+              Career Goal
+            </h2>
+            
+            <div className="space-y-4 relative z-10">
               <div>
-                <h2 className="dashboard-card-title">Recent Members</h2>
-                <p className="dashboard-card-subtitle">Latest platform actions</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Current Role</p>
+                <p className="text-lg text-slate-100 font-medium bg-slate-900/50 px-3 py-2 rounded-lg border border-slate-700/30">
+                  {currentRole}
+                </p>
               </div>
-              <span className="dashboard-live-badge">Live</span>
+              <div className="flex justify-center text-slate-500">
+                <ChevronRight size={24} className="rotate-90 lg:rotate-0" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Target Role</p>
+                <p className="text-lg text-cyan-50 font-medium bg-cyan-900/20 px-3 py-2 rounded-lg border border-cyan-500/30 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
+                  {targetRole}
+                </p>
+              </div>
             </div>
 
-            {loading ? (
-              <div className="dashboard-list-skeletons">
-                {[...Array(5)].map((_, index) => (
-                  <div key={index} className="dashboard-skeleton dashboard-row-skeleton" />
-                ))}
-              </div>
-            ) : (
-              <div className="dashboard-activity-list">
-                {recentUsers.map((user, index) => (
-                  <article key={`${user.email}-${index}`} className="dashboard-activity-row">
-                    <div className="dashboard-activity-icon">
-                      <span className="material-symbols-outlined" aria-hidden="true">
-                        {user.role === 'admin' ? 'admin_panel_settings' : 'person_add'}
+            <div className="mt-8 pt-6 border-t border-slate-700/50">
+              <ConfidenceMeter score={matchScore} />
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="lg:col-span-1">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.1 }}
+            className="h-full p-6 bg-slate-800/40 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm flex flex-col items-center justify-center min-h-[340px]"
+          >
+            <h2 className="text-lg font-semibold text-white mb-6 self-start w-full">Skill Radar</h2>
+            <div className="w-full flex-1 flex items-center justify-center relative">
+              <RadarChart data={radarSkills} />
+            </div>
+          </motion.div>
+        </div>
+
+        <div className="lg:col-span-1">
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.2 }}
+            className="h-full p-6 bg-slate-800/40 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm"
+          >
+            <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
+              <TrendingUp className="text-rose-400" size={20} />
+              Skill Gaps vs Trends
+            </h2>
+            
+            <div className="space-y-4 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
+              {gaps.length === 0 ? (
+                <p className="text-slate-400 text-sm text-center py-4">No significant skill gaps identified.</p>
+              ) : (
+                gaps.map((gap, idx) => (
+                  <div key={idx} className="bg-slate-900/60 p-4 rounded-2xl border border-rose-500/10 relative overflow-hidden group hover:border-rose-500/30 transition-colors">
+                    <div className={`absolute top-0 left-0 w-1 h-full bg-rose-500/50 opacity-${gap.gap_level * 20}`} />
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="font-semibold text-slate-200">{gap.skill_name}</h3>
+                      <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
+                        {gap.domain}
                       </span>
                     </div>
-                    <div className="dashboard-activity-copy">
-                      <p className="dashboard-activity-user">{user.name}</p>
-                      <p className="dashboard-activity-action">
-                        {user.role === 'admin' ? 'joined as administrator' : 'joined as user'}
-                      </p>
-                    </div>
-                    <p className="dashboard-activity-time">
-                      {new Date(user.created_at).toLocaleDateString('en-GB')}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          <Card className="dashboard-side-card">
-            <div className="dashboard-card-head">
-              <div>
-                <h2 className="dashboard-card-title">Top Gap Domains</h2>
-                <p className="dashboard-card-subtitle">Domains with highest current gap records</p>
-              </div>
-            </div>
-
-            {loading ? (
-              <div className="dashboard-list-skeletons">
-                {[...Array(5)].map((_, index) => (
-                  <div key={index} className="dashboard-skeleton dashboard-row-skeleton" />
-                ))}
-              </div>
-            ) : topGapDomains.length === 0 ? (
-              <div className="dashboard-empty">No gap domain data available</div>
-            ) : (
-              <div className="dashboard-domain-list">
-                {topGapDomains.map((domain) => (
-                  <div key={domain.name} className="dashboard-domain-row">
-                    <p className="dashboard-domain-name">{domain.name}</p>
-                    <p className="dashboard-domain-count">{domain.count}</p>
+                    <p className="text-xs text-slate-400 leading-relaxed mt-2">{gap.reason}</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
+                ))
+              )}
+            </div>
+          </motion.div>
         </div>
-      </section>
+
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}
+        className="mt-6 p-6 lg:p-8 bg-gradient-to-br from-slate-800/60 to-slate-900/80 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm"
+      >
+        <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+          <Sparkles className="text-amber-400" size={22} />
+          Recommendations Panel
+        </h2>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {recommendations.length === 0 ? (
+            <p className="text-slate-400 text-sm col-span-full">No active recommendations at this time.</p>
+          ) : (
+            recommendations.map((rec, idx) => (
+              <div key={idx} className="bg-slate-800/50 border border-slate-700 hover:border-cyan-500/30 transition-colors p-5 rounded-2xl flex flex-col h-full group">
+                <div className="flex justify-between mb-3 items-start gap-2">
+                  <h3 className="text-sm font-semibold text-slate-100 flex-1 leading-snug group-hover:text-cyan-300 transition-colors">
+                    {rec.title}
+                  </h3>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded border ${rec.priority === 'high' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : rec.priority === 'medium' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-slate-700 text-slate-300 border-slate-600'}`}>
+                    {rec.priority || 'normal'}
+                  </span>
+                </div>
+                <p className="text-sm text-slate-400 mt-auto">{rec.content}</p>
+                <div className="mt-4 pt-3 border-t border-slate-700/50 flex justify-between items-center text-xs text-slate-500">
+                  <span className="capitalize">{rec.type}</span>
+                  <button className="text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Set Action <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </motion.div>
+
     </div>
   );
-};
-
-export default Dashboard;
+}
 

@@ -1,13 +1,30 @@
-const { User, Profile, UserSkill, SkillGap, Recommendation } = require('../models');
+const { User, Profile, ChatHistory, UserSkill, SkillGap, Recommendation } = require('../models');
 const {
   recomputeUserAnalysis,
   requestAiSkillGapAnalysis,
   requestAiRoadmap,
   requestAiRecommendations,
   requestAiCareerAdvice,
+  requestAiChat,
   requestAiJobDescription,
+  triggerAiProfileExtraction,
 } = require('../services/analysisService');
+const {
+  buildAiSummary,
+  buildProfileEnvelope,
+  normalizeExplicitProfile,
+  normalizeAiProfile,
+} = require('../services/aiProfileService');
 const { getUserDashboardSnapshot } = require('../services/dashboardService');
+
+async function resolveOptional(label, operation, fallbackValue) {
+  try {
+    return await operation();
+  } catch (error) {
+    console.warn(`[UserController] Optional profile dependency failed for ${label}:`, error.message);
+    return fallbackValue;
+  }
+}
 
 class UserController {
   static normalizeUuid(value) {
@@ -21,29 +38,84 @@ class UserController {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
   }
 
+  static async buildDegradedProfilePayload(userId) {
+    const [user, profile] = await Promise.all([
+      resolveOptional('fallbackUser', () => User.findById(userId), null),
+      resolveOptional('fallbackProfile', () => Profile.getFullProfile(userId), null),
+    ]);
+
+    return buildProfileEnvelope({
+      user,
+      profile,
+      storedAiProfile: {},
+      skillGaps: [],
+      recommendations: [],
+    });
+  }
+
+  static async buildDegradedDashboardPayload(userId) {
+    const [profile, skills] = await Promise.all([
+      resolveOptional('fallbackDashboardProfile', () => Profile.getFullProfile(userId), null),
+      resolveOptional('fallbackDashboardSkills', () => UserSkill.getUserSkills(userId), []),
+    ]);
+
+    const ai_profile = normalizeAiProfile({}, {
+      skillGaps: [],
+      recommendations: [],
+    }, profile);
+    const ai_summary = buildAiSummary(ai_profile, profile);
+
+    return {
+      profile,
+      skills,
+      skillGaps: [],
+      recentRecommendations: [],
+      gapStatistics: {
+        total_gaps: 0,
+        avg_gap_level: 0,
+        high_priority_count: 0,
+        domains_with_gaps: 0,
+      },
+      ai_profile,
+      ai_summary,
+    };
+  }
+
   // Get user profile
   static async getProfile(req, res) {
     try {
       const userId = req.user.id;
-      const profile = await Profile.getFullProfile(userId);
+      const [user, profile, storedAiProfile, skillGaps, recommendations] = await Promise.all([
+        User.findById(userId),
+        Profile.getFullProfile(userId),
+        resolveOptional('storedAiProfile', () => Profile.getStoredAiProfile(userId), {}),
+        resolveOptional('skillGaps', () => SkillGap.findByUserId(userId), []),
+        resolveOptional('recommendations', () => Recommendation.getRecentRecommendations(userId, 30, 8), []),
+      ]);
 
-      if (!profile) {
-        return res.status(404).json({
-          success: false,
-          message: 'Profile not found'
-        });
-      }
+      const payload = buildProfileEnvelope({
+        user,
+        profile,
+        storedAiProfile,
+        skillGaps,
+        recommendations,
+      });
 
       res.status(200).json({
         success: true,
-        data: profile
+        data: payload
       });
     } catch (error) {
       console.error('Get profile error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'Error fetching profile',
-        error: error.message
+      const fallbackPayload = await UserController.buildDegradedProfilePayload(req.user.id);
+      res.status(200).json({
+        success: true,
+        data: fallbackPayload,
+        meta: {
+          degraded: true,
+          message: 'Profile insights are temporarily unavailable.',
+          error: error.message,
+        }
       });
     }
   }
@@ -363,10 +435,91 @@ class UserController {
       });
     } catch (error) {
       console.error('Get dashboard error:', error);
+      const fallbackDashboard = await UserController.buildDegradedDashboardPayload(req.user.id);
+      res.status(200).json({
+        success: true,
+        data: fallbackDashboard,
+        meta: {
+          degraded: true,
+          message: 'Dashboard insights are temporarily unavailable.',
+          error: error.message,
+        }
+      });
+    }
+  }
+
+  static async updateExplicitProfile(req, res) {
+    try {
+      const userId = req.user.id;
+      const explicitPayload = {
+        explicitSkills: Array.isArray(req.body?.skills) ? req.body.skills : [],
+        explicitTargetRole: typeof req.body?.target_role === 'string' ? req.body.target_role.trim() : null,
+        explicitEducation: typeof req.body?.education === 'string' ? req.body.education.trim() : null,
+        explicitExperience: typeof req.body?.experience === 'string' ? req.body.experience.trim() : null,
+        explicitPreferences:
+          req.body?.preferences && typeof req.body.preferences === 'object'
+            ? {
+                domain:
+                  typeof req.body.preferences.domain === 'string'
+                    ? req.body.preferences.domain.trim()
+                    : '',
+                stack:
+                  typeof req.body.preferences.stack === 'string'
+                    ? req.body.preferences.stack.trim()
+                    : '',
+              }
+            : {},
+      };
+
+      await Profile.upsertExplicitProfile(userId, explicitPayload);
+
+      const [user, profile, storedAiProfile, skillGaps, recommendations] = await Promise.all([
+        User.findById(userId),
+        Profile.getFullProfile(userId),
+        resolveOptional('storedAiProfile', () => Profile.getStoredAiProfile(userId), {}),
+        resolveOptional('skillGaps', () => SkillGap.findByUserId(userId), []),
+        resolveOptional('recommendations', () => Recommendation.getRecentRecommendations(userId, 30, 8), []),
+      ]);
+
+      const envelope = buildProfileEnvelope({
+        user,
+        profile,
+        storedAiProfile,
+        skillGaps,
+        recommendations,
+      });
+
+      if (explicitPayload.explicitTargetRole) {
+        setImmediate(() => {
+          void Promise.allSettled([
+            requestAiSkillGapAnalysis(userId, explicitPayload.explicitTargetRole),
+            requestAiRoadmap(userId, { role: explicitPayload.explicitTargetRole }),
+          ]).then((results) => {
+            const [gapResult, roadmapResult] = results;
+            if (gapResult.status === 'rejected') {
+              console.warn('Explicit profile update could not refresh skill-gap analysis:', gapResult.reason?.message || gapResult.reason);
+            }
+            if (roadmapResult.status === 'rejected') {
+              console.warn('Explicit profile update could not refresh roadmap:', roadmapResult.reason?.message || roadmapResult.reason);
+            }
+          });
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Explicit profile updated successfully',
+        data: {
+          explicit_profile: normalizeExplicitProfile(profile),
+          profile: envelope,
+        },
+      });
+    } catch (error) {
+      console.error('Update explicit profile error:', error);
       res.status(500).json({
         success: false,
-        message: 'Error fetching dashboard data',
-        error: error.message
+        message: 'Error updating explicit profile',
+        error: error.message,
       });
     }
   }
@@ -422,12 +575,13 @@ class UserController {
   static async generateRoadmapWithAi(req, res) {
     try {
       const userId = req.user.id;
-      const targetRole = typeof req.body?.targetRole === 'string' ? req.body.targetRole.trim() : undefined;
-      const timeframeMonths = Number(req.body?.timeframeMonths ?? 6);
+      const role =
+        typeof req.body?.role === 'string' && req.body.role.trim()
+          ? req.body.role.trim()
+          : (typeof req.body?.targetRole === 'string' ? req.body.targetRole.trim() : undefined);
 
       const result = await requestAiRoadmap(userId, {
-        targetRole: targetRole || undefined,
-        timeframeMonths,
+        role: role || undefined,
       });
 
       res.status(200).json({
@@ -485,6 +639,82 @@ class UserController {
         success: false,
         message: 'Error getting AI career advice',
         error: error.message,
+      });
+    }
+  }
+
+  // Return AI chat advice immediately and trigger profile extraction asynchronously.
+  static async chatWithAi(req, res) {
+    try {
+      const userId = req.user.id;
+      const message = String(req.body?.message || '').trim();
+
+      const result = await requestAiChat(userId, message);
+      if (!result.degraded) {
+        triggerAiProfileExtraction(userId, message);
+      }
+
+      const payload = {
+        response: result.response,
+        message_id: result.messageId,
+        conversation_summary: result.conversationSummary,
+      };
+
+      res.status(200).json({
+        success: true,
+        ...payload,
+        data: payload,
+        ...(result.degraded ? { meta: { degraded: true } } : {}),
+      });
+    } catch (error) {
+      console.error('Chat with AI error:', error);
+      res.status(200).json({
+        success: true,
+        response: 'The AI assistant is temporarily unavailable. Please try again in a moment.',
+        message_id: null,
+        conversation_summary: {
+          skills_mentioned: [],
+          goals_mentioned: [],
+        },
+        data: {
+          response: 'The AI assistant is temporarily unavailable. Please try again in a moment.',
+          message_id: null,
+          conversation_summary: {
+            skills_mentioned: [],
+            goals_mentioned: [],
+          },
+        },
+        meta: {
+          degraded: true,
+        },
+      });
+    }
+  }
+
+  static async getAiHistory(req, res) {
+    try {
+      const userId = req.user.id;
+      const requestedLimit = Number(req.query?.limit);
+      const limit = Number.isFinite(requestedLimit)
+        ? Math.max(1, Math.min(200, requestedLimit))
+        : 100;
+
+      const messages = await ChatHistory.findByUserId(userId, limit);
+
+      res.status(200).json({
+        success: true,
+        messages,
+      });
+    } catch (error) {
+      console.error('Get AI history error:', error);
+      res.status(200).json({
+        success: true,
+        messages: [],
+        meta: {
+          degraded: true,
+          message: 'AI chat history is temporarily unavailable.',
+          error: error.message,
+        },
       });
     }
   }

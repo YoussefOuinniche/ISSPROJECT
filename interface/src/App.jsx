@@ -8,6 +8,7 @@ import Content from './pages/Content';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import Chat from './pages/Chat';
 import ErrorBoundary from './components/ErrorBoundary';
 import { isAuthenticated as checkAuth, clearAuthTokens } from './utils/auth';
 import { getCurrentSessionUser, logoutSession } from './api/authGenerated';
@@ -91,6 +92,7 @@ function App() {
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/profile" element={<Profile />} />
+                  <Route path="/chat" element={<Chat />} />
                   <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 </Routes>
               </ErrorBoundary>

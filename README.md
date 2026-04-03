@@ -1,198 +1,284 @@
-# SkillPulse — AI-Powered Career Development & Upskilling Platform
+# SkillPulse
 
-## Overview
+SkillPulse is a career development platform for IT learners and early-career professionals. This repository currently contains two tracks:
 
-SkillPulse bridges the gap between IT students, junior professionals, and the evolving job market. The platform leverages AI to analyze user profiles, identify skill gaps, and deliver personalized learning pathways aligned with current industry demands.
+1. Legacy full stack used day-to-day in this workspace:
+     - Node/Express API in `Backend`
+     - React admin UI in `interface`
+     - Python FastAPI AI service in `Backend/ai`
+2. New monorepo track in `Skill-Pulse-1` (API server, mobile app, shared libs)
 
----
+## What Is Up To Date In This README
 
-## Architecture
+This README reflects the current code paths, ports, and scripts as of April 2026.
 
-```
-┌─────────────────────┐     REST API      ┌──────────────────────┐
-│   React Admin UI    │ ◄───────────────► │  Node.js / Express   │
-│  (Vite + Tailwind)  │                   │     Backend API       │
-└─────────────────────┘                   └──────────┬───────────┘
-                                                     │
-                                          ┌──────────▼───────────┐
-                                          │     PostgreSQL DB     │
-                                          └──────────────────────┘
-                                                     │
-                                          ┌──────────▼───────────┐
-                                          │  Python FastAPI (AI)  │
-                                          │  RAG · TF-IDF · LLM  │
-                                          └──────────────────────┘
-```
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|---|---|
-| **Admin Frontend** | React 18, Vite, Tailwind CSS, React Router v6, Axios |
-| **Backend API** | Node.js, Express 4, CommonJS |
-| **Database** | PostgreSQL (via `pg` driver) |
-| **Authentication** | JWT (`jsonwebtoken`), bcrypt password hashing |
-| **Validation** | `express-validator` |
-| **AI Service** | Python 3, FastAPI, Uvicorn |
-| **RAG / NLP** | `scikit-learn` TF-IDF, `pypdf`, DuckDuckGo search fallback |
-| **LLM Interface** | OpenAI-compatible client (Ollama local LLM) |
-
----
-
-## Project Structure
+## High-Level Architecture
 
 ```
-├── Backend/
-│   ├── app.js                  # Express entry point (port 5000)
-│   ├── config/
-│   │   └── database.js         # PostgreSQL pool (mock fallback for dev)
-│   ├── routes/
-│   │   ├── Auth.js             # /api/auth
-│   │   ├── User.js             # /api/user
-│   │   ├── Skills.js           # /api/skills
-│   │   ├── Trends.js           # /api/trends
-│   │   └── Public.js           # /api/public
-│   ├── controllers/            # Route handler logic
-│   ├── models/                 # DB model helpers
-│   ├── middleware/             # auth, errorHandler, validate
-│   ├── database/
-│   │   └── schema.sql          # PostgreSQL schema
-│   └── ai/
-│       ├── backend.py          # FastAPI AI service
-│       ├── rag.py              # RAG pipeline
-│       ├── requirements.txt    # Python dependencies
-│       └── Articles/           # Knowledge base documents
-└── interface/
-    ├── src/
-    │   ├── pages/              # Dashboard, Analytics, Users, Settings, etc.
-    │   ├── components/         # Shared UI components
-    │   ├── api.js              # Axios API client
-    │   └── App.jsx             # Router root
-    └── vite.config.js
+React Admin UI (Vite)  <---->  Express API  <---->  Supabase Postgres
+                                                                 |
+                                                                 +--------->  FastAPI AI Service (Ollama-compatible)
+
+Parallel track: Skill-Pulse-1 monorepo (pnpm + TypeScript + Expo mobile)
 ```
 
----
+## Runtime Port Map
 
-## API Endpoints
+| Service | Source | Env | Default |
+|---|---|---|---|
+| Backend API | `Backend/app.js` | `PORT` | `4000` |
+| Admin frontend | `interface/vite.config.js` | `VITE_WEB_PORT` | `3000` |
+| AI service | `Backend/ai/backend.py` | `AI_HOST`, `AI_PORT` | `0.0.0.0:8000` |
+| Mobile Expo dev server | `run-mobile-expo.ps1`, `Skill-Pulse-1/artifacts/mobile/scripts/start-local.js` | `MOBILE_PORT` / `PORT` | `8081` |
+| Mobile static bridge (optional) | `Skill-Pulse-1/artifacts/mobile/server/serve.js` | `MOBILE_BRIDGE_PORT` / `PORT` | `8082` |
 
-### Authentication — `/api/auth`
-| Method | Path | Description |
-|---|---|---|
-| POST | `/register` | Register new user |
-| POST | `/login` | Login and receive JWT |
-| POST | `/refresh-token` | Refresh access token |
-| POST | `/forgot-password` | Send password reset email |
-| POST | `/reset-password` | Reset with token |
-| GET | `/me` | Get current user (protected) |
-| POST | `/logout` | Invalidate session (protected) |
+## Project Layout
 
-### User — `/api/user` *(all protected)*
-| Method | Path | Description |
-|---|---|---|
-| GET/PUT/POST | `/profile` | Get or upsert user profile |
-| PUT | `/update` | Update account details |
-| DELETE | `/account` | Delete account |
-| GET/POST | `/skills` | List or add user skills |
-| PUT/DELETE | `/skills/:skillId` | Update or remove a skill |
-| GET | `/skill-gaps` | Computed skill gap analysis |
-| GET | `/recommendations` | Personalized learning recommendations |
-| GET | `/dashboard` | Aggregated dashboard data |
+```
+Backend/
+    app.js
+    config/database.js
+    routes/
+    controllers/
+    models/
+    middleware/
+    database/schema.sql
+    ai/
+        backend.py
+        tools.py
+        scraper.py
+        requirements.txt
 
-### Skills — `/api/skills`
-| Method | Path | Access |
-|---|---|---|
-| GET | `/` `/search` `/categories` `/:id` `/:id/stats` | Public |
-| POST/PUT/DELETE | `/` `/bulk` `/:id` | Admin (protected) |
+interface/
+    src/
+    vite.config.js
 
-### Trends — `/api/trends`
-| Method | Path | Access |
-|---|---|---|
-| GET | `/` `/recent` `/search` `/domains` `/:id` | Public |
-| POST/PUT/DELETE | `/` `/bulk` `/:id` | Admin (protected) |
+Skill-Pulse-1/
+    artifacts/
+        api-server/
+        mobile/
+    lib/
+```
 
----
+## API Surface (Legacy Backend)
 
-## Getting Started
+Base URL: `http://localhost:4000`
+
+### Health
+- `GET /health`
+
+### Auth (`/api/auth`)
+- `POST /register`
+- `POST /login`
+- `POST /refresh-token`
+- `POST /forgot-password`
+- `POST /reset-password`
+- `POST /change-password` (protected)
+- `GET /me` (protected)
+- `POST /logout` (protected)
+
+### User (`/api/user`, protected)
+- `GET /profile`
+- `PUT /profile`
+- `POST /profile`
+- `POST /profile/recompute`
+- `PUT /update`
+- `DELETE /account`
+- `GET /skills`
+- `POST /skills`
+- `PUT /skills/:skillId`
+- `DELETE /skills/:skillId`
+- `GET /skill-gaps`
+- `GET /recommendations`
+- `GET /dashboard`
+- `POST /ai/skill-gaps/analyze`
+- `POST /ai/roadmap`
+- `POST /ai/recommendations/generate`
+- `POST /ai/career-advice`
+- `POST /ai/job-description`
+
+### Skills (`/api/skills`)
+Public:
+- `GET /`
+- `GET /search`
+- `GET /categories`
+- `GET /:id`
+- `GET /:id/stats`
+
+Protected:
+- `POST /`
+- `POST /bulk`
+- `PUT /:id`
+- `DELETE /:id`
+
+### Trends (`/api/trends`)
+Public:
+- `GET /`
+- `GET /recent`
+- `GET /search`
+- `GET /domains`
+- `GET /:id`
+
+Protected:
+- `POST /`
+- `POST /bulk`
+- `PUT /:id`
+- `DELETE /:id`
+
+### Public/Admin (`/api/public`)
+Public:
+- `GET /dashboard`
+
+Admin protected:
+- `GET /admin/users`
+- `PATCH /admin/users/:id`
+- `DELETE /admin/users/:id`
+- `GET /admin/content`
+- `GET /admin/analytics`
+- `GET /admin/overview`
+- `POST /admin/profile/recompute`
+- `GET /admin/settings`
+- `PATCH /admin/settings`
+- `GET /admin/account`
+- `PATCH /admin/account`
+- `GET /admin/notifications`
+- `POST /admin/notifications/read-all`
+
+## Local Setup (Legacy Stack)
 
 ### Prerequisites
-- Node.js ≥ 18
-- PostgreSQL ≥ 14
-- Python ≥ 3.10
-- Ollama (for local LLM inference)
+- Node.js 18+
+- Python 3.10+
+- PostgreSQL 14+ (or Supabase Postgres)
+- Ollama (if using local LLM)
 
-### 1. Database Setup
-```sql
--- Run the schema
-psql -U <user> -d <dbname> -f Backend/database/schema.sql
-```
+### 1) Backend API
 
-### 2. Backend API
 ```bash
 cd Backend
-cp .env.example .env      # configure DATABASE_URL, JWT_SECRET, etc.
 npm install
-npm start                  # runs on http://localhost:5000
+npm start
 ```
 
-Required `.env` variables:
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/skillpulse
-JWT_SECRET=your_jwt_secret
-JWT_REFRESH_SECRET=your_refresh_secret
-PORT=5000
+Minimum backend env (`Backend/.env`):
+
+```env
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_xxx
+PORT=4000
 NODE_ENV=development
-CORS_ORIGIN=http://localhost:5173
+FRONTEND_URL=http://localhost:3000,http://127.0.0.1:3000
+
+JWT_SECRET=change-me
+JWT_REFRESH_SECRET=change-me-too
+JWT_EXPIRE=1h
+JWT_REFRESH_EXPIRE=7d
+RESET_PASSWORD_EXPIRE=3600000
 ```
 
-### 3. AI Service
+Optional backend env:
+
+```env
+AI_SERVICE_URL=http://localhost:8000
+AI_SERVICE_TOKEN=change-this-ai-service-token
+AI_TIMEOUT_MS=15000
+AI_HEALTH_TIMEOUT_MS=2500
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=admin-password
+```
+
+### 2) AI Service
+
 ```bash
 cd Backend/ai
 pip install -r requirements.txt
-uvicorn backend:app --reload --port 8000
+python backend.py
 ```
 
-### 4. Admin Frontend
+The AI service loads `Backend/.env` first, then `Backend/ai/.env` (override layer).
+
+Recommended AI env:
+
+```env
+AI_HOST=0.0.0.0
+AI_PORT=8000
+AI_RELOAD=true
+
+AI_REQUIRE_AUTH=true
+AI_SERVICE_TOKEN=change-this-ai-service-token
+AI_CORS_ORIGINS=
+
+OLLAMA_URL=http://localhost:11434/v1
+OLLAMA_MODEL=gemma3:1b
+OLLAMA_API_KEY=ollama
+AI_TEMPERATURE=0.7
+AI_TIMEOUT_SECONDS=300
+
+DATABASE_URL=postgresql://...
+AI_SCRAPER_TIMEOUT=15
+```
+
+AI endpoints:
+- `GET /health`
+- `POST /analyze-skill-gaps`
+- `POST /generate-roadmap`
+- `POST /recommend`
+- `POST /career-advice`
+- `POST /generate-job-description`
+- `GET /models`
+
+### 3) Admin Frontend
+
 ```bash
 cd interface
 npm install
-npm run dev                # runs on http://localhost:5173
+npm run dev
 ```
 
----
+Frontend env (`interface/.env`):
 
-## Core Features
-
-### Intelligent Profile Analysis
-- Skills taxonomy across programming languages, frameworks, databases, cloud platforms, and DevOps tools
-- User skill self-assessment and gap computation
-
-### Job Market Intelligence
-- Trending skills tracking by domain
-- Skill demand analytics across the user base
-
-### AI-Powered Recommendations
-- RAG pipeline combining local PDF articles with DuckDuckGo web search
-- TF-IDF cosine similarity for document retrieval
-- Ollama-backed LLM response generation
-
-### Admin Dashboard
-- User management and analytics
-- Skill and trend CRUD management
-- Platform-wide learning pathway analytics
-
----
-
-## Health Check
-
-```
-GET /health
-→ { "success": true, "database": "connected", "timestamp": "..." }
+```env
+VITE_WEB_PORT=3000
+VITE_API_URL=http://localhost:4000
 ```
 
----
+## Mobile (Monorepo Track)
 
-## Keywords
+### Expo dev server from repo root
 
-AI-powered upskilling · career development · skill gap analysis · personalized learning pathways · IT workforce development · RAG · PostgreSQL · FastAPI · React · Node.js
+```powershell
+.\run-mobile-expo.ps1 -Port 8081 -HostMode lan
+```
+
+`HostMode` supports `lan`, `localhost`, or `tunnel`.
+
+### Alternative (inside mobile package)
+
+```bash
+cd Skill-Pulse-1/artifacts/mobile
+pnpm install
+pnpm run start
+```
+
+### Static mobile bridge (prebuilt output)
+
+```bash
+cd Skill-Pulse-1/artifacts/mobile
+pnpm run build
+pnpm run serve
+```
+
+## Database Notes
+
+- Canonical SQL schema lives in `Backend/database/schema.sql`.
+- Backend runtime DB access uses `Backend/config/database.js` (Supabase service-role client).
+- AI runtime reads direct Postgres via `DATABASE_URL` in `Backend/ai/backend.py`.
+
+## Feature Notes
+
+Current AI service is prompt orchestration with:
+- user/profile/skills/trends retrieval from database
+- live web scraping inputs (`tools.py` + `scraper.py`)
+- structured JSON generation through an OpenAI-compatible endpoint (typically Ollama)
+
+There is no standalone `rag.py` module in the current `Backend/ai` folder.

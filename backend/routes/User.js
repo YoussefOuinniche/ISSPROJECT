@@ -13,6 +13,18 @@ const profileValidation = [
   body('bio').optional().trim()
 ];
 
+const explicitProfileValidation = [
+  body('skills').optional().isArray({ max: 50 }),
+  body('skills.*.name').optional().isString().trim().isLength({ min: 1, max: 100 }),
+  body('skills.*.level').optional().isIn(['beginner', 'intermediate', 'advanced']),
+  body('target_role').optional().isString().trim().isLength({ max: 255 }),
+  body('education').optional().isString().trim().isLength({ max: 2000 }),
+  body('experience').optional().isString().trim().isLength({ max: 2000 }),
+  body('preferences').optional().isObject(),
+  body('preferences.domain').optional().isString().trim().isLength({ max: 100 }),
+  body('preferences.stack').optional().isString().trim().isLength({ max: 255 }),
+];
+
 const addSkillValidation = [
   body('skillId')
     .customSanitizer((value) => String(value ?? '').trim().replace(/^"+|"+$/g, ''))
@@ -27,6 +39,7 @@ const aiSkillGapValidation = [
 ];
 
 const aiRoadmapValidation = [
+  body('role').optional().isString().trim(),
   body('targetRole').optional().isString().trim(),
   body('timeframeMonths').optional().isInt({ min: 1, max: 24 }),
 ];
@@ -37,6 +50,10 @@ const aiRecommendationsValidation = [
 
 const aiCareerAdviceValidation = [
   body('question').isString().trim().isLength({ min: 5 }),
+];
+
+const aiChatValidation = [
+  body('message').isString().trim().isLength({ min: 1, max: 4000 }),
 ];
 
 const aiJobDescriptionValidation = [
@@ -51,6 +68,7 @@ router.use(protect);
 router.get('/profile', UserController.getProfile);
 router.put('/profile', profileValidation, validate, UserController.upsertProfile);
 router.post('/profile', profileValidation, validate, UserController.upsertProfile);
+router.post('/profile/update', explicitProfileValidation, validate, UserController.updateExplicitProfile);
 router.post('/profile/recompute', UserController.recomputeProfileAnalysis);
 
 // User info routes
@@ -74,6 +92,8 @@ router.post('/ai/skill-gaps/analyze', aiSkillGapValidation, validate, UserContro
 router.post('/ai/roadmap', aiRoadmapValidation, validate, UserController.generateRoadmapWithAi);
 router.post('/ai/recommendations/generate', aiRecommendationsValidation, validate, UserController.generateRecommendationsWithAi);
 router.post('/ai/career-advice', aiCareerAdviceValidation, validate, UserController.getCareerAdviceWithAi);
+router.get('/ai/history', UserController.getAiHistory);
+router.post('/ai/chat', aiChatValidation, validate, UserController.chatWithAi);
 router.post('/ai/job-description', aiJobDescriptionValidation, validate, UserController.generateJobDescriptionWithAi);
 
 // Dashboard route

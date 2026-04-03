@@ -1,20 +1,31 @@
 import os # for environment variable handling and file paths
 import json # for parsing and handling JSON data
-import time # for timing functions
 import textwrap # for compact scraped context formatting
 import hmac
-from openai import OpenAI # for interacting with the LLM (Ollama)
+import logging
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 import uvicorn
+from ai_chat_router import router as ai_chat_router
+from ai_chat_runtime import initialize_ai_chat_runtime, shutdown_ai_chat_runtime
+from ai_profile_extract_router import router as ai_profile_extract_router
+from ai_roadmap_router import router as ai_roadmap_router
+from ai_skill_gap_router import router as ai_skill_gap_router
+from services.llm_service import (
+    build_messages,
+    call_llm,
+    list_available_models,
+)
 
 
 # Load shared backend env first, then optional local AI env overrides.
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, "..", ".env"))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+logging.basicConfig(level=os.getenv("AI_LOG_LEVEL", "INFO").upper())
 
 
 def _env_int(name, default):
@@ -23,16 +34,6 @@ def _env_int(name, default):
         return default
     try:
         return int(raw)
-    except Exception:
-        return default
-
-
-def _env_float(name, default):
-    raw = os.getenv(name)
-    if raw is None or str(raw).strip() == "":
-        return default
-    try:
-        return float(raw)
     except Exception:
         return default
 
@@ -53,11 +54,8 @@ def _env_list(name, default=None):
 
 
 # --- SETTINGS ---
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/v1") # base URL for Ollama API
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:1b") # model name
-OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "ollama") # local ollama ignores key, cloud gateways may require one
-TEMPERATURE = _env_float("AI_TEMPERATURE", 0.7) # creativity level
-TIMEOUT = _env_int("AI_TIMEOUT_SECONDS", 300) # timeout in seconds
+OLLAMA_MODEL_CHAT = (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2.5:3b").strip()
+OLLAMA_MODEL_EXTRACT = (os.getenv("OLLAMA_MODEL_EXTRACT") or OLLAMA_MODEL_CHAT).strip()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres") # database connection string
 API_HOST = os.getenv("AI_HOST", "0.0.0.0")
 API_PORT = _env_int("AI_PORT", 8000) # port for the API server
@@ -70,19 +68,6 @@ CORS_ORIGINS = _env_list("AI_CORS_ORIGINS", default_cors_origins)
 
 if AI_REQUIRE_AUTH and not AI_SERVICE_TOKEN:
     raise RuntimeError("AI_REQUIRE_AUTH is enabled but AI_SERVICE_TOKEN is not set.")
-
-
-# fix ollama url
-def fix_ollama_url(raw_url):
-    cleaned = raw_url.strip()
-    if cleaned.endswith("/"): # remove trailing slash
-        cleaned = cleaned[:-1]
-    if not cleaned.endswith("/v1"):
-        cleaned = cleaned + "/v1"
-    return cleaned
-
-
-OLLAMA_URL = fix_ollama_url(OLLAMA_URL)
 
 
 # connect to database
@@ -208,32 +193,6 @@ def save_recommendations(user_id, recommendations):
     conn.commit()
     cursor.close()
     conn.close()
-
-
-# CALL THE LLM
-def call_llm(system_prompt, user_prompt):
-    client = OpenAI(base_url=OLLAMA_URL, api_key=OLLAMA_API_KEY)
-
-    attempt = 0
-    while attempt < 2:
-        try:
-            response = client.chat.completions.create(
-                model=OLLAMA_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=TEMPERATURE,
-                timeout=TIMEOUT
-            )
-            return response.choices[0].message.content
-
-        except Exception as error:
-            print("LLM call failed:", error)
-            attempt = attempt + 1
-            time.sleep(1)
-
-    return None
 
 
 # --- CLEAN UP AND PARSE JSON FROM LLM ---
@@ -362,7 +321,7 @@ def analyze_skill_gaps(user_id, target_role=None):
     user_prompt = user_prompt + "Current skills:\n" + skills_text
 
     # call llm
-    raw = call_llm(system_prompt, user_prompt) # this is where we call the LLM to analyze skill gaps based on the user's profile and target role
+    raw = call_llm("chat", build_messages(system_prompt, user_prompt)) # this is where we call the LLM to analyze skill gaps based on the user's profile and target role
     gaps = parse_llm_json(raw) # we then parse the LLM's response to extract the skill gaps in a structured format
 
     if gaps is None:
@@ -439,7 +398,7 @@ def generate_roadmap(user_id, target_role=None, timeframe_months=6):
     user_prompt = user_prompt + "Current skills:\n" + skills_text + "\n\n"
     user_prompt = user_prompt + "Generate a step-by-step roadmap."
 
-    raw = call_llm(system_prompt, user_prompt)
+    raw = call_llm("chat", build_messages(system_prompt, user_prompt))
     roadmap = parse_llm_json(raw)
 
     return {"success": True, "data": roadmap}
@@ -491,7 +450,7 @@ def get_recommendations(user_id, count=5):
     user_prompt = user_prompt + "Current trends:\n" + trends_text + "\n\n"
     user_prompt = user_prompt + "Provide up to " + str(count) + " recommendations."
 
-    raw = call_llm(system_prompt, user_prompt)
+    raw = call_llm("chat", build_messages(system_prompt, user_prompt))
     recs = parse_llm_json(raw)
 
     if recs is None:
@@ -540,7 +499,7 @@ Format your response in clear paragraphs. You can use bullet points."""
 
     user_prompt = question + context
 
-    answer = call_llm(system_prompt, user_prompt)
+    answer = call_llm("chat", build_messages(system_prompt, user_prompt))
 
     return {"success": True, "answer": answer}
 
@@ -859,7 +818,7 @@ Return ONLY the JSON, no extra text."""
     user_prompt_part1 = user_prompt_part1 + "Generate the job descriptions now."
 
     # call llm for job descriptions
-    raw_part1 = call_llm(system_prompt_part1, user_prompt_part1)
+    raw_part1 = call_llm("chat", build_messages(system_prompt_part1, user_prompt_part1))
     part1 = parse_llm_json(raw_part1)
 
     if part1 is None:
@@ -906,7 +865,7 @@ Include 6 to 10 tasks with concrete time_estimate."""
             + json.dumps(job_no_ai) + "\n\n"
             + "Generate only the AI-augmented section now."
         )
-        repaired = parse_llm_json(call_llm(repair_system, repair_user))
+        repaired = parse_llm_json(call_llm("chat", build_messages(repair_system, repair_user)))
 
         if type(repaired) == dict:
             if type(repaired.get("job_with_ai")) == dict:
@@ -940,7 +899,7 @@ Include 6 to 10 tasks with concrete time_estimate."""
     user_prompt_part2 = user_prompt_part2 + context_block + "\n\n"
     user_prompt_part2 = user_prompt_part2 + "Generate the analysis sections now."
 
-    raw_part2 = call_llm(system_prompt_part2, user_prompt_part2)
+    raw_part2 = call_llm("chat", build_messages(system_prompt_part2, user_prompt_part2))
     part2 = parse_llm_json(raw_part2)
 
     if part2 is None:
@@ -984,9 +943,7 @@ def check_health():
 
     # check llm
     try:
-        from openai import OpenAI
-        client = OpenAI(base_url=OLLAMA_URL, api_key=OLLAMA_API_KEY)
-        client.models.list()
+        list_available_models()
         status["llm"] = "connected"
     except Exception:
         status["llm"] = "disconnected"
@@ -1007,7 +964,15 @@ def check_health():
         if status[key] != "connected":
             all_good = False
 
-    return {"success": all_good, "services": status, "model": OLLAMA_MODEL}
+    return {
+        "success": all_good,
+        "services": status,
+        "model": OLLAMA_MODEL_CHAT,
+        "models": {
+            "chat": OLLAMA_MODEL_CHAT,
+            "extract": OLLAMA_MODEL_EXTRACT,
+        },
+    }
 
 
 app = FastAPI(
@@ -1046,6 +1011,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(ai_chat_router)
+app.include_router(ai_profile_extract_router)
+app.include_router(ai_roadmap_router)
+app.include_router(ai_skill_gap_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    await initialize_ai_chat_runtime(app)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await shutdown_ai_chat_runtime(app)
 
 
 @app.get("/health")
@@ -1158,12 +1137,15 @@ async def generate_job_description_endpoint(payload: dict):
 @app.get("/models")
 async def models_endpoint():
     try:
-        client = OpenAI(base_url=OLLAMA_URL, api_key=OLLAMA_API_KEY)
-        models = client.models.list()
+        models = list_available_models()
         return {
             "success": True,
-            "current_model": OLLAMA_MODEL,
-            "available": [m.id for m in models.data],
+            "current_model": OLLAMA_MODEL_CHAT,
+            "current_models": {
+                "chat": OLLAMA_MODEL_CHAT,
+                "extract": OLLAMA_MODEL_EXTRACT,
+            },
+            "available": models,
         }
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Ollama unreachable: {exc}")
