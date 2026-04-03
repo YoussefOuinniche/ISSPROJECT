@@ -7,6 +7,12 @@
  */
 import * as zod from "zod";
 
+// SkillPulse seed data uses PostgreSQL-canonical UUID strings that are valid in Postgres
+// even when they do not encode an RFC version/variant nibble.
+const postgresCanonicalUuid = zod
+  .string()
+  .regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/, "Invalid UUID");
+
 /**
  * Returns server health status
  * @summary Health check
@@ -39,7 +45,7 @@ export const LoginAuthResponse = zod.object({
   message: zod.string().optional(),
   data: zod.object({
     user: zod.object({
-      id: zod.string().uuid(),
+      id: postgresCanonicalUuid,
       email: zod.string().email(),
       fullName: zod.string().optional(),
       role: zod.enum(["user", "admin"]),

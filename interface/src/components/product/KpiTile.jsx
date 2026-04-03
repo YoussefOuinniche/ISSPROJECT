@@ -39,9 +39,9 @@ export default function KpiTile({
         </span>
       </div>
 
-      <p className="text-xs uppercase tracking-[0.16em] text-text-muted">{title}</p>
-      <p className="mt-1 text-3xl font-bold tabular-nums text-text-primary">{value}</p>
-      <p className="mt-2 text-sm text-text-secondary">{changeLabel || 'No period comparison available'}</p>
+      <p className="admin-card-label">{title}</p>
+      <p className="admin-card-stat mt-1 text-3xl tabular-nums">{value}</p>
+      <p className="admin-card-copy mt-2 text-sm">{changeLabel || 'No period comparison available'}</p>
     </Card>
   );
 }

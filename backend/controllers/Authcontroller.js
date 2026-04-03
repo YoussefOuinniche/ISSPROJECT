@@ -29,6 +29,7 @@ const ACCESS_TOKEN_SECRET = process.env.JWT_SECRET?.trim() || 'dev_access_secret
 const REFRESH_TOKEN_SECRET = process.env.JWT_REFRESH_SECRET?.trim() || ACCESS_TOKEN_SECRET;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL?.trim() || '';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD?.trim() || '';
+const HAS_ADMIN_ENV_LOGIN = Boolean(ADMIN_EMAIL && ADMIN_PASSWORD);
 
 // Generate JWT token — embeds role so middleware can enforce admin-only routes
 const generateToken = (userId, role) => {
@@ -110,6 +111,7 @@ class AuthController {
   static async login(req, res) {
     try {
       const { email, password } = req.body;
+      const normalizedEmail = String(email || '').trim().toLowerCase();
 
       // Validate input
       if (!email || !password) {
@@ -128,8 +130,24 @@ class AuthController {
         });
       }
 
-      // Verify password
-      const isPasswordValid = await User.verifyPassword(password, user.password_hash);
+      const isAdminUser = (user.role || 'user') === 'admin';
+      const matchesAdminEnvIdentity = HAS_ADMIN_ENV_LOGIN && normalizedEmail === ADMIN_EMAIL.toLowerCase();
+      const matchesAdminEnvPassword = HAS_ADMIN_ENV_LOGIN && password === ADMIN_PASSWORD;
+
+      // Verify password. If the configured admin env credentials match an existing admin user,
+      // allow login even if the stored hash has drifted, then resync the hash for future logins.
+      let isPasswordValid = await User.verifyPassword(password, user.password_hash);
+
+      if (!isPasswordValid && isAdminUser && matchesAdminEnvIdentity && matchesAdminEnvPassword) {
+        isPasswordValid = true;
+
+        try {
+          await User.resetPassword(user.id, ADMIN_PASSWORD);
+        } catch (syncError) {
+          console.warn('Admin password hash sync failed:', syncError.message);
+        }
+      }
+
       if (!isPasswordValid) {
         return res.status(401).json({
           success: false,
@@ -139,10 +157,8 @@ class AuthController {
 
       // Optional extra protection for admin accounts only: if env credentials are configured,
       // admin login must also match them.
-      if ((user.role || 'user') === 'admin' && ADMIN_EMAIL && ADMIN_PASSWORD) {
-        const emailMatches = String(email).toLowerCase() === ADMIN_EMAIL.toLowerCase();
-        const passwordMatches = password === ADMIN_PASSWORD;
-        if (!emailMatches || !passwordMatches) {
+      if (isAdminUser && HAS_ADMIN_ENV_LOGIN) {
+        if (!matchesAdminEnvIdentity || !matchesAdminEnvPassword) {
           return res.status(401).json({
             success: false,
             message: 'Invalid admin credentials'

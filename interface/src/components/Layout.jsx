@@ -20,11 +20,11 @@ import './Logo3D.css';
 ensureGeneratedClientConfigured();
 
 const menuItems = [
-  { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
+  { path: '/dashboard', icon: 'dashboard_customize', label: 'Control Center' },
   { path: '/chat', icon: 'chat', label: 'AI Assistant' },
-  { path: '/users', icon: 'group', label: 'Users' },
-  { path: '/content', icon: 'description', label: 'Content' },
-  { path: '/analytics', icon: 'analytics', label: 'Analytics' },
+  { path: '/users', icon: 'group', label: 'Talent Pool' },
+  { path: '/content', icon: 'hub', label: 'Skills & Trends' },
+  { path: '/analytics', icon: 'insights', label: 'Intelligence' },
   { path: '/settings', icon: 'settings', label: 'Settings' },
 ];
 
@@ -94,11 +94,14 @@ export default function Layout({ children, onLogout }) {
   }, []);
 
   useEffect(() => {
-    const interval = window.setInterval(() => {
-      const shouldBeOnline = Math.random() > 0.08;
-      setIsOnline(shouldBeOnline);
-    }, 12000);
-    return () => window.clearInterval(interval);
+    const syncOnlineState = () => setIsOnline(window.navigator.onLine);
+    syncOnlineState();
+    window.addEventListener('online', syncOnlineState);
+    window.addEventListener('offline', syncOnlineState);
+    return () => {
+      window.removeEventListener('online', syncOnlineState);
+      window.removeEventListener('offline', syncOnlineState);
+    };
   }, []);
 
   const unreadCount = useMemo(
@@ -147,7 +150,7 @@ export default function Layout({ children, onLogout }) {
               aria-label="Go to dashboard"
             >
               <div className="logo-glow">
-                <img src="/logo.png" alt="SkillPulse" className="h-10 w-auto object-contain logo-3d" />
+                <img src="/logo-admin.png" alt="SkillPulse" className="h-10 w-auto object-contain logo-3d" />
               </div>
               <div className="hidden sm:block">
                 <h2 className="text-lg font-bold leading-tight tracking-[-0.015em] text-text-primary">SkillPulse</h2>
@@ -159,7 +162,7 @@ export default function Layout({ children, onLogout }) {
           <form onSubmit={submitSearch} className="hidden w-[340px] xl:block">
             <SearchInput
               aria-label="Global search"
-              placeholder="Search users by name/email"
+              placeholder="Search users across SkillPulse"
               value={searchValue}
               onChange={(event) => setSearchValue(event.target.value)}
               className="w-full"

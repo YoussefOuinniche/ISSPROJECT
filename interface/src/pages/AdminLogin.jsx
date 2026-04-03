@@ -97,7 +97,7 @@ const AdminLogin = ({ onLogin }) => {
         <div className="flex items-center gap-4 text-white">
           <div className="logo-glow">
             <img 
-              src="/logo.png" 
+              src="/logo-admin.png" 
               alt="SkillPulse Logo" 
               className="h-10 w-auto object-contain logo-3d"
             />
@@ -122,7 +122,7 @@ const AdminLogin = ({ onLogin }) => {
             <div className="flex flex-col items-center mb-8">
               <div className="logo-glow">
                 <img 
-                  src="/logo.png" 
+                  src="/logo-admin.png" 
                   alt="SkillPulse Logo" 
                   className="h-24 w-auto object-contain logo-3d-large"
                 />

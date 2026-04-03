@@ -1,193 +1,495 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import './Content.css';
-import api from '../api';
-import AnimatedButton from '../components/ui/AnimatedButton';
-import MotionCard from '../components/ui/MotionCard';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  BookOpenCheck,
+  Plus,
+  RefreshCcw,
+  Save,
+  Trash2,
+  TrendingUp,
+} from 'lucide-react';
+import {
+  createSkill,
+  createTrend,
+  deleteSkill,
+  deleteTrend,
+  getAdminOverview,
+  getSkillCategories,
+  getSkills,
+  getTrendDomains,
+  getTrends,
+  refreshAdminTrendSignals,
+  updateSkill,
+  updateTrend,
+} from '../api/admin';
+import Button from '../components/ui/Button';
+import { useToast } from '../components/ui/Toast';
+import { BarList } from '../components/product/AdminVisuals';
 
-const typeIcon = {
-  Skill: 'psychology',
-  Trend: 'trending_up',
-  'Skill Gap': 'warning_amber',
-};
+const initialSkillForm = { id: '', name: '', category: '' };
+const initialTrendForm = { id: '', title: '', domain: '', source: '', description: '' };
 
-const Content = () => {
-  const [selectedType, setSelectedType] = useState('all');
+export default function Content() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('skills');
   const [searchQuery, setSearchQuery] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [stats, setStats] = useState({
-    totalContent: 0,
-    skills: 0,
-    trends: 0,
-    skillGaps: 0,
-    recommendations: 0,
-  });
-  const [items, setItems] = useState([]);
+  const [skillForm, setSkillForm] = useState(initialSkillForm);
+  const [trendForm, setTrendForm] = useState(initialTrendForm);
 
-  const loadContent = async () => {
-    try {
-      setError('');
-      const res = await api.get('/api/public/admin/content');
-      const payload = res?.data?.data;
-      if (payload) {
-        setStats(payload.stats || {});
-        setItems(payload.items || []);
-      }
-    } catch (err) {
-      console.error('Failed to load content data', err);
-      setError('Failed to load content data from database.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const overviewQuery = useQuery({ queryKey: ['admin-overview'], queryFn: getAdminOverview, staleTime: 1000 * 20 });
+  const skillsQuery = useQuery({ queryKey: ['skills-catalog'], queryFn: () => getSkills({ limit: 400 }), staleTime: 1000 * 20 });
+  const categoriesQuery = useQuery({ queryKey: ['skill-categories'], queryFn: getSkillCategories, staleTime: 1000 * 60 });
+  const trendsQuery = useQuery({ queryKey: ['trends-catalog'], queryFn: () => getTrends({ limit: 240 }), staleTime: 1000 * 20 });
+  const domainsQuery = useQuery({ queryKey: ['trend-domains'], queryFn: getTrendDomains, staleTime: 1000 * 60 });
+
+  const skills = skillsQuery.data || [];
+  const trends = trendsQuery.data || [];
+  const overview = overviewQuery.data || { learningJourneys: { recentJourneys: [], topRoles: [], stageDistribution: [] }, trends: { topSignals: [] } };
+
+  const filteredSkills = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return skills.filter((skill) => {
+      if (!query) return true;
+      return (
+        skill.name?.toLowerCase().includes(query) ||
+        skill.category?.toLowerCase().includes(query)
+      );
+    });
+  }, [searchQuery, skills]);
+
+  const filteredTrends = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return trends.filter((trend) => {
+      if (!query) return true;
+      return (
+        trend.title?.toLowerCase().includes(query) ||
+        trend.domain?.toLowerCase().includes(query) ||
+        trend.source?.toLowerCase().includes(query)
+      );
+    });
+  }, [searchQuery, trends]);
+
+  const skillMutation = useMutation({
+    mutationFn: (payload) =>
+      payload.id
+        ? updateSkill({ id: payload.id, patch: { name: payload.name, category: payload.category } })
+        : createSkill({ name: payload.name, category: payload.category }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skills-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['skill-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      toast.success(skillForm.id ? 'Skill updated' : 'Skill created');
+      setSkillForm(initialSkillForm);
+    },
+    onError: (error) => toast.error(error?.message || 'Unable to save skill'),
+  });
+
+  const deleteSkillMutation = useMutation({
+    mutationFn: deleteSkill,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['skills-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['skill-categories'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      toast.success('Skill deleted');
+      setSkillForm(initialSkillForm);
+    },
+    onError: (error) => toast.error(error?.message || 'Unable to delete skill'),
+  });
+
+  const trendMutation = useMutation({
+    mutationFn: (payload) =>
+      payload.id
+        ? updateTrend({ id: payload.id, patch: payload })
+        : createTrend(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trends-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['trend-domains'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      toast.success(trendForm.id ? 'Trend updated' : 'Trend created');
+      setTrendForm(initialTrendForm);
+    },
+    onError: (error) => toast.error(error?.message || 'Unable to save trend'),
+  });
+
+  const deleteTrendMutation = useMutation({
+    mutationFn: deleteTrend,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['trends-catalog'] });
+      queryClient.invalidateQueries({ queryKey: ['trend-domains'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      toast.success('Trend deleted');
+      setTrendForm(initialTrendForm);
+    },
+    onError: (error) => toast.error(error?.message || 'Unable to delete trend'),
+  });
+
+  const refreshSignals = useMutation({
+    mutationFn: refreshAdminTrendSignals,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      toast.success('Trend signals refreshed');
+    },
+    onError: (error) => toast.error(error?.message || 'Unable to refresh trend signals'),
+  });
 
   useEffect(() => {
-    loadContent();
-  }, []);
-
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      const matchType = selectedType === 'all' || item.type === selectedType;
-      const query = searchQuery.trim().toLowerCase();
-      const matchQuery =
-        !query ||
-        item.title?.toLowerCase().includes(query) ||
-        item.category?.toLowerCase().includes(query) ||
-        item.meta?.toLowerCase().includes(query);
-      return matchType && matchQuery;
-    });
-  }, [items, searchQuery, selectedType]);
-
-  const cards = [
-    { title: 'Total Content', value: stats.totalContent ?? 0, icon: 'description', iconClass: 'text-blue-400', bgClass: 'bg-blue-500/10' },
-    { title: 'Skills', value: stats.skills ?? 0, icon: 'psychology', iconClass: 'text-cyan-400', bgClass: 'bg-cyan-500/10' },
-    { title: 'Trends', value: stats.trends ?? 0, icon: 'trending_up', iconClass: 'text-green-400', bgClass: 'bg-green-500/10' },
-    { title: 'Skill Gaps', value: stats.skillGaps ?? 0, icon: 'warning_amber', iconClass: 'text-orange-400', bgClass: 'bg-orange-500/10' },
-    { title: 'Recommendations', value: stats.recommendations ?? 0, icon: 'lightbulb', iconClass: 'text-purple-400', bgClass: 'bg-purple-500/10' },
-  ];
+    if (activeTab === 'skills' && !skillForm.id && skills[0]) {
+      setSkillForm((current) => (current.id ? current : { id: '', name: '', category: '' }));
+    }
+  }, [activeTab, skillForm.id, skills]);
 
   return (
-    <div className="min-h-screen bg-[#080c14]">
-      <div className="border-b border-white/5 bg-[#0f1623]/60 backdrop-blur-sm px-6 py-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Content</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Database-backed knowledge assets</p>
-          </div>
-          <AnimatedButton
-            onClick={loadContent}
-            variant="ghost"
-            className="text-slate-300"
-          >
-            <span className="material-symbols-outlined text-xl">refresh</span>
-            Refresh
-          </AnimatedButton>
-        </div>
-      </div>
-
-      <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-          {cards.map((card) => (
-            <MotionCard key={card.title} whileHover={{ y: -4 }} className="rounded-2xl border border-white/10 bg-[#0f1623]/80 p-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${card.bgClass}`}>
-                  <span className={`material-symbols-outlined text-xl ${card.iconClass}`}>{card.icon}</span>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">{card.title}</p>
-                  <p className="text-2xl font-bold text-white tabular-nums">{loading ? '—' : card.value}</p>
-                </div>
+    <div className="min-h-screen bg-app px-4 py-6 md:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
+        <section className="card-premium p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-100">
+                <BookOpenCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                Skills & Trends Management
               </div>
-            </MotionCard>
+              <h1 className="text-3xl font-semibold text-white lg:text-4xl">Manage the platform intelligence catalog</h1>
+              <p className="mt-3 max-w-3xl text-base text-slate-300">
+                Maintain the skills catalog, curate trend entries, and inspect generated learning journeys without leaving the existing admin web.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button onClick={() => refreshSignals.mutate()} loading={refreshSignals.isPending} icon={<RefreshCcw className="h-4 w-4" aria-hidden="true" />}>
+                Refresh trend signals
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <div className="grid gap-4 md:grid-cols-4">
+          <SummaryTile label="Skills" value={skills.length} helper="Catalog entries" />
+          <SummaryTile label="Trend entries" value={trends.length} helper="Tracked market signals" />
+          <SummaryTile label="Roadmaps" value={overview.learningJourneys?.total || 0} helper="Stored learning journeys" />
+          <SummaryTile label="Demand signals" value={overview.trends?.topSignals?.length || 0} helper="Visible trend outputs" />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {[
+            ['skills', 'Skills'],
+            ['trends', 'Trends'],
+            ['journeys', 'Journeys'],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setActiveTab(value)}
+              className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
+                activeTab === value
+                  ? 'border-brand/30 bg-brand/12 text-cyan-100'
+                  : 'border-white/10 bg-white/[0.03] text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              {label}
+            </button>
           ))}
+          <input
+            type="text"
+            placeholder={activeTab === 'journeys' ? 'Search roadmap role or user' : 'Search name, category, source'}
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            className="ml-auto min-w-[280px] rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-text-primary placeholder:text-text-muted focus:border-brand/45 focus:outline-none"
+          />
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-[#0f1623]/80 overflow-hidden">
-          <div className="p-5 border-b border-white/10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-            <div className="flex flex-wrap gap-2">
-              {['all', 'Skill', 'Trend', 'Skill Gap'].map((type) => (
-                <AnimatedButton
-                  key={type}
-                  onClick={() => setSelectedType(type)}
-                  size="sm"
-                  variant={selectedType === type ? 'gradient' : 'ghost'}
-                  className={`text-sm transition-colors ${
-                    selectedType === type
-                      ? 'text-white'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {type === 'all' ? 'All' : type}
-                </AnimatedButton>
-              ))}
-            </div>
-            <div className="relative">
-              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xl">search</span>
-              <input
-                type="text"
-                placeholder="Search title/category/meta"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 w-full lg:w-80"
-              />
+        {activeTab === 'skills' ? (
+          <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+            <CatalogPanel
+              title="Skills catalog"
+              items={filteredSkills}
+              selectedId={skillForm.id}
+              onSelect={(skill) => setSkillForm({ id: skill.id, name: skill.name || '', category: skill.category || '' })}
+              renderMeta={(skill) => skill.category || 'Uncategorized'}
+            />
+
+            <div className="space-y-6">
+              <EditorPanel
+                title={skillForm.id ? 'Edit skill' : 'Create skill'}
+                description="Update the shared skill taxonomy used by profiles, gaps, and AI guidance."
+              >
+                <div className="space-y-4">
+                  <Field label="Skill name">
+                    <input
+                      value={skillForm.name}
+                      onChange={(event) => setSkillForm((current) => ({ ...current, name: event.target.value }))}
+                      className="field-input"
+                      placeholder="TypeScript"
+                    />
+                  </Field>
+                  <Field label="Category">
+                    <input
+                      list="skill-categories"
+                      value={skillForm.category}
+                      onChange={(event) => setSkillForm((current) => ({ ...current, category: event.target.value }))}
+                      className="field-input"
+                      placeholder="Programming"
+                    />
+                    <datalist id="skill-categories">
+                      {(categoriesQuery.data || []).map((category) => (
+                        <option key={category} value={category} />
+                      ))}
+                    </datalist>
+                  </Field>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      onClick={() => skillMutation.mutate(skillForm)}
+                      loading={skillMutation.isPending}
+                      disabled={!skillForm.name.trim()}
+                      icon={<Save className="h-4 w-4" aria-hidden="true" />}
+                    >
+                      {skillForm.id ? 'Save skill' : 'Create skill'}
+                    </Button>
+                    <Button
+                      onClick={() => setSkillForm(initialSkillForm)}
+                      variant="secondary"
+                      icon={<Plus className="h-4 w-4" aria-hidden="true" />}
+                    >
+                      New
+                    </Button>
+                    {skillForm.id ? (
+                      <Button
+                        onClick={() => deleteSkillMutation.mutate(skillForm.id)}
+                        variant="danger"
+                        loading={deleteSkillMutation.isPending}
+                        icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                      >
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </EditorPanel>
+
+              <EditorPanel title="Skill category distribution" description="Distribution of mapped skills currently used across SkillPulse user profiles.">
+                <BarList
+                  items={overview.skills?.categoryShares || []}
+                  valueFormatter={(value) => `${value} mappings`}
+                />
+              </EditorPanel>
             </div>
           </div>
+        ) : null}
 
-          {error && (
-            <div className="mx-5 mt-5 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">{error}</div>
-          )}
+        {activeTab === 'trends' ? (
+          <div className="grid gap-6 xl:grid-cols-[1.02fr_0.98fr]">
+            <CatalogPanel
+              title="Trend catalog"
+              items={filteredTrends}
+              selectedId={trendForm.id}
+              onSelect={(trend) =>
+                setTrendForm({
+                  id: trend.id,
+                  title: trend.title || '',
+                  domain: trend.domain || '',
+                  source: trend.source || '',
+                  description: trend.description || '',
+                })
+              }
+              renderMeta={(trend) => `${trend.domain || 'General'} • ${trend.source || 'No source'}`}
+            />
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="border-b border-white/10 bg-white/5">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Title</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Type</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Category</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Meta</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  [...Array(6)].map((_, i) => (
-                    <tr key={i} className="border-b border-white/5">
-                      <td colSpan={5} className="px-6 py-4"><div className="h-8 bg-white/5 rounded-lg animate-pulse" /></td>
-                    </tr>
-                  ))
-                ) : filteredItems.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-slate-500">No matching database records.</td>
-                  </tr>
+            <div className="space-y-6">
+              <EditorPanel
+                title={trendForm.id ? 'Edit trend' : 'Create trend'}
+                description="Curate market intelligence that feeds dashboard signals and recommendation context."
+              >
+                <div className="space-y-4">
+                  <Field label="Trend title">
+                    <input
+                      value={trendForm.title}
+                      onChange={(event) => setTrendForm((current) => ({ ...current, title: event.target.value }))}
+                      className="field-input"
+                      placeholder="Platform engineering rise"
+                    />
+                  </Field>
+                  <Field label="Domain">
+                    <input
+                      list="trend-domains"
+                      value={trendForm.domain}
+                      onChange={(event) => setTrendForm((current) => ({ ...current, domain: event.target.value }))}
+                      className="field-input"
+                      placeholder="DevOps"
+                    />
+                    <datalist id="trend-domains">
+                      {(domainsQuery.data || []).map((domain) => (
+                        <option key={domain} value={domain} />
+                      ))}
+                    </datalist>
+                  </Field>
+                  <Field label="Source">
+                    <input
+                      value={trendForm.source}
+                      onChange={(event) => setTrendForm((current) => ({ ...current, source: event.target.value }))}
+                      className="field-input"
+                      placeholder="CNCF Survey 2025"
+                    />
+                  </Field>
+                  <Field label="Description">
+                    <textarea
+                      value={trendForm.description}
+                      onChange={(event) => setTrendForm((current) => ({ ...current, description: event.target.value }))}
+                      className="field-input min-h-[140px] resize-y"
+                      placeholder="Describe the observed demand signal..."
+                    />
+                  </Field>
+                  <div className="flex flex-wrap gap-3">
+                    <Button
+                      onClick={() => trendMutation.mutate(trendForm)}
+                      loading={trendMutation.isPending}
+                      disabled={!trendForm.title.trim()}
+                      icon={<Save className="h-4 w-4" aria-hidden="true" />}
+                    >
+                      {trendForm.id ? 'Save trend' : 'Create trend'}
+                    </Button>
+                    <Button onClick={() => setTrendForm(initialTrendForm)} variant="secondary" icon={<Plus className="h-4 w-4" aria-hidden="true" />}>
+                      New
+                    </Button>
+                    {trendForm.id ? (
+                      <Button
+                        onClick={() => deleteTrendMutation.mutate(trendForm.id)}
+                        variant="danger"
+                        loading={deleteTrendMutation.isPending}
+                        icon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
+                      >
+                        Delete
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </EditorPanel>
+
+              <EditorPanel title="Current trend signals" description="Signals are generated from stored trends and related skills.">
+                {(overview.trends?.topSignals || []).length === 0 ? (
+                  <p className="text-sm text-text-muted">No trend signals available yet. Refresh the signal set to derive the first demand map.</p>
                 ) : (
-                  filteredItems.map((item) => (
-                    <tr key={`${item.type}-${item.id}`} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                      <td className="px-6 py-4 text-sm text-white font-medium">{item.title}</td>
-                      <td className="px-6 py-4 text-sm text-slate-300">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-base text-cyan-400">{typeIcon[item.type] || 'dataset'}</span>
-                          {item.type}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-300">{item.category || '—'}</td>
-                      <td className="px-6 py-4 text-sm text-slate-400">{item.meta || '—'}</td>
-                      <td className="px-6 py-4 text-sm text-slate-500">{new Date(item.created_at).toLocaleDateString('en-GB')}</td>
-                    </tr>
-                  ))
+                  <BarList
+                    items={(overview.trends?.topSignals || []).map((item) => ({ name: item.skill, value: item.demandScore }))}
+                    colorClass="bg-emerald-500"
+                    valueFormatter={(value, item) => `${value}/100${item?.trend ? ` • ${item.trend}` : ''}`}
+                  />
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          {!loading && (
-            <div className="px-6 py-3 border-t border-white/10 text-xs text-slate-600">
-              Showing {filteredItems.length} records from database
+              </EditorPanel>
             </div>
-          )}
-        </div>
+          </div>
+        ) : null}
+
+        {activeTab === 'journeys' ? (
+          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+            <EditorPanel title="Recent learning journeys" description="Read-only roadmap oversight based on persisted user AI profiles.">
+              <div className="space-y-3">
+                {(overview.learningJourneys?.recentJourneys || [])
+                  .filter((item) => {
+                    const query = searchQuery.trim().toLowerCase();
+                    if (!query) return true;
+                    return (
+                      item.targetRole?.toLowerCase().includes(query) ||
+                      item.userName?.toLowerCase().includes(query)
+                    );
+                  })
+                  .map((journey) => (
+                    <div key={`${journey.userId}-${journey.targetRole}`} className="card-premium-soft p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-text-primary">{journey.targetRole}</p>
+                          <p className="text-xs text-text-muted">{journey.userName}</p>
+                        </div>
+                        <span className="text-xs text-text-muted">{journey.stageCount} stages</span>
+                      </div>
+                      <p className="mt-2 text-sm text-text-secondary">{journey.nextStage || 'No next stage identified yet.'}</p>
+                    </div>
+                  ))}
+                {(overview.learningJourneys?.recentJourneys || []).length === 0 ? (
+                  <p className="text-sm text-text-muted">No persisted learning journeys are available yet.</p>
+                ) : null}
+              </div>
+            </EditorPanel>
+
+            <div className="space-y-6">
+              <EditorPanel title="Top roadmap roles" description="Roles most frequently selected in generated learning paths.">
+                <BarList
+                  items={overview.learningJourneys?.topRoles || []}
+                  valueFormatter={(value) => `${value} journeys`}
+                />
+              </EditorPanel>
+
+              <EditorPanel title="Roadmap stage distribution" description="The most common stage names currently stored in user learning journeys.">
+                <BarList
+                  items={overview.learningJourneys?.stageDistribution || []}
+                  colorClass="bg-violet-500"
+                  valueFormatter={(value) => `${value} stages`}
+                />
+              </EditorPanel>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
-};
+}
 
-export default Content;
+function SummaryTile({ label, value, helper }) {
+  return (
+    <div className="card-premium-soft p-4">
+      <p className="admin-card-label">{label}</p>
+      <p className="admin-card-stat mt-3 text-2xl">{value}</p>
+      <p className="admin-card-copy mt-1 text-sm">{helper}</p>
+    </div>
+  );
+}
+
+function CatalogPanel({ title, items, selectedId, onSelect, renderMeta }) {
+  return (
+    <div className="card-premium p-5">
+      <h2 className="admin-card-title mb-4">{title}</h2>
+      <div className="space-y-3">
+        {items.map((item) => {
+          const selected = item.id === selectedId;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onSelect(item)}
+              className={`w-full p-4 text-left transition-all ${
+                selected
+                  ? 'card-premium-soft border-brand/30'
+                  : 'card-premium-soft hover:border-white/15'
+              }`}
+            >
+              <p className="text-sm font-semibold text-text-primary">{item.name || item.title}</p>
+              <p className="mt-1 text-sm text-text-muted">{renderMeta(item)}</p>
+            </button>
+          );
+        })}
+        {items.length === 0 ? (
+          <div className="card-premium-soft border-dashed px-5 py-12 text-center text-sm text-text-muted">
+            No records match the current search.
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EditorPanel({ title, description, children }) {
+  return (
+    <div className="card-premium p-5">
+      <h2 className="admin-card-title">{title}</h2>
+      <p className="admin-card-copy mt-2 text-sm">{description}</p>
+      <div className="mt-5">{children}</div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-medium text-text-secondary">{label}</span>
+      {children}
+    </label>
+  );
+}

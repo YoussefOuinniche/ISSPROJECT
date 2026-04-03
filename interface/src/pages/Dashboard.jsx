@@ -1,277 +1,365 @@
-﻿import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Sparkles, Target, AlertTriangle, ChevronRight, TrendingUp, Compass } from 'lucide-react';
-import api from '../api';
+import React from 'react';
+import { Link } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Bot,
+  BrainCircuit,
+  RefreshCcw,
+  Route,
+  Target,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
+import { getAdminOverview, refreshAdminTrendSignals } from '../api/admin';
+import Button from '../components/ui/Button';
+import KpiTile from '../components/product/KpiTile';
+import { useToast } from '../components/ui/Toast';
+import {
+  BarList,
+  ClusterMap,
+  HeatGrid,
+  InsightBadge,
+  JourneyFlow,
+  LinePlot,
+  RadialMeter,
+  RoleDemandList,
+  SectionCard,
+  StatStrip,
+} from '../components/product/AdminVisuals';
 
-const RadarChart = ({ data }) => {
-  if (!data || data.length < 3) return <div className="text-slate-500 text-sm text-center">Not enough data for radar chart</div>;
-
-  const size = 260;
-  const center = size / 2;
-  const radius = size / 2 - 40;
-  const numPoints = data.length;
-  const angleStep = (Math.PI * 2) / numPoints;
-  const maxVal = 100;
-
-  const getPoint = (value, index) => {
-    const r = (value / maxVal) * radius;
-    const theta = index * angleStep - Math.PI / 2;
-    return {
-      x: center + r * Math.cos(theta),
-      y: center + r * Math.sin(theta)
-    };
-  };
-
-  const dataPoints = data.map((d, i) => getPoint(d.level, i));
-  const dataPath = dataPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
-
-  return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${size} ${size}`}>
-      {[0.2, 0.4, 0.6, 0.8, 1].map(level => {
-        const points = data.map((_, i) => getPoint(level * maxVal, i));
-        const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + 'Z';
-        return <path key={level} d={path} fill="none" stroke="#334155" strokeWidth="1" />;
-      })}
-      {data.map((_, i) => {
-        const edge = getPoint(maxVal, i);
-        return <line key={i} x1={center} y1={center} x2={edge.x} y2={edge.y} stroke="#334155" strokeWidth="1" />;
-      })}
-      <motion.path 
-        initial={{ pathLength: 0, opacity: 0 }} 
-        animate={{ pathLength: 1, opacity: 1 }} 
-        transition={{ duration: 1.5, ease: 'easeOut' }}
-        d={dataPath} 
-        fill="rgba(6, 182, 212, 0.2)" 
-        stroke="#06b6d4" 
-        strokeWidth="2" 
-      />
-      {data.map((d, i) => {
-        const edge = getPoint(maxVal * 1.15, i);
-        return (
-          <text key={i} x={edge.x} y={edge.y + 4} fill="#cbd5e1" fontSize="11" textAnchor="middle" fontWeight="500">
-            {d.name.length > 10 ? d.name.slice(0, 10) + '...' : d.name}
-          </text>
-        );
-      })}
-    </svg>
-  );
+const emptyOverview = {
+  hero: { headline: 'Loading SkillPulse control intelligence', subheadline: '', insights: [] },
+  summary: {},
+  kpis: [],
+  users: { growthSeries: [], recentUsers: [], targetRoles: [] },
+  aiActivity: { requestsSeries: [], hourlyRequests: [], peakHour: { label: '00:00', value: 0 }, health: { status: 'unknown' } },
+  skills: { topSkills: [], categoryShares: [], clusters: [], topAiDetectedSkills: [], proficiencyDistribution: [] },
+  gaps: { heatmap: [], topUrgent: [], severityDistribution: [], distributionByRole: [], avgSeverity: 0 },
+  trends: { topSignals: [], directionMix: [], sources: [] },
+  profiles: { averageCompletion: 0, averageAiConfidence: 0, explicitVsAi: [], evolutionStages: [] },
+  learningJourneys: { recentJourneys: [], topRoles: [] },
+  roleDemand: [],
 };
 
-const ConfidenceMeter = ({ score }) => (
-  <div className="w-full">
-    <div className="flex justify-between items-end mb-2">
-      <span className="text-sm font-semibold text-slate-300">AI Confidence</span>
-      <span className="text-xs text-cyan-400 font-bold">{score}% match</span>
-    </div>
-    <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden shadow-inner">
-      <motion.div 
-        initial={{ width: 0 }} 
-        animate={{ width: `${score}%` }}
-        transition={{ duration: 1.2, ease: 'easeOut' }}
-        className="h-full bg-gradient-to-r from-cyan-500 to-emerald-400"
-      />
-    </div>
-  </div>
-);
+function formatDelta(value) {
+  const numeric = Number(value || 0);
+  return `${numeric >= 0 ? '+' : ''}${numeric}%`;
+}
+
+function mapTone(value) {
+  if (value === 'success') return 'success';
+  if (value === 'warning') return 'warning';
+  if (value === 'danger') return 'danger';
+  return 'primary';
+}
+
+function insightActionProps(insight, refreshSignals, isPending) {
+  if (insight.id === 'trend-refresh') {
+    return {
+      type: 'button',
+      onClick: refreshSignals,
+      disabled: isPending,
+      label: isPending ? 'Refreshing...' : insight.action,
+    };
+  }
+
+  return {
+    type: 'link',
+    to: insight.id === 'urgent-gaps' ? '/users' : '/analytics',
+    label: insight.action,
+  };
+}
 
 export default function Dashboard() {
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const overviewQuery = useQuery({
+    queryKey: ['admin-overview'],
+    queryFn: getAdminOverview,
+    staleTime: 1000 * 20,
+  });
 
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const res = await api.get('/api/user/profile');
-        setProfile(res.data.data);
-      } catch (err) {
-        console.error('Dashboard fetch error:', err);
-        setError('Failed to load AI profile data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProfile();
-  }, []);
+  const refreshSignals = useMutation({
+    mutationFn: refreshAdminTrendSignals,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-overview'] });
+      toast.success(`Trend signals refreshed${data?.persisted ? ' and persisted' : ''}`);
+    },
+    onError: (error) => {
+      toast.error(error?.message || 'Unable to refresh trend signals');
+    },
+  });
 
-  if (loading) {
+  const data = overviewQuery.data || emptyOverview;
+
+  if (overviewQuery.isLoading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="w-10 h-10 rounded-full border-2 border-cyan-500/30 border-t-cyan-500 animate-spin" />
+      <div className="flex min-h-[70vh] items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-11 w-11 animate-spin rounded-full border-2 border-brand/20 border-t-brand" />
+          <p className="text-sm text-text-muted">Loading admin control center</p>
+        </div>
       </div>
     );
   }
 
-  const currentRole = profile?.currentRole || 'Software Engineer';
-  const targetRole = profile?.targetRole || 'Senior Engineer';
-  
-  const rawSkills = profile?.skills || [
-    { skill_name: 'JavaScript', proficiency_level: 'expert' },
-    { skill_name: 'React', proficiency_level: 'advanced' },
-    { skill_name: 'Node.js', proficiency_level: 'intermediate' },
-    { skill_name: 'Python', proficiency_level: 'beginner' },
-    { skill_name: 'Docker', proficiency_level: 'beginner' }
-  ];
-  
-  const levelMap = { 'expert': 100, 'advanced': 80, 'intermediate': 50, 'beginner': 25 };
-  const radarSkills = rawSkills.slice(0, 6).map(s => ({
-    name: s.skill_name || s.name,
-    level: levelMap[(s.proficiency_level || '').toLowerCase()] || 50
-  }));
-
-  const gaps = profile?.skillGaps || profile?.gaps || [
-    { skill_name: 'Kubernetes', domain: 'DevOps', gap_level: 4, reason: 'High demand in target role' },
-    { skill_name: 'System Design', domain: 'Architecture', gap_level: 5, reason: 'Required for Senior' }
-  ];
-
-  const recommendations = profile?.recommendations || [
-    { title: 'Master Container Orchestration', content: 'Consider the CKA certification.', type: 'course', priority: 'high' },
-    { title: 'Read Designing Data-Intensive Applications', content: 'Essential for system design rounds.', type: 'book', priority: 'medium' }
-  ];
-
-  const matchScore = profile?.aiConfidenceScore || profile?.matchScore || 65;
-
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto font-display text-slate-100 min-h-[60vh]">
-      
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-          <Sparkles className="text-cyan-400" size={28} />
-          AI Profile Overview
-        </h1>
-        <p className="text-slate-400 mt-2 max-w-2xl">
-          Your dynamic career development dashboard, powered by real-time skill gap analysis and market intelligence.
-        </p>
-      </div>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl flex items-center gap-3">
-          <AlertTriangle size={20} /> {error}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <div className="lg:col-span-1 flex flex-col gap-6">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-            className="p-6 bg-slate-800/40 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 p-4 opacity-10">
-              <Target size={100} />
-            </div>
-            
-            <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-              <Compass className="text-emerald-400" size={20} />
-              Career Goal
-            </h2>
-            
-            <div className="space-y-4 relative z-10">
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Current Role</p>
-                <p className="text-lg text-slate-100 font-medium bg-slate-900/50 px-3 py-2 rounded-lg border border-slate-700/30">
-                  {currentRole}
-                </p>
+    <div className="min-h-screen bg-app px-4 py-6 md:px-6 lg:px-8">
+      <div className="mx-auto flex max-w-[1600px] flex-col gap-6">
+        <section className="card-premium relative overflow-hidden p-6 lg:p-8">
+          <div className="absolute -left-24 top-0 h-72 w-72 rounded-full bg-cyan-500/16 blur-[120px]" />
+          <div className="absolute -right-16 bottom-0 h-72 w-72 rounded-full bg-blue-500/16 blur-[120px]" />
+          <div className="relative grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
+            <div>
+              <div className="mb-5 flex flex-wrap items-center gap-3">
+                <InsightBadge label="SkillPulse Admin Control Center" tone="success" icon={<BrainCircuit className="h-3.5 w-3.5" aria-hidden="true" />} />
+                <InsightBadge label={`${data.summary.totalUsers || 0} monitored users`} tone="neutral" />
               </div>
-              <div className="flex justify-center text-slate-500">
-                <ChevronRight size={24} className="rotate-90 lg:rotate-0" />
+              <h1 className="max-w-4xl text-3xl font-semibold leading-tight text-white lg:text-5xl">
+                {data.hero.headline}
+              </h1>
+              <p className="mt-4 max-w-3xl text-base text-slate-300 lg:text-lg">
+                {data.hero.subheadline}
+              </p>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Button onClick={() => refreshSignals.mutate()} loading={refreshSignals.isPending} icon={<RefreshCcw className="h-4 w-4" aria-hidden="true" />}>
+                  Refresh trend signals
+                </Button>
+                <Link to="/users" className="inline-flex h-10 items-center gap-2 rounded-xl border border-border-subtle/25 bg-app-elevated px-4 text-sm font-semibold text-text-primary transition-all duration-normal hover:-translate-y-0.5 hover:border-brand/45">
+                  <Users className="h-4 w-4" aria-hidden="true" />
+                  Inspect talent pool
+                </Link>
               </div>
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Target Role</p>
-                <p className="text-lg text-cyan-50 font-medium bg-cyan-900/20 px-3 py-2 rounded-lg border border-cyan-500/30 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.15)]">
-                  {targetRole}
-                </p>
+
+              <div className="mt-8">
+                <StatStrip
+                  items={[
+                    { label: 'Active users', value: data.summary.activeUsers || 0, helper: 'last 30 days' },
+                    { label: 'AI requests', value: data.summary.totalAiRequests || 0, helper: 'persisted chat messages' },
+                    { label: 'Urgent gaps', value: data.summary.urgentSkillGaps || 0, helper: 'gap level 4+' },
+                    { label: 'Roadmaps', value: data.summary.roadmapCount || 0, helper: 'stored learning journeys' },
+                  ]}
+                />
               </div>
             </div>
 
-            <div className="mt-8 pt-6 border-t border-slate-700/50">
-              <ConfidenceMeter score={matchScore} />
-            </div>
-          </motion.div>
-        </div>
-
-        <div className="lg:col-span-1">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, delay: 0.1 }}
-            className="h-full p-6 bg-slate-800/40 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm flex flex-col items-center justify-center min-h-[340px]"
-          >
-            <h2 className="text-lg font-semibold text-white mb-6 self-start w-full">Skill Radar</h2>
-            <div className="w-full flex-1 flex items-center justify-center relative">
-              <RadarChart data={radarSkills} />
-            </div>
-          </motion.div>
-        </div>
-
-        <div className="lg:col-span-1">
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.2 }}
-            className="h-full p-6 bg-slate-800/40 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm"
-          >
-            <h2 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-              <TrendingUp className="text-rose-400" size={20} />
-              Skill Gaps vs Trends
-            </h2>
-            
-            <div className="space-y-4 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
-              {gaps.length === 0 ? (
-                <p className="text-slate-400 text-sm text-center py-4">No significant skill gaps identified.</p>
-              ) : (
-                gaps.map((gap, idx) => (
-                  <div key={idx} className="bg-slate-900/60 p-4 rounded-2xl border border-rose-500/10 relative overflow-hidden group hover:border-rose-500/30 transition-colors">
-                    <div className={`absolute top-0 left-0 w-1 h-full bg-rose-500/50 opacity-${gap.gap_level * 20}`} />
-                    <div className="flex justify-between items-start mb-1">
-                      <h3 className="font-semibold text-slate-200">{gap.skill_name}</h3>
-                      <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
-                        {gap.domain}
-                      </span>
+            <div className="grid gap-3 self-start">
+              {data.hero.insights.map((insight) => {
+                const action = insightActionProps(insight, () => refreshSignals.mutate(), refreshSignals.isPending);
+                return (
+                  <div key={insight.id} className="card-premium-soft p-4">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-text-primary">{insight.title}</p>
+                        <p className="mt-1 text-sm text-text-muted">{insight.description}</p>
+                      </div>
+                      <InsightBadge label={insight.tone} tone={insight.tone} />
                     </div>
-                    <p className="text-xs text-slate-400 leading-relaxed mt-2">{gap.reason}</p>
+                    {action.type === 'button' ? (
+                      <Button variant="ghost" className="w-full justify-between" onClick={action.onClick} disabled={action.disabled}>
+                        {action.label}
+                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                      </Button>
+                    ) : (
+                      <Link to={action.to} className="inline-flex h-10 w-full items-center justify-between rounded-xl border border-border-subtle/20 px-4 text-sm font-semibold text-text-secondary transition-all duration-normal hover:bg-white/[0.04] hover:text-text-primary hover:border-border-subtle/35">
+                        <span>{action.label}</span>
+                        <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                      </Link>
+                    )}
                   </div>
-                ))
-              )}
+                );
+              })}
             </div>
-          </motion.div>
+          </div>
+        </section>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {data.kpis.map((item) => (
+            <KpiTile
+              key={item.id}
+              title={item.label}
+              value={item.value}
+              change={formatDelta(item.delta)}
+              changeLabel={item.deltaLabel}
+              icon={item.icon}
+              tone={mapTone(item.tone)}
+            />
+          ))}
         </div>
 
-      </div>
+        <div className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
+          <SectionCard title="Skill intelligence map" subtitle="Clusters are built from the real user-skill graph inside SkillPulse.">
+            <ClusterMap clusters={data.skills.clusters} />
+            <div className="mt-5 grid gap-5 lg:grid-cols-2">
+              <div>
+                <p className="mb-3 text-sm font-semibold text-text-primary">Most common platform skills</p>
+                <BarList
+                  items={data.skills.topSkills.map((item) => ({ name: item.name, count: item.count }))}
+                  valueFormatter={(value, item) => `${value} mappings${item?.users ? ` • ${item.users} users` : ''}`}
+                />
+              </div>
+              <div>
+                <p className="mb-3 text-sm font-semibold text-text-primary">AI-detected skills</p>
+                <BarList
+                  items={data.skills.topAiDetectedSkills}
+                  colorClass="bg-violet-500"
+                  valueFormatter={(value) => `${value} AI profiles`}
+                />
+              </div>
+            </div>
+          </SectionCard>
 
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}
-        className="mt-6 p-6 lg:p-8 bg-gradient-to-br from-slate-800/60 to-slate-900/80 border border-slate-700/50 rounded-3xl shadow-xl backdrop-blur-sm"
-      >
-        <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
-          <Sparkles className="text-amber-400" size={22} />
-          Recommendations Panel
-        </h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {recommendations.length === 0 ? (
-            <p className="text-slate-400 text-sm col-span-full">No active recommendations at this time.</p>
-          ) : (
-            recommendations.map((rec, idx) => (
-              <div key={idx} className="bg-slate-800/50 border border-slate-700 hover:border-cyan-500/30 transition-colors p-5 rounded-2xl flex flex-col h-full group">
-                <div className="flex justify-between mb-3 items-start gap-2">
-                  <h3 className="text-sm font-semibold text-slate-100 flex-1 leading-snug group-hover:text-cyan-300 transition-colors">
-                    {rec.title}
-                  </h3>
-                  <span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded border ${rec.priority === 'high' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : rec.priority === 'medium' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-slate-700 text-slate-300 border-slate-600'}`}>
-                    {rec.priority || 'normal'}
-                  </span>
+          <SectionCard
+            title="System pulse"
+            subtitle="AI workload, demand peaks, and backend readiness."
+            action={<InsightBadge label={data.aiActivity.health?.status || 'unknown'} tone={data.aiActivity.health?.status === 'connected' ? 'success' : 'warning'} icon={<Activity className="h-3.5 w-3.5" />} />}
+          >
+            <LinePlot data={data.aiActivity.requestsSeries} />
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <PulseStat label="Peak hour" value={data.aiActivity.peakHour?.label || '00:00'} helper={`${data.aiActivity.peakHour?.value || 0} requests`} />
+              <PulseStat label="Avg requests / user" value={data.aiActivity.avgRequestsPerUser || 0} helper={`${data.aiActivity.totalConversations || 0} active AI users`} />
+              <PulseStat label="Tracked conversations" value={data.aiActivity.totalConversations || 0} helper="Distinct users with chat history" />
+              <PulseStat label="AI model" value={data.aiActivity.health?.model || 'Not configured'} helper={data.aiActivity.health?.enabled ? 'Live backend check' : 'AI disabled'} />
+            </div>
+          </SectionCard>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <SectionCard title="Skill gap heatmap" subtitle="Each cell reflects real gap severity and the number of affected users.">
+            <HeatGrid items={data.gaps.heatmap} />
+          </SectionCard>
+
+          <SectionCard title="Profile intelligence" subtitle="Explicit profile data, inferred AI confidence, and completion quality.">
+            <div className="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+              <RadialMeter value={data.profiles.averageCompletion} label="completion" sublabel={`${data.profiles.completedCareerProfiles || 0} users have strong career profiles`} />
+              <div className="space-y-5">
+                <div>
+                  <p className="mb-3 text-sm font-semibold text-text-primary">Explicit vs AI-enriched profiles</p>
+                  <BarList items={data.profiles.explicitVsAi} colorClass="bg-blue-500" valueFormatter={(value) => `${value} users`} />
                 </div>
-                <p className="text-sm text-slate-400 mt-auto">{rec.content}</p>
-                <div className="mt-4 pt-3 border-t border-slate-700/50 flex justify-between items-center text-xs text-slate-500">
-                  <span className="capitalize">{rec.type}</span>
-                  <button className="text-cyan-400 hover:text-cyan-300 font-medium flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Set Action <ChevronRight size={14} />
-                  </button>
+                <div>
+                  <p className="mb-3 text-sm font-semibold text-text-primary">Profile evolution</p>
+                  <div className="space-y-3">
+                    {data.profiles.evolutionStages.map((stage) => (
+                      <div key={stage.id} className="card-premium-soft p-4">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-text-primary">{stage.title}</p>
+                            <p className="text-xs text-text-muted">{stage.time}</p>
+                          </div>
+                          <span className="text-xs text-text-muted">{stage.count}</span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <MetricBar label="Structured profile" value={stage.metrics.skill} colorClass="bg-cyan-400" />
+                          <MetricBar label="AI confidence" value={stage.metrics.ai} colorClass="bg-violet-500" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-            ))
-          )}
+            </div>
+          </SectionCard>
         </div>
-      </motion.div>
 
+        <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+          <SectionCard title="Role intelligence" subtitle="Demand is inferred from stored target roles and active learning journeys.">
+            <RoleDemandList roles={data.roleDemand} />
+          </SectionCard>
+
+          <SectionCard title="Learning path flow" subtitle="Recent learning journeys generated and persisted for SkillPulse users.">
+            <JourneyFlow journeys={data.learningJourneys.recentJourneys} />
+          </SectionCard>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-2">
+          <SectionCard title="Trend signals" subtitle="Persisted or derived skill trend signals tied to the current backend dataset.">
+            {data.trends.topSignals.length === 0 ? (
+              <EmptyBlock
+                icon={<TrendingUp className="h-5 w-5" aria-hidden="true" />}
+                title="No trend signals yet"
+                body="Use the refresh action to derive skill trend signals from the current trend catalog and related skills."
+              />
+            ) : (
+              <BarList
+                items={data.trends.topSignals.map((item) => ({ name: item.skill, value: item.demandScore }))}
+                colorClass="bg-emerald-500"
+                valueFormatter={(value, item) => `${value}/100${item?.trend ? ` • ${item.trend}` : ''}`}
+              />
+            )}
+          </SectionCard>
+
+          <SectionCard title="Recent user intake" subtitle="Newly registered users with completion coverage for fast admin triage.">
+            <div className="space-y-3">
+              {data.users.recentUsers.map((user) => (
+                <div key={user.id} className="card-premium-soft flex items-center justify-between gap-4 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">{user.name}</p>
+                    <p className="text-xs text-text-muted">{user.email}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs uppercase tracking-[0.16em] text-text-muted">{user.role}</p>
+                    <p className="text-sm text-text-secondary">{user.completion}% complete</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+
+        {overviewQuery.isError ? (
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+              {overviewQuery.error?.message || 'Unable to load control center data'}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
+function PulseStat({ label, value, helper }) {
+  return (
+    <div className="card-premium-soft p-4">
+      <p className="admin-card-label">{label}</p>
+      <p className="admin-card-stat mt-3 text-xl">{value}</p>
+      <p className="admin-card-copy mt-1 text-sm">{helper}</p>
+    </div>
+  );
+}
+
+function MetricBar({ label, value, colorClass }) {
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-3">
+        <span className="text-sm text-text-secondary">{label}</span>
+        <span className="text-xs text-text-muted">{value}%</span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-white/6">
+        <div className={cn('h-full rounded-full', colorClass)} style={{ width: `${Math.max(6, value)}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function EmptyBlock({ icon, title, body }) {
+  return (
+    <div className="card-premium-soft flex min-h-[220px] flex-col items-center justify-center border-dashed px-6 text-center">
+      <div className="card-premium-soft mb-4 flex h-12 w-12 items-center justify-center text-brand">
+        {icon}
+      </div>
+      <p className="text-base font-semibold text-text-primary">{title}</p>
+      <p className="mt-2 max-w-md text-sm text-text-muted">{body}</p>
+    </div>
+  );
+}
+
+function cn(...values) {
+  return values.filter(Boolean).join(' ');
+}

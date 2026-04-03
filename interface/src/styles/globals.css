@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@500;600;700;800&display=swap');
 
 :root {
   --bg-app: 7 12 21;
@@ -22,6 +22,11 @@
   --motion-fast: 150ms;
   --motion-normal: 250ms;
   --motion-slow: 350ms;
+
+  --admin-card-gradient:
+    radial-gradient(circle at 14% 18%, rgba(12, 110, 126, 0.26) 0%, rgba(12, 110, 126, 0.12) 18%, transparent 42%),
+    radial-gradient(circle at 88% 22%, rgba(37, 99, 235, 0.16) 0%, rgba(37, 99, 235, 0.08) 18%, transparent 42%),
+    linear-gradient(135deg, rgba(7, 20, 23, 0.96) 0%, rgba(15, 15, 20, 0.98) 47%, rgba(17, 26, 49, 0.96) 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -51,7 +56,7 @@
   body {
     background: rgb(var(--bg-app));
     color: rgb(var(--text-primary));
-    font-family: Inter, system-ui, sans-serif;
+    font-family: Manrope, Inter, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
@@ -60,14 +65,15 @@
   h1 {
     font-size: clamp(1.875rem, 1.4rem + 1.5vw, 2rem);
     line-height: 1.2;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-weight: 800;
+    letter-spacing: -0.04em;
   }
 
   h2 {
     font-size: clamp(1rem, 0.95rem + 0.4vw, 1.125rem);
     line-height: 1.3;
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: -0.025em;
   }
 
   p {
@@ -84,7 +90,7 @@
 }
 
 @layer utilities {
-  .glass-surface {
+.glass-surface {
     background: linear-gradient(180deg, rgba(15, 22, 35, 0.86), rgba(15, 22, 35, 0.65));
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
@@ -92,23 +98,98 @@
   }
 
   .card-premium {
+    position: relative;
+    isolation: isolate;
     border-radius: 1.25rem;
-    border: 1px solid rgba(var(--border-subtle), 0.2);
-    background: rgb(var(--bg-surface));
-    box-shadow: 0 8px 30px rgba(2, 8, 23, 0.25);
-    transition-property: transform, box-shadow, border-color;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: var(--admin-card-gradient);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.035),
+      0 22px 64px rgba(2, 8, 23, 0.46);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    transition-property: box-shadow, border-color, filter;
     transition-duration: var(--motion-normal);
     transition-timing-function: ease-out;
   }
 
   .card-premium:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 18px 40px rgba(2, 8, 23, 0.45);
-    border-color: rgba(56, 189, 248, 0.35);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.045),
+      0 28px 80px rgba(2, 8, 23, 0.56);
+    border-color: rgba(56, 189, 248, 0.24);
+    filter: saturate(1.03);
+  }
+
+  .card-premium-soft {
+    position: relative;
+    isolation: isolate;
+    border-radius: 1.5rem;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: var(--admin-card-gradient);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      0 18px 44px rgba(2, 8, 23, 0.32);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .admin-card-label {
+    font-size: 0.72rem;
+    line-height: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(148, 163, 184, 0.86);
+  }
+
+  .admin-card-title {
+    font-family: Manrope, Inter, system-ui, sans-serif;
+    font-size: clamp(1.05rem, 1rem + 0.28vw, 1.2rem);
+    line-height: 1.15;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    color: rgb(248, 250, 252);
+  }
+
+  .admin-card-copy {
+    font-family: Manrope, Inter, system-ui, sans-serif;
+    font-size: 0.97rem;
+    line-height: 1.7;
+    font-weight: 500;
+    color: rgba(148, 163, 184, 0.92);
+  }
+
+  .admin-card-stat {
+    font-family: Manrope, Inter, system-ui, sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    color: rgb(248, 250, 252);
   }
 
   .text-meta {
     font-size: 0.8125rem;
     line-height: 1.25rem;
+  }
+
+  .field-input {
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    background: rgba(2, 6, 23, 0.32);
+    color: rgb(var(--text-primary));
+    padding: 0.85rem 1rem;
+    font-size: 0.95rem;
+    transition: border-color var(--motion-fast) ease-out, box-shadow var(--motion-fast) ease-out;
+  }
+
+  .field-input::placeholder {
+    color: rgba(148, 163, 184, 0.72);
+  }
+
+  .field-input:focus {
+    border-color: rgba(34, 211, 238, 0.4);
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.12), 0 0 0 4px rgba(34, 211, 238, 0.08);
+    outline: none;
   }
 }

@@ -1,56 +1,10 @@
 const { supabase } = require('../config/database');
 const { recomputeUserAnalysis } = require('../services/analysisService');
-
-async function getAiServiceHealth() {
-  const aiServiceUrl = process.env.AI_SERVICE_URL;
-  if (!aiServiceUrl) {
-    return {
-      enabled: false,
-      status: 'disabled',
-      model: null,
-    };
-  }
-
-  const token = process.env.AI_SERVICE_TOKEN;
-  const timeoutMs = Number(process.env.AI_HEALTH_TIMEOUT_MS || 2500);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(`${aiServiceUrl.replace(/\/$/, '')}/health`, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: token ? { 'x-ai-service-token': token } : {},
-    });
-
-    const payload = await response.json().catch(() => null);
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return {
-        enabled: true,
-        status: 'degraded',
-        model: null,
-        detail: payload?.detail || `AI health check failed with status ${response.status}`,
-      };
-    }
-
-    return {
-      enabled: true,
-      status: payload?.success ? 'connected' : 'degraded',
-      model: payload?.model || null,
-      services: payload?.services || {},
-    };
-  } catch (error) {
-    clearTimeout(timeout);
-    return {
-      enabled: true,
-      status: 'down',
-      model: null,
-      detail: error.message,
-    };
-  }
-}
+const {
+  getAdminControlCenterData,
+  getAdminUserDetailData,
+  refreshSkillTrendSignals,
+} = require('../services/adminControlCenterService');
 
 // PublicController serves endpoints the frontend expects for dashboard data
 class PublicController {
@@ -193,6 +147,22 @@ class PublicController {
     } catch (err) {
       console.error('PublicController.listUsers error', err);
       res.status(500).json({ success: false, message: 'Unable to load users' });
+    }
+  }
+
+  static async getAdminUserDetail(req, res) {
+    try {
+      const { id } = req.params;
+      const data = await getAdminUserDetailData(id);
+
+      if (!data) {
+        return res.status(404).json({ success: false, message: 'User not found' });
+      }
+
+      res.status(200).json({ success: true, data });
+    } catch (err) {
+      console.error('PublicController.getAdminUserDetail error', err);
+      res.status(500).json({ success: false, message: 'Unable to load user detail' });
     }
   }
 
@@ -509,108 +479,42 @@ class PublicController {
 
   static async getAdminOverview(req, res) {
     try {
-      const [
-        usersCount,
-        adminsCount,
-        profilesCount,
-        skillsCount,
-        userSkillsCount,
-        trendsCount,
-        gapsCount,
-        recommendationsCount,
-        aiGapsCount,
-        recentUsersResult,
-        skillCategoryRows,
-        gapDomainRows,
-      ] = await Promise.all([
-        supabase.from('users').select('*', { count: 'exact', head: true }),
-        supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'admin'),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('skills').select('*', { count: 'exact', head: true }),
-        supabase.from('user_skills').select('*', { count: 'exact', head: true }),
-        supabase.from('trends').select('*', { count: 'exact', head: true }),
-        supabase.from('skill_gaps').select('*', { count: 'exact', head: true }),
-        supabase.from('recommendations').select('*', { count: 'exact', head: true }),
-        supabase.from('skill_gaps').select('*', { count: 'exact', head: true }).ilike('reason', 'AI:%'),
-        supabase
-          .from('users')
-          .select('id, full_name, email, role, created_at')
-          .order('created_at', { ascending: false })
-          .limit(8),
-        supabase.from('skills').select('category'),
-        supabase.from('skill_gaps').select('domain'),
-      ]);
-
-      const totals = {
-        users: usersCount.count || 0,
-        admins: adminsCount.count || 0,
-        profiles: profilesCount.count || 0,
-        skills: skillsCount.count || 0,
-        userSkills: userSkillsCount.count || 0,
-        trends: trendsCount.count || 0,
-        skillGaps: gapsCount.count || 0,
-        recommendations: recommendationsCount.count || 0,
-        aiGeneratedGaps: aiGapsCount.count || 0,
-      };
-
-      const profileCoveragePct = totals.users > 0
-        ? Number(((totals.profiles / totals.users) * 100).toFixed(1))
-        : 0;
-      const avgSkillsPerUser = totals.users > 0
-        ? Number((totals.userSkills / totals.users).toFixed(2))
-        : 0;
-
-      const skillCategoryMap = {};
-      (skillCategoryRows.data || []).forEach((row) => {
-        const category = row.category || 'Other';
-        skillCategoryMap[category] = (skillCategoryMap[category] || 0) + 1;
-      });
-
-      const gapDomainMap = {};
-      (gapDomainRows.data || []).forEach((row) => {
-        const domain = row.domain || 'General';
-        gapDomainMap[domain] = (gapDomainMap[domain] || 0) + 1;
-      });
-
-      const skillsByCategory = Object.entries(skillCategoryMap)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
-
-      const topGapDomains = Object.entries(gapDomainMap)
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 6);
-
-      const recentUsers = (recentUsersResult.data || []).map((u) => ({
-        id: u.id,
-        name: u.full_name || u.email?.split('@')?.[0] || 'Unknown',
-        email: u.email,
-        role: u.role || 'user',
-        created_at: u.created_at,
-      }));
-
-      const aiService = await getAiServiceHealth();
-
-      res.status(200).json({
-        success: true,
-        data: {
-          summary: totals,
-          workflows: {
-            profileCoveragePct,
-            avgSkillsPerUser,
-            aiGeneratedGaps: totals.aiGeneratedGaps,
-          },
-          distributions: {
-            skillsByCategory,
-            topGapDomains,
-          },
-          recentUsers,
-          aiService,
-        },
-      });
+      const data = await getAdminControlCenterData();
+      res.status(200).json({ success: true, data });
     } catch (err) {
       console.error('PublicController.getAdminOverview error', err);
       res.status(500).json({ success: false, message: 'Unable to load admin overview data' });
+    }
+  }
+
+  static async recomputeAdminUserAnalysis(req, res) {
+    try {
+      const { id } = req.params;
+      const targetRole = typeof req.body?.targetRole === 'string' ? req.body.targetRole.trim() : undefined;
+      const result = await recomputeUserAnalysis(id, { targetRole: targetRole || undefined });
+
+      res.status(200).json({
+        success: true,
+        message: 'User analysis recomputed and persisted',
+        data: result,
+      });
+    } catch (err) {
+      console.error('PublicController.recomputeAdminUserAnalysis error', err);
+      res.status(500).json({ success: false, message: 'Unable to recompute user analysis' });
+    }
+  }
+
+  static async refreshAdminTrendSignals(req, res) {
+    try {
+      const data = await refreshSkillTrendSignals();
+      res.status(200).json({
+        success: true,
+        message: 'Trend signals refreshed',
+        data,
+      });
+    } catch (err) {
+      console.error('PublicController.refreshAdminTrendSignals error', err);
+      res.status(500).json({ success: false, message: 'Unable to refresh trend signals' });
     }
   }
 
