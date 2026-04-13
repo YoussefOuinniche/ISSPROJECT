@@ -10,6 +10,7 @@ import {
   Keyboard,
   Platform,
   type KeyboardEvent,
+  Image,
 } from "react-native";
 import { Stack, router } from "expo-router";
 import { Feather } from "@expo/vector-icons";
@@ -192,9 +193,15 @@ export default function AIChatScreen() {
           headerTitleStyle: { color: Colors.textPrimary, fontWeight: "600" },
           headerStyle: { backgroundColor: Colors.surface },
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
-              <Feather name="arrow-left" size={24} color={Colors.textPrimary} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <TouchableOpacity onPress={() => router.back()} style={styles.headerButton}>
+                <Feather name="arrow-left" size={24} color={Colors.textPrimary} />
+              </TouchableOpacity>
+              <Image 
+                source={require("@/assets/images/logo-nexapath.png")}
+                style={{ width: 28, height: 28, marginLeft: 8 }}
+              />
+            </View>
           ),
           headerShadowVisible: false,
         }} 

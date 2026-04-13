@@ -6,7 +6,8 @@ import {
   StyleSheet,
   Text,
   View,
-  ActivityIndicator
+  ActivityIndicator,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
@@ -183,8 +184,16 @@ export default function TrendsScreen() {
       showsVerticalScrollIndicator={false}
     >
       <AnimatedSection delay={20} style={styles.header}>
-        <Text style={styles.screenTitle}>Career Intelligence</Text>
-        <Text style={styles.screenSub}>Role-based market insights</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Image 
+            source={require("@/assets/images/logo-nexapath.png")}
+            style={{ width: 28, height: 28 }}
+          />
+          <View>
+            <Text style={styles.screenTitle}>Career Intelligence</Text>
+            <Text style={styles.screenSub}>Role-based market insights</Text>
+          </View>
+        </View>
       </AnimatedSection>
 
       {/* 3. Market Demand Summary (Hero Card) */}

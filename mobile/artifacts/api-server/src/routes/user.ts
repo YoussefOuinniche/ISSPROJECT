@@ -91,4 +91,21 @@ router.get("/user/skill-gaps", async (req, res) => {
   return res.status(upstream.status).json(upstream.data);
 });
 
+router.post("/user/ai/role-snapshot", async (req, res) => {
+  const body =
+    req.body && typeof req.body === "object"
+      ? {
+          role: typeof req.body.role === "string" ? req.body.role.trim() : "",
+          countries: Array.isArray(req.body.countries)
+            ? req.body.countries
+                .map((country: unknown) => String(country ?? "").trim())
+                .filter(Boolean)
+            : [],
+        }
+      : { role: "", countries: [] };
+
+  const upstream = await proxyLegacy(req, "/user/ai/role-snapshot", "POST", body);
+  return res.status(upstream.status).json(upstream.data);
+});
+
 export default router;

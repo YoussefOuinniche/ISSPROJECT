@@ -13,6 +13,7 @@ const { ensureLocalAiRuntime, shutdownLocalAiRuntime } = require('./services/aiR
 // Import routes
 const authRoutes = require('./routes/Auth');
 const userRoutes = require('./routes/User');
+const userAiRoutes = require('./routes/UserAi');
 const skillRoutes = require('./routes/Skills');
 const trendRoutes = require('./routes/Trends');
 const publicRoutes = require('./routes/Public');
@@ -131,6 +132,7 @@ app.get('/health', async (req, res) => {
 // ─────────────────────────────────────────
 
 app.use('/api/auth',    authRoutes);
+app.use('/api/user/ai', userAiRoutes);
 app.use('/api/user',    userRoutes);
 app.use('/api/skills',  skillRoutes);
 app.use('/api/trends',  trendRoutes);

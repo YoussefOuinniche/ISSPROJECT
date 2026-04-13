@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Colors from "@/constants/colors";
@@ -319,13 +320,19 @@ export default function SkillsScreen() {
       {/* Header */}
       <AnimatedSection style={styles.header} variant="up">
         <View style={styles.headerCopy}>
-          <View>
-            <Text style={styles.screenTitle}>Skill Analysis</Text>
-            <Text style={styles.screenSub}>
-              {effectiveTargetRole
-                ? `Compare your profile against ${effectiveTargetRole}`
-                : "Identify and close your gaps"}
-            </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Image 
+              source={require("@/assets/images/logo-nexapath.png")}
+              style={{ width: 28, height: 28 }}
+            />
+            <View>
+              <Text style={styles.screenTitle}>Skill Analysis</Text>
+              <Text style={styles.screenSub}>
+                {effectiveTargetRole
+                  ? `Compare your profile against ${effectiveTargetRole}`
+                  : "Identify and close your gaps"}
+              </Text>
+            </View>
           </View>
           </View>
         <Pressable style={styles.filterBtn} onPress={onRefresh}>

@@ -5,6 +5,9 @@ import {
 } from "@/lib/api/runtime";
 
 type ApiMethod = "GET" | "POST" | "PUT" | "DELETE";
+type RequestOptions = {
+  signal?: AbortSignal;
+};
 
 let hasWarnedMissingRoleTrendsEndpoint = false;
 let hasWarnedMissingPersonalizedEndpoint = false;
@@ -31,7 +34,19 @@ export type ExplicitProfileUpdatePayload = {
   };
 };
 
-async function request<T>(method: ApiMethod, path: string, body?: unknown): Promise<T> {
+function isAbortError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.name === "AbortError" || /aborted|abort/i.test(error.message))
+  );
+}
+
+async function request<T>(
+  method: ApiMethod,
+  path: string,
+  body?: unknown,
+  options: RequestOptions = {}
+): Promise<T> {
   const baseUrl = getMobileApiBaseUrl().replace(/\/$/, "");
   const buildUrl = (requestPath: string) => `${baseUrl}${requestPath}`;
 
@@ -47,9 +62,13 @@ async function request<T>(method: ApiMethod, path: string, body?: unknown): Prom
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        signal: options.signal,
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (error) {
+      if (isAbortError(error)) {
+        throw error;
+      }
       const message = error instanceof Error ? error.message : String(error);
       console.error("[mobileApi] Network request failed", {
         method,
@@ -72,7 +91,7 @@ async function request<T>(method: ApiMethod, path: string, body?: unknown): Prom
 
   let { response, payload, url } = await performRequest(path);
 
-  if (response.status === 401) {
+  if (response.status === 401 && !options.signal?.aborted) {
     await resetStoredMobileAccessToken();
     ({ response, payload, url } = await performRequest(path));
   }
@@ -321,6 +340,7 @@ export type AiRoadmapResponse = Record<string, unknown>;
 export type AiRecommendationsResponse = unknown;
 export type AiCareerAdviceResponse = Record<string, unknown> | string;
 export type AiJobDescriptionResponse = Record<string, unknown>;
+export type AiRoleSnapshotResponse = Record<string, unknown>;
 
 export async function analyzeSkillGapsWithAi(payload: { targetRole?: string }) {
   return request<{ success: boolean; message?: string; data: AiSkillGapResponse }>(
@@ -360,4 +380,16 @@ export async function generateJobDescriptionWithAi(payload: { role: string; perS
     "/api/user/ai/job-description",
     payload
   );
+}
+
+export async function fetchAiRoleSnapshotEnvelope(
+  payload: { role: string; countries: string[] },
+  options?: RequestOptions
+) {
+  return request<{
+    success: boolean;
+    message?: string;
+    data: AiRoleSnapshotResponse;
+    meta?: Record<string, unknown>;
+  }>("POST", "/api/user/ai/role-snapshot", payload, options);
 }

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -192,9 +193,15 @@ export default function LearnScreen() {
       showsVerticalScrollIndicator={false}
     >
       <AnimatedSection delay={20} style={styles.header}>
-        <View>
-          <Text style={styles.screenTitle}>Role Roadmaps</Text>
-          <Text style={styles.screenSub}>Explore practical, stage-by-stage paths for IT roles</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Image 
+            source={require("@/assets/images/logo-nexapath.png")}
+            style={{ width: 28, height: 28 }}
+          />
+          <View>
+            <Text style={styles.screenTitle}>Role Roadmaps</Text>
+            <Text style={styles.screenSub}>Explore practical, stage-by-stage paths for IT roles</Text>
+          </View>
         </View>
         <Pressable style={styles.headerBtn} onPress={handleProfileRefresh}>
           <Feather name="refresh-cw" size={18} color={Colors.textSecondary} />

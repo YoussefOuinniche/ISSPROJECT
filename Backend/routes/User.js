@@ -95,7 +95,6 @@ router.post('/ai/career-advice', aiCareerAdviceValidation, validate, UserControl
 router.get('/ai/history', UserController.getAiHistory);
 router.post('/ai/chat', aiChatValidation, validate, UserController.chatWithAi);
 router.post('/ai/job-description', aiJobDescriptionValidation, validate, UserController.generateJobDescriptionWithAi);
-
 // Dashboard route
 router.get('/dashboard', UserController.getDashboard);
 

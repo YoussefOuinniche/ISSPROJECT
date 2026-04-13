@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   View,
+  Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQueryClient } from "@tanstack/react-query";
@@ -152,7 +153,13 @@ export default function ProfileScreen() {
     >
       {/* Header */}
       <AnimatedSection style={styles.header} variant="up">
-        <Text style={styles.screenTitle}>Profile</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Image 
+            source={require("@/assets/images/logo-nexapath.png")}
+            style={{ width: 28, height: 28 }}
+          />
+          <Text style={styles.screenTitle}>Profile</Text>
+        </View>
         <Pressable
           style={styles.settingsBtn}
           onPress={() => router.push("/settings")}
