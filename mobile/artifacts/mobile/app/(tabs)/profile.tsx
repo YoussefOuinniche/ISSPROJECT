@@ -123,7 +123,7 @@ export default function ProfileScreen() {
 
   const achievements = [
     { id: "ach-1", title: "Profile Synced", icon: "check-circle", color: Colors.success, earned: true },
-    { id: "ach-2", title: "Skills Mapped", icon: "target", color: Colors.primary, earned: skills.length > 0 },
+    { id: "ach-2", title: "Skills Mapped", icon: "target", color: Colors.accentTertiary, earned: skills.length > 0 },
     { id: "ach-3", title: "Gap Tracked", icon: "zap", color: Colors.warning, earned: highPriority > 0 },
   ];
 
@@ -317,7 +317,7 @@ export default function ProfileScreen() {
       </AnimatedSection>
       <AnimatedSection delay={290} style={styles.activityGrid}>
         <GlassCard style={styles.activityCard} padding={16} radius={16}>
-          <Feather name="book-open" size={20} color={Colors.primary} />
+          <Feather name="book-open" size={20} color={Colors.accentTertiary} />
           <AnimatedCounter
             value={Math.max(0, Math.floor(skillScore / 10))}
             style={styles.activityValue}
@@ -344,7 +344,7 @@ export default function ProfileScreen() {
         <>
           <AnimatedSection delay={320} style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>AI Insights</Text>
-            <Feather name="cpu" size={18} color={Colors.primary} />
+            <Feather name="cpu" size={18} color={Colors.accentTertiary} />
           </AnimatedSection>
           <AnimatedSection delay={350}>
           <GlassCard style={styles.aiInsightsCard} padding={18} radius={20}>
@@ -387,21 +387,21 @@ export default function ProfileScreen() {
           icon="user"
           label="Edit Profile"
           sublabel="Update your details and skills"
-          color={Colors.primary}
+          color={Colors.accentTertiary}
           onPress={() => router.push("/settings")}
         />
         <MenuItem
           icon="star"
           label="Personalized Recommendations"
           sublabel="View your latest AI guidance"
-          color={Colors.accent}
+          color={Colors.accentTertiary}
           onPress={() => router.push("/recommendations")}
         />
         <MenuItem
           icon="cpu"
           label="AI Assistant"
           sublabel="Profile-aware chat with roadmap and gap context"
-          color={Colors.primary}
+          color={Colors.accentTertiary}
           onPress={() => router.push("/ai-assistant")}
           showBadge
         />
@@ -497,7 +497,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 7,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.accentTertiary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
   seeAll: {
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.primary,
+    color: Colors.accentTertiary,
   },
   scoreRow: {
     flexDirection: "row",
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   menuBadge: {
-    backgroundColor: Colors.primary + "20",
+    backgroundColor: Colors.accentTertiary + "20",
     borderRadius: 100,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -681,7 +681,7 @@ const styles = StyleSheet.create({
   menuBadgeText: {
     fontSize: 10,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.primary,
+    color: Colors.accentTertiary,
   },
   refreshBtn: {
     height: 44,

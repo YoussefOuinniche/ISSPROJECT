@@ -214,7 +214,7 @@ export default function AIChatScreen() {
         <View style={styles.chatArea}>
           {initializing ? (
             <AnimatedSection style={styles.emptyState}>
-              <ActivityIndicator size="large" color={Colors.primary} />
+                <ActivityIndicator size="large" color={Colors.accentTertiary} />
               <Text style={styles.emptyTitle}>Loading History...</Text>
             </AnimatedSection>
           ) : messages.length === 0 && !loading ? (
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   contextEyebrow: {
     fontSize: 10,
     fontWeight: "600",
-    color: Colors.textSecondary,
+    color: Colors.accentTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
     marginBottom: 4,
@@ -403,16 +403,16 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   suggestionChip: {
-    backgroundColor: Colors.backgroundSecondary,
+    backgroundColor: Colors.accentTertiaryLight + "50",
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: Colors.accentTertiary + "40",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 20,
   },
   suggestionText: {
     fontSize: 13,
-    color: Colors.textPrimary,
-    fontWeight: "500",
+    color: Colors.accentTertiary,
+    fontWeight: "600",
   },
 });

@@ -327,7 +327,7 @@ export default function SkillsScreen() {
               resizeMode="contain"
             />
             <View>
-              <Text style={styles.screenTitle}>Skill Analysis</Text>
+              <Text style={styles.screenTitle}>Organize Your Skills</Text>
             </View>
           </View>
         </View>
@@ -499,7 +499,7 @@ export default function SkillsScreen() {
           <View style={styles.summaryItem}>
             <AnimatedCounter
               value={strengths.length}
-              style={[styles.summaryValue, { color: Colors.primary }]}
+              style={[styles.summaryValue, { color: Colors.accentTertiary }]}
             />
             <Text style={styles.summaryLabel}>Strengths</Text>
           </View>
@@ -552,7 +552,7 @@ export default function SkillsScreen() {
                         ? Colors.warning + "20"
                         : f === "low"
                         ? Colors.success + "20"
-                        : Colors.primary + "20",
+                        : Colors.accentTertiary + "20",
                     borderColor:
                       f === "high"
                         ? Colors.danger
@@ -560,7 +560,7 @@ export default function SkillsScreen() {
                         ? Colors.warning
                         : f === "low"
                         ? Colors.success
-                        : Colors.primary,
+                        : Colors.accentTertiary,
                   },
                 ]}
                 onPress={() => setPriorityFilter(f)}
@@ -576,7 +576,7 @@ export default function SkillsScreen() {
                           ? Colors.warning
                           : f === "low"
                           ? Colors.success
-                          : Colors.primary,
+                          : Colors.accentTertiary,
                     },
                   ]}
                 >
@@ -706,7 +706,7 @@ export default function SkillsScreen() {
               <GlassCard style={styles.recommendationCard} padding={18} radius={18}>
                 <View style={styles.recommendationHeader}>
                   <View style={styles.recommendationIcon}>
-                    <Feather name="zap" size={16} color={Colors.primary} />
+                    <Feather name="zap" size={16} color={Colors.accentTertiary} />
                   </View>
                   <View style={styles.recommendationMeta}>
                     <Text style={styles.recommendationTitle}>{recommendation.title}</Text>
@@ -811,7 +811,7 @@ export default function SkillsScreen() {
                         skill.level >= 80
                           ? Colors.success
                           : skill.level >= 60
-                          ? Colors.primary
+                          ? Colors.accentTertiary
                           : Colors.warning,
                     },
                   ]}
@@ -829,7 +829,7 @@ export default function SkillsScreen() {
                   skill.level >= 80
                     ? Colors.success
                     : skill.level >= 60
-                    ? Colors.primary
+                    ? Colors.accentTertiary
                     : Colors.warning
                 }
                 showLabel={false}
@@ -916,7 +916,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.accentTertiary,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -997,7 +997,7 @@ const styles = StyleSheet.create({
     marginTop: 14,
     height: 42,
     borderRadius: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.accentTertiary,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1189,7 +1189,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: Colors.primary + "15",
+    backgroundColor: Colors.accentTertiary + "15",
   },
   recommendationMeta: {
     flex: 1,

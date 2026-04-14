@@ -103,7 +103,7 @@ export default function TrendsScreen() {
             demand,
             growth: growthValue,
             category,
-            color: demand >= 80 ? Colors.success : Colors.primary,
+            color: demand >= 80 ? Colors.success : Colors.accentTertiary,
           };
         }),
     [trendRows]
@@ -203,7 +203,7 @@ export default function TrendsScreen() {
         />
         <View style={styles.summaryTopRow}>
           <View style={styles.summaryIconBox}>
-            <Feather name="globe" size={20} color={Colors.primaryLight} />
+            <Feather name="globe" size={20} color={Colors.accentTertiaryLight} />
           </View>
           <Text style={styles.summaryTitle}>Market Summary</Text>
         </View>
@@ -306,7 +306,7 @@ export default function TrendsScreen() {
 
             return (
               <View key={index} style={styles.recItem}>
-                 <Feather name="check" size={16} color={Colors.primary} style={{marginTop: 2}} />
+                 <Feather name="check" size={16} color={Colors.accentTertiary} style={{marginTop: 2}} />
                  <View style={{ flex: 1 }}>
                    <Text style={styles.recText}>{title}</Text>
                    {!!content && <Text style={styles.recSubText}>{content}</Text>}
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
   
   marketSummaryCard: { marginBottom: 32, overflow: "hidden", borderWidth: 1, borderColor: "rgba(43,230,246,0.3)" },
   summaryTopRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
-  summaryIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: "rgba(43,230,246,0.15)", alignItems: "center", justifyContent: "center" },
+  summaryIconBox: { width: 36, height: 36, borderRadius: 10, backgroundColor: Colors.accentTertiary + "20", alignItems: "center", justifyContent: "center" },
   summaryTitle: { color: Colors.textPrimary, fontSize: 18, fontFamily: "Inter_600SemiBold" },
   summaryDesc: { color: Colors.textSecondary, fontSize: 14, lineHeight: 22, fontFamily: "Inter_400Regular" },
   summaryBadgesRow: { marginTop: 10, flexDirection: "row", flexWrap: "wrap", gap: 8 },

@@ -486,7 +486,7 @@ const styles = StyleSheet.create({
   recommendedEyebrow: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.primary,
+    color: Colors.accentTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
   },
   recommendedButton: {
     borderRadius: 12,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.accentTertiary,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -621,7 +621,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 12,
-    backgroundColor: Colors.primary + "18",
+    backgroundColor: Colors.accentTertiary + "18",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -646,6 +646,6 @@ const styles = StyleSheet.create({
   roleFooterText: {
     fontSize: 13,
     fontFamily: "Inter_700Bold",
-    color: Colors.primary,
+    color: Colors.accentTertiary,
   },
 });
