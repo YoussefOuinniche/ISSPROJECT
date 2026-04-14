@@ -366,14 +366,14 @@ export default function LearnScreen() {
             <View style={styles.roleBody}>
               <View style={styles.roleTopRow}>
                 <View style={styles.roleIconWrap}>
-                  <Feather name={role.icon as never} size={18} color={Colors.primary} />
+                  <Feather name={role.icon as never} size={18} color={Colors.accentTertiary} />
                 </View>
                 <View style={styles.roleTagRow}>
                   {recommendedRole?.id === role.id ? (
                     <Badge label="Recommended" variant="primary" size="sm" />
                   ) : null}
                   {(roleMarketScores[role.id] || 0) > 0 ? (
-                    <Badge label="In demand" variant="accent" size="sm" />
+                    <Badge label="In demand" variant="accentTertiary" size="sm" />
                   ) : null}
                 </View>
               </View>
@@ -381,7 +381,7 @@ export default function LearnScreen() {
               <Text style={styles.roleDescription}>{role.description}</Text>
               <View style={styles.roleFooter}>
                 <Text style={styles.roleFooterText}>View Roadmap</Text>
-                <Feather name="arrow-right" size={16} color={Colors.primary} />
+                <Feather name="arrow-right" size={16} color={Colors.accentTertiary} />
               </View>
             </View>
           </GlassCard>

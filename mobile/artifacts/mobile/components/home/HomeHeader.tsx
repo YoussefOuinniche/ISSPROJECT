@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   statusPillActive: {
-    borderColor: alpha(Colors.accent, 0.25),
+    borderColor: alpha(Colors.accentTertiary, 0.25),
   },
   statusDot: {
     backgroundColor: Colors.textTertiary,
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     width: 8,
   },
   statusDotActive: {
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.accentTertiary,
   },
   statusLabel: {
     color: Colors.textSecondary,
@@ -226,8 +226,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipSelected: {
-    backgroundColor: Colors.textPrimary,
-    borderColor: Colors.textPrimary,
+    backgroundColor: Colors.accentTertiary,
+    borderColor: Colors.accentTertiary,
   },
   chipDisabled: {
     opacity: 0.45,

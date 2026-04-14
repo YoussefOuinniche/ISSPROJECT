@@ -4,6 +4,8 @@
   primaryLight: "#F3F4F6",
   accent: "#2563EB",
   accentLight: "#DBEAFE",
+  accentTertiary: "#1E3A8A",
+  accentTertiaryLight: "#E0E7FF",
   success: "#059669",
   successLight: "#D1FAE5",
   warning: "#D97706",

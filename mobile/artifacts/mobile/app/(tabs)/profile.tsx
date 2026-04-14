@@ -325,7 +325,7 @@ export default function ProfileScreen() {
           <Text style={styles.activityLabel}>Completed</Text>
         </GlassCard>
         <GlassCard style={styles.activityCard} padding={16} radius={16}>
-          <Feather name="clock" size={20} color={Colors.accent} />
+          <Feather name="clock" size={20} color={Colors.accentTertiary} />
           <AnimatedCounter
             value={Math.max(1, skills.length * 2)}
             suffix="h"

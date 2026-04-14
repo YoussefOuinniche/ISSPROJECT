@@ -273,7 +273,7 @@ export default function TrendsScreen() {
           <View style={styles.gapCard}>
             <View style={styles.gapHeader}>
               <View style={styles.gapIconBg}>
-                <Feather name="compass" size={16} color={Colors.accent} />
+                <Feather name="compass" size={16} color={Colors.accentTertiary} />
               </View>
               <View style={{flex: 1, marginLeft: 12}}>
                 <Text style={styles.gapSkill}>{gap.skill_name}</Text>
@@ -360,9 +360,9 @@ const styles = StyleSheet.create({
 
   gapCard: { backgroundColor: Colors.surface, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: Colors.border },
   gapHeader: { flexDirection: "row", alignItems: "center", marginBottom: 10 },
-  gapIconBg: { width: 32, height: 32, borderRadius: 8, backgroundColor: Colors.accent + "15", alignItems: "center", justifyContent: "center" },
+  gapIconBg: { width: 32, height: 32, borderRadius: 8, backgroundColor: Colors.accentTertiary + "15", alignItems: "center", justifyContent: "center" },
   gapSkill: { fontSize: 15, fontFamily: "Inter_600SemiBold", color: Colors.textPrimary },
-  gapImportance: { fontSize: 12, color: Colors.accent, fontFamily: "Inter_500Medium" },
+  gapImportance: { fontSize: 12, color: Colors.accentTertiary, fontFamily: "Inter_500Medium" },
   gapDesc: { fontSize: 13, color: Colors.textSecondary, lineHeight: 20, fontFamily: "Inter_400Regular" },
 
   emptyTrendingContainer: { width: 200, padding: 20 },

@@ -426,7 +426,7 @@ export default function SkillsScreen() {
                 });
               }}
             >
-              <Feather name="map" size={14} color={Colors.primary} />
+              <Feather name="map" size={14} color={Colors.accentTertiary} />
               <Text style={styles.inlineRoadmapButtonText}>Open roadmap</Text>
             </Pressable>
           ) : null}
@@ -932,7 +932,7 @@ const styles = StyleSheet.create({
   snapshotEyebrow: {
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
-    color: Colors.primary,
+    color: Colors.accentTertiary,
     textTransform: "uppercase",
     letterSpacing: 0.7,
   },

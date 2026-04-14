@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View, ViewStyle } from "react-native";
 import Colors from "@/constants/colors";
 
-type BadgeVariant = "primary" | "success" | "warning" | "danger" | "neutral" | "accent";
+type BadgeVariant = "primary" | "success" | "warning" | "danger" | "neutral" | "accent" | "accentTertiary";
 
 type BadgeProps = {
   label: string;
@@ -18,6 +18,7 @@ const VARIANT_STYLES: Record<BadgeVariant, { bg: string; text: string; border: s
   danger: { bg: Colors.dangerLight, text: Colors.danger, border: Colors.danger + "40" },
   neutral: { bg: Colors.backgroundSecondary, text: Colors.textSecondary, border: Colors.border },
   accent: { bg: Colors.accentLight, text: Colors.accent, border: Colors.accent + "40" },
+  accentTertiary: { bg: Colors.accentTertiaryLight, text: Colors.accentTertiary, border: Colors.accentTertiary + "40" },
 };
 
 export function Badge({ label, variant = "neutral", size = "sm", style }: BadgeProps) {
