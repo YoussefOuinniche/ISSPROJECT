@@ -330,14 +330,7 @@ export default function SkillsScreen() {
               <Text style={styles.screenTitle}>Skill Analysis</Text>
             </View>
           </View>
-          </View>
-        <Pressable style={styles.filterBtn} onPress={onRefresh}>
-          {analysisRefreshing ? (
-            <ActivityIndicator size="small" color={Colors.primary} />
-          ) : (
-            <Feather name="refresh-cw" size={18} color={Colors.textSecondary} />
-          )}
-        </Pressable>
+        </View>
       </AnimatedSection>
 
       {/* Gap Summary Card */}

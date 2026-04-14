@@ -203,9 +203,6 @@ export default function LearnScreen() {
             <Text style={styles.screenTitle}>Role Roadmaps</Text>
           </View>
         </View>
-        <Pressable style={styles.headerBtn} onPress={handleProfileRefresh}>
-          <Feather name="refresh-cw" size={18} color={Colors.textSecondary} />
-        </Pressable>
       </AnimatedSection>
 
       <AnimatedSection delay={70}>
