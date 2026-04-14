@@ -328,11 +328,6 @@ export default function SkillsScreen() {
             />
             <View>
               <Text style={styles.screenTitle}>Skill Analysis</Text>
-              <Text style={styles.screenSub}>
-                {effectiveTargetRole
-                  ? `Compare your profile against ${effectiveTargetRole}`
-                  : "Identify and close your gaps"}
-              </Text>
             </View>
           </View>
           </View>

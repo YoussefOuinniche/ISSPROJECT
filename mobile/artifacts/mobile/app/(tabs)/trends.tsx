@@ -192,7 +192,6 @@ export default function TrendsScreen() {
           />
           <View>
             <Text style={styles.screenTitle}>Career Intelligence</Text>
-            <Text style={styles.screenSub}>Role-based market insights</Text>
           </View>
         </View>
       </AnimatedSection>

@@ -201,7 +201,6 @@ export default function LearnScreen() {
           />
           <View>
             <Text style={styles.screenTitle}>Role Roadmaps</Text>
-            <Text style={styles.screenSub}>Explore practical, stage-by-stage paths for IT roles</Text>
           </View>
         </View>
         <Pressable style={styles.headerBtn} onPress={handleProfileRefresh}>
