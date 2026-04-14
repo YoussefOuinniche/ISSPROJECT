@@ -20,6 +20,7 @@ export function AuthBackground({
       resizeMode="cover"
       style={styles.background}
       imageStyle={styles.image}
+      blurRadius={3}
     >
       <View pointerEvents="none" style={[styles.overlay, { opacity: overlayOpacity }]} />
       <View style={[styles.content, contentStyle]}>{children}</View>

@@ -196,7 +196,8 @@ export default function LearnScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Image 
             source={require("@/assets/images/logo-nexapath.png")}
-            style={{ width: 28, height: 28 }}
+            style={{ width: 44, height: 44 }}
+            resizeMode="contain"
           />
           <View>
             <Text style={styles.screenTitle}>Role Roadmaps</Text>

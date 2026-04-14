@@ -199,7 +199,8 @@ export default function AIChatScreen() {
               </TouchableOpacity>
               <Image 
                 source={require("@/assets/images/logo-nexapath.png")}
-                style={{ width: 28, height: 28, marginLeft: 8 }}
+                style={{ width: 36, height: 36, marginLeft: 8 }}
+                resizeMode="contain"
               />
             </View>
           ),
