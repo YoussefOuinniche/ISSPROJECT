@@ -84,3 +84,9 @@ interface/.env
 .vscode/
 *.zip
 
+# One-off local helper/snapshot files
+cleanup.js
+refactor.js
+MOBILE_APP_FRONTEND_PAGES.md
+WORKSPACE_BUILD_STATUS.md
+
