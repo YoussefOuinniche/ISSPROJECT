@@ -44,10 +44,6 @@ function RootLayoutNav() {
         name="signup"
         options={{ headerShown: false, presentation: "card", animation: "fade" }}
       />
-      <Stack.Screen
-        name="onboarding"
-        options={{ headerShown: false, presentation: "card", animation: "fade" }}
-      />
       <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen
         name="learn/[id]"
@@ -55,10 +51,6 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="settings"
-        options={{ headerShown: false, presentation: "card", animation: "fade" }}
-      />
-      <Stack.Screen
-        name="profile-completion"
         options={{ headerShown: false, presentation: "card", animation: "fade" }}
       />
       <Stack.Screen

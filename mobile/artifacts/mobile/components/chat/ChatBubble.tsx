@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
+import Animated, { FadeInLeft, FadeInRight } from "react-native-reanimated";
 
 import Colors from "@/constants/colors";
 import { AppRadius, AppType } from "@/constants/theme";
@@ -8,12 +8,20 @@ import { AppRadius, AppType } from "@/constants/theme";
 interface ChatBubbleProps {
   text: string;
   isUser: boolean;
+  index?: number;
 }
 
-export const ChatBubble = ({ text, isUser }: ChatBubbleProps) => {
+export const ChatBubble = ({ text, isUser, index = 0 }: ChatBubbleProps) => {
+  const enterDelay = isUser ? 0 : Math.min(index, 8) * 28;
+  const enteringAnimation = (isUser ? FadeInRight : FadeInLeft)
+    .springify()
+    .damping(16)
+    .stiffness(180)
+    .delay(enterDelay);
+
   return (
     <Animated.View
-      entering={FadeInDown.duration(220)}
+      entering={enteringAnimation}
       style={[
         styles.container,
         isUser ? styles.userContainer : styles.aiContainer,
@@ -21,7 +29,7 @@ export const ChatBubble = ({ text, isUser }: ChatBubbleProps) => {
     >
       <View style={[styles.bubble, isUser ? styles.userBubble : styles.aiBubble]}>
         <Text style={[styles.label, isUser ? styles.userLabel : styles.aiLabel]}>
-          {isUser ? "You" : "SkillPulse AI"}
+          {isUser ? "You" : "NexaPath AI"}
         </Text>
         <Text style={[styles.text, isUser ? styles.userText : styles.aiText]}>{text}</Text>
       </View>
@@ -46,9 +54,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderRadius: AppRadius.lg,
+    shadowColor: Colors.shadowStrong,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8,
+    elevation: 2,
   },
   userBubble: {
-    backgroundColor: Colors.textPrimary,
+    backgroundColor: Colors.accentTertiary,
     borderBottomRightRadius: 6,
   },
   aiBubble: {
@@ -63,7 +76,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   userLabel: {
-    color: "rgba(255,255,255,0.72)",
+    color: Colors.background,
   },
   aiLabel: {
     color: Colors.textTertiary,
@@ -72,7 +85,7 @@ const styles = StyleSheet.create({
     ...AppType.body,
   },
   userText: {
-    color: Colors.textInverse,
+    color: Colors.background,
   },
   aiText: {
     color: Colors.textPrimary,

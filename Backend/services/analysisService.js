@@ -494,7 +494,7 @@ async function requestAiChat(userId, message) {
       response: String(result?.response || '').trim() || CHAT_FALLBACK_RESPONSE,
       messageId: userMessageId,
       conversationSummary: normalizeConversationSummary(result?.conversation_summary),
-      degraded: false,
+      degraded: Boolean(result?.degraded),
     };
   } catch (error) {
     console.error('AI chat request failed:', error.message);

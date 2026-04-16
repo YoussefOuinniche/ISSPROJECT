@@ -35,7 +35,7 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
         onPress={handleSend}
         disabled={!text.trim() || disabled}
       >
-        <Feather name="send" size={20} color={Colors.textInverse} />
+        <Feather name="send" size={18} color={Colors.textInverse} />
       </TouchableOpacity>
     </View>
   );
@@ -45,30 +45,33 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 12,
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.border,
   },
   input: {
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
     maxHeight: 120,
     backgroundColor: Colors.backgroundSecondary,
-    borderRadius: 20,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 11,
+    paddingBottom: 11,
     fontSize: 15,
     color: Colors.textPrimary,
     marginRight: 10,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.primary,
+    width: 42,
+    height: 42,
+    borderRadius: 24,
+    backgroundColor: Colors.accentTertiary,
     justifyContent: "center",
     alignItems: "center",
   },

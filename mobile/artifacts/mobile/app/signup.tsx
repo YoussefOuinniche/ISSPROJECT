@@ -57,7 +57,7 @@ export default function SignupScreen() {
       }
 
       await storeMobileAccessToken(token);
-      router.replace("/onboarding");
+      router.replace("/(tabs)");
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Unable to create account";
       setError(message);

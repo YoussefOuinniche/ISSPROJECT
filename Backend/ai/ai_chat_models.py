@@ -40,3 +40,4 @@ class AIChatResponse(BaseModel):
     response: str
     message_id: str | None = None
     conversation_summary: ConversationSummary = Field(default_factory=ConversationSummary)
+    degraded: bool = False
