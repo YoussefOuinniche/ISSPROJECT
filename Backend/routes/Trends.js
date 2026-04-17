@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body } = require('express-validator');
 const TrendController = require('../controllers/Trendcontroller');
-const { protect, optionalAuth } = require('../middleware/auth');
+const { protect, requireAdmin, optionalAuth } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
 // Validation rules
@@ -22,6 +22,7 @@ router.get('/', optionalAuth, TrendController.getAllTrends);
 router.get('/recent', optionalAuth, TrendController.getRecentTrends);
 router.get('/search', optionalAuth, TrendController.searchTrends);
 router.get('/domains', optionalAuth, TrendController.getDomains);
+router.post('/ingest', protect, requireAdmin, TrendController.ingestExternalTrends);
 router.get('/:id', optionalAuth, TrendController.getTrendById);
 
 // Protected routes (admin only - you can add admin middleware here)

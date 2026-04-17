@@ -1,5 +1,5 @@
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -9,256 +9,169 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { Badge } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GradientCard";
 import Colors from "@/constants/colors";
 import {
-  getGlobalMarketTrends,
-  getPersonalizedMarketInsights,
-  getRoleMarketTrends,
-  refreshRoleMarketTrends,
-  type PersonalizedMarketInsights,
-  type RoleMarketTrendsResponse,
+  getTrendDomains,
+  getTrends,
+  type TrendCatalogItem,
 } from "@/lib/api/mobileApi";
 import { getBottomContentPadding } from "@/lib/layout";
 
-const FALLBACK_ROLES = [
-  "Frontend Developer",
-  "Backend Developer",
-  "Full Stack Developer",
-  "Data Analyst",
-  "Data Scientist",
-  "DevOps Engineer",
-  "Cloud Engineer",
-  "UI UX Designer",
-  "Cybersecurity Analyst",
-  "Product Manager",
-];
-
-type TrendNewsItem = {
-  id: string;
-  skill: string;
-  headline: string;
-  summary: string;
-  category: string;
-  growthPercent: number;
-  demandScore: number;
-  sourceCount: number;
-  updatedAt: string | null;
-  tone: string;
-};
+const ALL_DOMAINS_LABEL = "All Domains";
 
 function trackTrendsEvent(event: string, payload: Record<string, unknown> = {}) {
-  // TODO(analytics): Replace console markers with production analytics SDK events.
   console.info("[Telemetry][Trends]", event, payload);
 }
 
 function formatSnapshotTime(value: string | null | undefined) {
-  if (!value) return "No snapshot yet";
+  if (!value) return "No timestamp";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No snapshot yet";
+  if (Number.isNaN(date.getTime())) return "No timestamp";
   return date.toLocaleString();
 }
 
-async function openTrendOnWeb(skill: string, role: string) {
-  const query = `${skill} ${role} hiring trend`;
-  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=nws`;
+function normalizeDomains(domains: string[]) {
+  return [ALL_DOMAINS_LABEL, ...Array.from(new Set(domains.map((item) => String(item || "").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b))];
+}
+
+async function openTrendOnWeb(url: string | null | undefined) {
+  const sourceUrl = String(url || "").trim();
+  if (!sourceUrl) return;
 
   try {
-    await Linking.openURL(url);
+    await Linking.openURL(sourceUrl);
   } catch (error) {
     console.error("Failed to open trend web link", error);
   }
 }
 
-function normalizeRoleList(items: string[]) {
-  const unique = Array.from(
-    new Set(
-      items
-        .map((item) => String(item || "").trim())
-        .filter(Boolean)
-    )
-  );
-
-  return unique.sort((a, b) => a.localeCompare(b));
-}
-
 export default function TrendsScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const refreshInFlightRef = useRef(false);
 
-  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
-  const [rolesLoading, setRolesLoading] = useState(true);
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [availableDomains, setAvailableDomains] = useState<string[]>([ALL_DOMAINS_LABEL]);
+  const [domainsLoading, setDomainsLoading] = useState(true);
+  const [selectedDomain, setSelectedDomain] = useState(ALL_DOMAINS_LABEL);
 
-  const [trendRows, setTrendRows] = useState<Record<string, unknown>[]>([]);
-  const [marketMeta, setMarketMeta] = useState<RoleMarketTrendsResponse | null>(null);
-  const [personalizedInsights, setPersonalizedInsights] = useState<PersonalizedMarketInsights | null>(null);
+  const [trendRows, setTrendRows] = useState<TrendCatalogItem[]>([]);
   const [trendsLoading, setTrendsLoading] = useState(false);
   const [screenError, setScreenError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const topPadding = Platform.OS === "web" ? insets.top + 54 : insets.top + 10;
   const horizontalPadding = width >= 1200 ? 34 : width >= 980 ? 28 : 20;
   const isWide = width >= 960;
 
-  const loadAvailableRoles = async () => {
-    setRolesLoading(true);
+  const loadDomains = async () => {
+    setDomainsLoading(true);
 
     try {
-      const global = await getGlobalMarketTrends({ limit: 500 });
-      const rows = Array.isArray(global?.trends) ? global.trends : [];
-      const discoveredRoles = rows
-        .map((row) => String((row as { role?: string | null }).role || "").trim())
-        .filter(Boolean);
-
-      const combined = normalizeRoleList([...discoveredRoles, ...FALLBACK_ROLES]);
-      setAvailableRoles(combined);
+      const domains = await getTrendDomains();
+      setAvailableDomains(normalizeDomains(domains));
     } catch (error) {
-      console.error("Failed to load global roles", error);
-      setAvailableRoles(normalizeRoleList(FALLBACK_ROLES));
+      console.error("Failed to load trend domains", error);
+      setAvailableDomains([ALL_DOMAINS_LABEL]);
     } finally {
-      setRolesLoading(false);
+      setDomainsLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadAvailableRoles().catch(() => undefined);
-  }, []);
-
-  const fetchForRole = async (role: string) => {
-    const cleanRole = String(role || "").trim();
-    if (!cleanRole) return;
-
+  const loadTrends = async (domain: string) => {
     setScreenError(null);
     setTrendsLoading(true);
 
-    trackTrendsEvent("role_fetch_started", { role: cleanRole });
+    trackTrendsEvent("trend_catalog_fetch_started", { domain });
 
     try {
-      // Trigger live refresh first so role trends reflect the latest web data.
-      await refreshRoleMarketTrends({ role: cleanRole, searchLimit: 30 });
+      const trends = await getTrends({
+        limit: 120,
+        domain: domain === ALL_DOMAINS_LABEL ? undefined : domain,
+      });
 
-      const [roleData, personalized] = await Promise.all([
-        getRoleMarketTrends({
-          role: cleanRole,
-          limit: 120,
-          refreshIfStale: false,
-        }),
-        getPersonalizedMarketInsights({
-          role: cleanRole,
-          limit: 80,
-          refreshIfStale: false,
-        }),
-      ]);
+      setTrendRows(Array.isArray(trends) ? trends : []);
 
-      setTrendRows(
-        Array.isArray(roleData?.trends)
-          ? (roleData.trends as unknown as Record<string, unknown>[])
-          : []
-      );
-      setMarketMeta(roleData);
-      setPersonalizedInsights(personalized);
-
-      trackTrendsEvent("role_fetch_completed", {
-        role: cleanRole,
-        trendsFound: Array.isArray(roleData?.trends) ? roleData.trends.length : 0,
-        stale: Boolean(roleData?.stale),
+      trackTrendsEvent("trend_catalog_fetch_completed", {
+        domain,
+        trendsFound: Array.isArray(trends) ? trends.length : 0,
       });
     } catch (error) {
-      console.error("Role trend fetch failed", error);
-
-      // Fallback path: pull cached/stale data if direct refresh path fails.
-      try {
-        const [roleData, personalized] = await Promise.all([
-          getRoleMarketTrends({ role: cleanRole, limit: 120, refreshIfStale: true }),
-          getPersonalizedMarketInsights({ role: cleanRole, limit: 80, refreshIfStale: true }),
-        ]);
-
-        setTrendRows(
-          Array.isArray(roleData?.trends)
-            ? (roleData.trends as unknown as Record<string, unknown>[])
-            : []
-        );
-        setMarketMeta(roleData);
-        setPersonalizedInsights(personalized);
-        setScreenError("Live refresh failed. Showing latest cached intelligence.");
-      } catch (fallbackError) {
-        console.error("Fallback role trend fetch failed", fallbackError);
-        setTrendRows([]);
-        setMarketMeta(null);
-        setPersonalizedInsights(null);
-        setScreenError("Unable to fetch trends for this role right now.");
-      }
+      console.error("Trend catalog fetch failed", error);
+      setTrendRows([]);
+      setScreenError("Unable to fetch trends from the backend right now.");
     } finally {
       setTrendsLoading(false);
     }
   };
 
-  const onSelectRole = async (role: string) => {
-    const cleanRole = String(role || "").trim();
-    if (!cleanRole) return;
+  useEffect(() => {
+    loadDomains().catch(() => undefined);
+    loadTrends(ALL_DOMAINS_LABEL).catch(() => undefined);
+  }, []);
 
-    setSelectedRole(cleanRole);
-    await fetchForRole(cleanRole);
+  const onSelectDomain = async (domain: string) => {
+    setSelectedDomain(domain);
+    await loadTrends(domain);
   };
 
-  const newsItems = useMemo<TrendNewsItem[]>(() => {
-    const roleLabel = selectedRole || "this role";
+  const refreshAll = async () => {
+    if (refreshInFlightRef.current) {
+      return;
+    }
+
+    refreshInFlightRef.current = true;
+    try {
+      await Promise.allSettled([loadDomains(), loadTrends(selectedDomain)]);
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  };
+
+  const isRefreshing = trendsLoading || domainsLoading;
+
+  const filteredTrends = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
 
     return trendRows
-      .map((item) => (typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {}))
-      .map((item, idx) => {
-        const frequency = Number(item.frequency ?? 0);
-        const sourceCount = Math.max(1, Number(item.source_count ?? 1));
-        const demandScore = Math.max(42, Math.min(99, 45 + frequency * 4));
-        const growthPercent = Math.max(6, Math.round(demandScore / 7));
-        const category = String(item.category ?? "General");
-        const skill = String(item.skill ?? item.title ?? `Trend ${idx + 1}`);
-        const updatedAt = typeof item.updated_at === "string" ? item.updated_at : null;
+      .filter((item) => {
+        if (!query) return true;
 
-        return {
-          id: String(item.id ?? `trend-news-${idx}`),
-          skill,
-          headline: `${skill} hiring momentum rises for ${roleLabel}`,
-          summary: `Signals from ${sourceCount} web sources show strong relevance in ${category.toLowerCase()} and active role demand.`,
-          category,
-          growthPercent,
-          demandScore,
-          sourceCount,
-          updatedAt,
-          tone: demandScore >= 80 ? Colors.success : Colors.accentTertiary,
-        };
+        const searchableText = [
+          item.title,
+          item.description,
+          item.domain,
+          item.source_name,
+          item.source,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+
+        return searchableText.includes(query);
+      })
+      .sort((left, right) => {
+        const leftTime = new Date(left.published_at || left.scraped_at || left.created_at || 0).getTime();
+        const rightTime = new Date(right.published_at || right.scraped_at || right.created_at || 0).getTime();
+        return rightTime - leftTime;
       });
-  }, [selectedRole, trendRows]);
+  }, [searchQuery, trendRows]);
 
-  const aiSummary =
-    typeof personalizedInsights?.market_summary === "string" &&
-    personalizedInsights.market_summary.trim().length > 0
-      ? personalizedInsights.market_summary
-      : selectedRole
-      ? `Live market signals for ${selectedRole} are being tracked from web trend sources.`
-      : "Select a role to generate market summary.";
+  const latestSnapshot = useMemo(() => {
+    const values = filteredTrends
+      .map((item) => item.scraped_at || item.published_at || item.updated_at || item.created_at || null)
+      .filter(Boolean) as string[];
 
-  const aiNextStep =
-    typeof personalizedInsights?.recommended_next_step === "string" &&
-    personalizedInsights.recommended_next_step.trim().length > 0
-      ? personalizedInsights.recommended_next_step
-      : null;
-
-  const highPrioritySkills = Array.isArray(personalizedInsights?.high_priority_skill_names)
-    ? personalizedInsights.high_priority_skill_names.slice(0, 4)
-    : [];
-
-  const missingSkills = Array.isArray(personalizedInsights?.missing_skill_names)
-    ? personalizedInsights.missing_skill_names.slice(0, 4)
-    : [];
+    return values.sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] || null;
+  }, [filteredTrends]);
 
   return (
     <ScrollView
@@ -287,43 +200,61 @@ export default function TrendsScreen() {
         </View>
 
         <Pressable
-          style={[styles.refreshIconBtn, !selectedRole && styles.refreshIconBtnDisabled]}
-          disabled={!selectedRole || trendsLoading}
+          style={[styles.refreshIconBtn, isRefreshing && styles.refreshIconBtnDisabled]}
+          disabled={isRefreshing}
           onPress={() => {
-            if (selectedRole) {
-              fetchForRole(selectedRole).catch(() => undefined);
-            }
+            refreshAll().catch(() => undefined);
           }}
         >
-          <Feather name="refresh-cw" size={18} color={Colors.textSecondary} />
+          {isRefreshing ? (
+            <ActivityIndicator size="small" color={Colors.accentTertiary} />
+          ) : (
+            <Feather name="refresh-cw" size={15} color={Colors.textSecondary} />
+          )}
         </Pressable>
       </AnimatedSection>
 
-      <AnimatedSection delay={55}>
-        <GlassCard style={styles.rolePickerCard} padding={16} radius={18}>
-          <View style={styles.roleHeaderRow}>
-            <Text style={styles.sectionTitle}>Choose Role</Text>
-            <Text style={styles.sectionMeta}>{availableRoles.length} roles</Text>
+      <AnimatedSection delay={50}>
+        <GlassCard style={styles.searchCard} padding={16} radius={18}>
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search titles, descriptions, or sources"
+            placeholderTextColor={Colors.textTertiary}
+            style={styles.searchInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </GlassCard>
+      </AnimatedSection>
+
+      <AnimatedSection delay={80}>
+        <GlassCard style={styles.domainPickerCard} padding={16} radius={18}>
+          <View style={styles.domainHeaderRow}>
+            <Text style={styles.sectionTitle}>Choose Domain</Text>
+            <Text style={styles.sectionMeta}>{availableDomains.length - 1} domains</Text>
           </View>
 
-          {rolesLoading ? (
-            <View style={styles.rolesLoadingWrap}>
+          {domainsLoading ? (
+            <View style={styles.domainsLoadingWrap}>
               <ActivityIndicator size="small" color={Colors.accentTertiary} />
-              <Text style={styles.rolesLoadingText}>Loading roles from web trend index...</Text>
+              <Text style={styles.domainsLoadingText}>Loading domains from backend trend catalog...</Text>
             </View>
           ) : (
-            <View style={styles.roleChipWrap}>
-              {availableRoles.map((role) => {
-                const active = selectedRole === role;
+            <View style={styles.domainChipWrap}>
+              {availableDomains.map((domain) => {
+                const active = selectedDomain === domain;
                 return (
                   <Pressable
-                    key={role}
+                    key={domain}
                     onPress={() => {
-                      onSelectRole(role).catch(() => undefined);
+                      onSelectDomain(domain).catch(() => undefined);
                     }}
-                    style={[styles.roleChip, active && styles.roleChipActive]}
+                    style={[styles.domainChip, active && styles.domainChipActive]}
                   >
-                    <Text style={[styles.roleChipText, active && styles.roleChipTextActive]}>{role}</Text>
+                    <Text style={[styles.domainChipText, active && styles.domainChipTextActive]}>
+                      {domain}
+                    </Text>
                   </Pressable>
                 );
               })}
@@ -332,160 +263,102 @@ export default function TrendsScreen() {
         </GlassCard>
       </AnimatedSection>
 
-      {!selectedRole ? (
-        <AnimatedSection delay={90}>
-          <GlassCard style={styles.promptCard} padding={22} radius={20}>
-            <Feather name="compass" size={22} color={Colors.accentTertiary} />
-            <Text style={styles.promptTitle}>Pick a role to start live trend fetch</Text>
-            <Text style={styles.promptBody}>
-              Once a role is selected, NexaPath fetches role-specific web trend signals and summarizes them on this page.
-            </Text>
-          </GlassCard>
-        </AnimatedSection>
-      ) : null}
+      <AnimatedSection delay={110}>
+        <GlassCard style={styles.heroCard} padding={20} radius={22}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.heroPill}>
+              <Feather name="database" size={14} color={Colors.background} />
+              <Text style={styles.heroPillText}>Backend Catalog</Text>
+            </View>
+            <Badge
+              label={selectedDomain === ALL_DOMAINS_LABEL ? "All domains" : selectedDomain}
+              variant="primary"
+              size="sm"
+            />
+          </View>
 
-      {selectedRole ? (
+          <Text style={styles.heroTitle}>{filteredTrends.length} live trend entries</Text>
+          <Text style={styles.heroSummary}>
+            This screen now reads only from the persisted backend `/api/trends` catalog.
+          </Text>
+          <Text style={styles.heroMeta}>Latest snapshot: {formatSnapshotTime(latestSnapshot)}</Text>
+        </GlassCard>
+      </AnimatedSection>
+
+      {trendsLoading ? (
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={Colors.accentTertiary} />
+          <Text style={styles.loadingText}>Loading trends from the backend...</Text>
+        </View>
+      ) : (
         <>
-          <AnimatedSection delay={110}>
-            <GlassCard style={styles.heroCard} padding={20} radius={22}>
-              <View style={styles.heroTopRow}>
-                <View style={styles.heroPill}>
-                  <Feather name="radio" size={14} color={Colors.background} />
-                  <Text style={styles.heroPillText}>Live Web + AI Summary</Text>
-                </View>
-                <Badge
-                  label={marketMeta?.stale ? "Stale" : "Fresh"}
-                  variant={marketMeta?.stale ? "warning" : "primary"}
-                  size="sm"
-                />
+          {screenError ? (
+            <AnimatedSection delay={130}>
+              <View style={styles.warningBanner}>
+                <Feather name="alert-triangle" size={15} color={Colors.warning} />
+                <Text style={styles.warningText}>{screenError}</Text>
               </View>
+            </AnimatedSection>
+          ) : null}
 
-              <Text style={styles.heroTitle}>{selectedRole.toUpperCase()}</Text>
-              <Text style={styles.heroSummary}>{aiSummary}</Text>
-              {aiNextStep ? <Text style={styles.heroActionLine}>Next step: {aiNextStep}</Text> : null}
-              <Text style={styles.heroMeta}>Snapshot: {formatSnapshotTime(marketMeta?.latest_updated_at)}</Text>
-            </GlassCard>
+          <AnimatedSection delay={140} style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Trend Catalog</Text>
+            <Text style={styles.sectionMeta}>{filteredTrends.length} results</Text>
           </AnimatedSection>
 
-          {trendsLoading ? (
-            <View style={styles.centerContainer}>
-              <ActivityIndicator size="large" color={Colors.accentTertiary} />
-              <Text style={styles.loadingText}>Fetching live signals and summarizing...</Text>
-            </View>
-          ) : (
-            <>
-              {screenError ? (
-                <AnimatedSection delay={130}>
-                  <View style={styles.warningBanner}>
-                    <Feather name="alert-triangle" size={15} color={Colors.warning} />
-                    <Text style={styles.warningText}>{screenError}</Text>
-                  </View>
-                </AnimatedSection>
-              ) : null}
+          <View style={[styles.newsGrid, isWide && styles.newsGridWide]}>
+            {filteredTrends.length > 0 ? (
+              filteredTrends.map((item, index) => (
+                <AnimatedSection
+                  key={item.id}
+                  delay={160 + index * 20}
+                  style={[styles.newsCell, isWide && styles.newsCellWide]}
+                >
+                  <GlassCard style={styles.newsCard} padding={16} radius={18}>
+                    <View style={styles.newsTopRow}>
+                      <View style={styles.newsTagWrap}>
+                        <Badge label={item.domain || "General Tech"} variant="neutral" size="sm" />
+                      </View>
+                      <Text style={styles.newsSourceCount}>
+                        {item.source_name || item.source || "Unknown source"}
+                      </Text>
+                    </View>
 
-              <AnimatedSection delay={140} style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Role Trend News</Text>
-                <Text style={styles.sectionMeta}>{newsItems.length} signals</Text>
-              </AnimatedSection>
-
-              <View style={[styles.newsGrid, isWide && styles.newsGridWide]}>
-                {newsItems.length > 0 ? (
-                  newsItems.slice(0, 8).map((item, index) => (
-                    <AnimatedSection
-                      key={item.id}
-                      delay={160 + index * 30}
-                      style={[styles.newsCell, isWide && styles.newsCellWide]}
-                    >
-                      <GlassCard style={styles.newsCard} padding={16} radius={18}>
-                        <View style={styles.newsTopRow}>
-                          <View style={styles.newsTagWrap}>
-                            <Badge label={item.category} variant="neutral" size="sm" />
-                          </View>
-                          <Text style={styles.newsSourceCount}>{item.sourceCount} sources</Text>
-                        </View>
-
-                        <Text style={styles.newsHeadline}>{item.headline}</Text>
-                        <Text style={styles.newsSummary}>{item.summary}</Text>
-
-                        <View style={styles.newsStatsRow}>
-                          <View style={styles.newsStatItem}>
-                            <Text style={styles.newsStatLabel}>Growth</Text>
-                            <AnimatedCounter
-                              value={item.growthPercent}
-                              prefix="+"
-                              suffix="%"
-                              style={[styles.newsStatValue, { color: item.tone }]}
-                            />
-                          </View>
-                          <View style={styles.newsStatDivider} />
-                          <View style={styles.newsStatItem}>
-                            <Text style={styles.newsStatLabel}>Demand</Text>
-                            <AnimatedCounter
-                              value={item.demandScore}
-                              suffix="/100"
-                              style={[styles.newsStatValue, { color: item.tone }]}
-                            />
-                          </View>
-                        </View>
-
-                        <View style={styles.newsFooter}>
-                          <Text style={styles.newsTimestamp}>{formatSnapshotTime(item.updatedAt)}</Text>
-                          <Pressable
-                            style={styles.newsActionBtn}
-                            onPress={() => {
-                              openTrendOnWeb(item.skill, selectedRole).catch(() => undefined);
-                            }}
-                          >
-                            <Text style={styles.newsActionText}>Open on web</Text>
-                            <Feather name="external-link" size={13} color={Colors.background} />
-                          </Pressable>
-                        </View>
-                      </GlassCard>
-                    </AnimatedSection>
-                  ))
-                ) : (
-                  <View style={styles.emptyCard}>
-                    <Text style={styles.emptyText}>
-                      No trend news found yet for this role. Try refreshing now to trigger another web fetch.
+                    <Text style={styles.newsHeadline}>{item.title}</Text>
+                    <Text style={styles.newsSummary}>
+                      {item.description || "No description available for this trend entry."}
                     </Text>
-                  </View>
-                )}
+
+                    <View style={styles.newsFooter}>
+                      <Text style={styles.newsTimestamp}>
+                        Published: {formatSnapshotTime(item.published_at || item.scraped_at || item.created_at)}
+                      </Text>
+                      <Pressable
+                        style={[styles.newsActionBtn, !item.source_url && styles.newsActionBtnDisabled]}
+                        onPress={() => {
+                          openTrendOnWeb(item.source_url).catch(() => undefined);
+                        }}
+                        disabled={!item.source_url}
+                      >
+                        <Text style={styles.newsActionText}>
+                          {item.source_url ? "Open source" : "No source URL"}
+                        </Text>
+                        <Feather name="external-link" size={13} color={Colors.background} />
+                      </Pressable>
+                    </View>
+                  </GlassCard>
+                </AnimatedSection>
+              ))
+            ) : (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>
+                  No trends match the current backend filters.
+                </Text>
               </View>
-
-              <AnimatedSection delay={380} style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Skill Watchlist</Text>
-                <Feather name="target" size={18} color={Colors.textSecondary} />
-              </AnimatedSection>
-
-              <AnimatedSection delay={410}>
-                <GlassCard style={styles.watchlistCard} padding={18} radius={18}>
-                  <Text style={styles.watchlistLabel}>High Priority</Text>
-                  <View style={styles.watchlistChipRow}>
-                    {highPrioritySkills.length > 0 ? (
-                      highPrioritySkills.map((skill) => (
-                        <Badge key={`priority-${skill}`} label={skill} variant="accent" size="sm" />
-                      ))
-                    ) : (
-                      <Text style={styles.watchlistFallback}>No high-priority skills surfaced yet.</Text>
-                    )}
-                  </View>
-
-                  <Text style={[styles.watchlistLabel, { marginTop: 12 }]}>Missing in Market</Text>
-                  <View style={styles.watchlistChipRow}>
-                    {missingSkills.length > 0 ? (
-                      missingSkills.map((skill) => (
-                        <Badge key={`missing-${skill}`} label={skill} variant="warning" size="sm" />
-                      ))
-                    ) : (
-                      <Text style={styles.watchlistFallback}>No missing skills found in latest snapshot.</Text>
-                    )}
-                  </View>
-                </GlassCard>
-              </AnimatedSection>
-            </>
-          )}
+            )}
+          </View>
         </>
-      ) : null}
+      )}
     </ScrollView>
   );
 }
@@ -527,9 +400,9 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
   },
   refreshIconBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -537,12 +410,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   refreshIconBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
-  rolePickerCard: {
+  searchCard: {
     gap: 10,
   },
-  roleHeaderRow: {
+  searchInput: {
+    height: 46,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: Colors.textPrimary,
+    fontFamily: "Inter_500Medium",
+  },
+  domainPickerCard: {
+    gap: 10,
+  },
+  domainHeaderRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -559,23 +446,23 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
-  rolesLoadingWrap: {
+  domainsLoadingWrap: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingVertical: 4,
   },
-  rolesLoadingText: {
+  domainsLoadingText: {
     fontSize: 13,
     color: Colors.textSecondary,
     fontFamily: "Newsreader_500Medium",
   },
-  roleChipWrap: {
+  domainChipWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
-  roleChip: {
+  domainChip: {
     borderRadius: 999,
     borderWidth: 1,
     borderColor: Colors.border,
@@ -583,32 +470,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 8,
   },
-  roleChipActive: {
+  domainChipActive: {
     borderColor: Colors.accentTertiary,
     backgroundColor: Colors.accentTertiary,
   },
-  roleChipText: {
+  domainChipText: {
     color: Colors.textSecondary,
     fontSize: 12,
     fontFamily: "Inter_600SemiBold",
   },
-  roleChipTextActive: {
+  domainChipTextActive: {
     color: Colors.background,
-  },
-  promptCard: {
-    alignItems: "flex-start",
-    gap: 8,
-  },
-  promptTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: Colors.textPrimary,
-  },
-  promptBody: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-    fontFamily: "Newsreader_400Regular",
   },
   heroCard: {
     marginTop: 2,
@@ -648,12 +520,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     fontFamily: "Newsreader_400Regular",
-  },
-  heroActionLine: {
-    color: Colors.textPrimary,
-    fontSize: 13,
-    lineHeight: 20,
-    fontFamily: "Newsreader_500Medium",
   },
   heroMeta: {
     marginTop: 3,
@@ -709,7 +575,7 @@ const styles = StyleSheet.create({
     width: "49%",
   },
   newsCard: {
-    minHeight: 218,
+    minHeight: 210,
   },
   newsTopRow: {
     flexDirection: "row",
@@ -723,11 +589,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   newsSourceCount: {
+    flex: 1,
+    textAlign: "right",
     fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
   },
   newsHeadline: {
     fontSize: 16,
@@ -743,38 +609,8 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: 12,
   },
-  newsStatsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.border,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    paddingVertical: 9,
-    marginBottom: 10,
-  },
-  newsStatItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  newsStatLabel: {
-    fontSize: 11,
-    color: Colors.textTertiary,
-    fontFamily: "Newsreader_500Medium",
-    marginBottom: 2,
-  },
-  newsStatValue: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  newsStatDivider: {
-    width: 1,
-    alignSelf: "stretch",
-    backgroundColor: Colors.border,
-  },
   newsFooter: {
+    marginTop: "auto",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -796,6 +632,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     backgroundColor: Colors.accentTertiary,
   },
+  newsActionBtnDisabled: {
+    opacity: 0.55,
+  },
   newsActionText: {
     color: Colors.background,
     fontSize: 12,
@@ -814,28 +653,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: "Newsreader_400Regular",
-  },
-  watchlistCard: {
-    gap: 2,
-  },
-  watchlistLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  watchlistChipRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  watchlistFallback: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: Colors.textSecondary,
     fontFamily: "Newsreader_400Regular",
   },
 });

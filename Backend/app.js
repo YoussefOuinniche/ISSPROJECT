@@ -16,7 +16,9 @@ const userRoutes = require('./routes/User');
 const userAiRoutes = require('./routes/UserAi');
 const skillRoutes = require('./routes/Skills');
 const trendRoutes = require('./routes/Trends');
+const marketRoutes = require('./routes/Market');
 const publicRoutes = require('./routes/Public');
+const { startRoleMarketScheduler, stopRoleMarketScheduler } = require('./services/roleMarketSchedulerService');
 
 // Initialize express app
 const app = express();
@@ -79,6 +81,19 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Temporary request logs for mobile Home page data endpoints.
+app.use((req, res, next) => {
+  const isUserCatalogRequest =
+    req.method === 'GET' &&
+    (req.path === '/api/user/countries' || req.path === '/api/user/roles');
+
+  if (isUserCatalogRequest) {
+    console.log(`[app] Incoming ${req.method} ${req.originalUrl}`);
+  }
+
+  next();
+});
+
 // ─────────────────────────────────────────
 //  Health Check
 // ─────────────────────────────────────────
@@ -133,9 +148,12 @@ app.get('/health', async (req, res) => {
 
 app.use('/api/auth',    authRoutes);
 app.use('/api/user/ai', userAiRoutes);
+console.log('[app] Mounting /api/user routes');
 app.use('/api/user',    userRoutes);
+console.log('[app] Mounted /api/user routes');
 app.use('/api/skills',  skillRoutes);
 app.use('/api/trends',  trendRoutes);
+app.use('/api/market',  marketRoutes);
 app.use('/api/public',  publicRoutes);
 
 // ─────────────────────────────────────────
@@ -188,7 +206,9 @@ const server = app.listen(PORT, () => {
 ║   Status: Running ✓                    ║
 ╚════════════════════════════════════════╝
   `);
+  console.log('[app] Startup check: /api/user/countries and /api/user/roles should resolve.');
   void ensureLocalAiRuntime();
+  startRoleMarketScheduler();
 });
 
 // ─────────────────────────────────────────
@@ -200,6 +220,7 @@ const shutdown = (signal) => {
   server.close(async () => {
     console.log('HTTP server closed.');
 
+    await stopRoleMarketScheduler();
     await closeDatabaseResources();
     await shutdownLocalAiRuntime();
     process.exit(0);

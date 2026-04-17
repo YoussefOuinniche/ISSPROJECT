@@ -50,6 +50,14 @@ function RootLayoutNav() {
         options={{ headerShown: false, presentation: "card", animation: "fade" }}
       />
       <Stack.Screen
+        name="roles/[slug]"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
+        name="role-details"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
         name="settings"
         options={{ headerShown: false, presentation: "card", animation: "fade" }}
       />

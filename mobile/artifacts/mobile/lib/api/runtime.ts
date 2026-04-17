@@ -50,12 +50,22 @@ function deriveLanApiBaseUrl(): string | null {
   return `http://${host}:4000`;
 }
 
+function normalizeApiBaseUrl(value: string | null | undefined) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return FALLBACK_API_BASE_URL;
+  }
+
+  return trimmed.replace(/\/+$/, "").replace(/\/api$/i, "");
+}
+
 export function configureMobileApiRuntime() {
   if (configured) return;
 
   configured = true;
-  const apiBaseUrl =
+  const rawApiBaseUrl =
     readExpoExtraString("apiBaseUrl") ?? deriveLanApiBaseUrl() ?? FALLBACK_API_BASE_URL;
+  const apiBaseUrl = normalizeApiBaseUrl(rawApiBaseUrl);
   const bootstrapToken = readExpoExtraString("apiToken");
   resolvedApiBaseUrl = apiBaseUrl;
   resolvedBootstrapToken = bootstrapToken;
@@ -63,6 +73,7 @@ export function configureMobileApiRuntime() {
   console.info("[mobileApi] configured", {
     platform: Platform.OS,
     apiBaseUrl,
+    rawApiBaseUrl,
     hasBootstrapToken: Boolean(bootstrapToken),
   });
 

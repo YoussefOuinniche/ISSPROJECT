@@ -5,6 +5,21 @@ const UserController = require('../controllers/UserController');
 const { protect } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 
+const requiredCatalogHandlers = [
+  'getCountriesCatalog',
+  'getRolesCatalog',
+  'getRoleBySlug',
+  'getRoleMarketOverview',
+];
+
+for (const handlerName of requiredCatalogHandlers) {
+  if (typeof UserController[handlerName] !== 'function') {
+    throw new Error(`[routes/User] Missing handler on UserController: ${handlerName}`);
+  }
+}
+
+console.log('[routes/User] Loaded');
+
 // Validation rules
 const profileValidation = [
   body('domain').optional().trim(),
@@ -60,6 +75,25 @@ const aiJobDescriptionValidation = [
   body('role').isString().trim().isLength({ min: 2 }),
   body('perSourceLimit').optional().isInt({ min: 1, max: 10 }),
 ];
+
+// Temporary request logs for Home page catalog endpoints.
+router.use((req, res, next) => {
+  const isCatalogRoute =
+    req.method === 'GET' &&
+    (req.path === '/countries' || req.path === '/roles' || req.path.startsWith('/roles/'));
+
+  if (isCatalogRoute) {
+    console.log(`[routes/User] ${req.method} ${req.originalUrl}`);
+  }
+
+  next();
+});
+
+// Public catalog routes consumed by mobile Home page.
+router.get('/countries', UserController.getCountriesCatalog);
+router.get('/roles', UserController.getRolesCatalog);
+router.get('/roles/:slug', UserController.getRoleBySlug);
+router.get('/roles/:slug/market', UserController.getRoleMarketOverview);
 
 // Protected routes (require authentication)
 router.use(protect);

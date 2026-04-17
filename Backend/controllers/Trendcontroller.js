@@ -1,4 +1,39 @@
 const { Trend } = require('../models');
+const { ingestAndUpsertTrendSources } = require('../services/trendsIngestionService');
+
+function parseBooleanFlag(value, fallback = false) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+}
+
+function parseOptionalInteger(value, fallback) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.trunc(numeric) : fallback;
+}
+
+function isManualIngestionEnabled() {
+  return process.env.NODE_ENV !== 'production' || process.env.ENABLE_TRENDS_INGEST_ENDPOINT === 'true';
+}
 
 class TrendController {
   // Get all trends
@@ -124,6 +159,60 @@ class TrendController {
         success: false,
         message: 'Error fetching recent trends',
         error: error.message
+      });
+    }
+  }
+
+  // Run external trend ingestion + upsert (admin only)
+  static async ingestExternalTrends(req, res) {
+    try {
+      if (!isManualIngestionEnabled()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Manual trend ingestion endpoint is disabled in production',
+        });
+      }
+
+      const primaryOnly = parseBooleanFlag(req.body?.primaryOnly ?? req.query?.primaryOnly, false);
+      const limitPerSource = parseOptionalInteger(
+        req.body?.limitPerSource ?? req.query?.limitPerSource,
+        undefined
+      );
+
+      const result = await ingestAndUpsertTrendSources({
+        primaryOnly,
+        limitPerSource,
+      });
+
+      return res.status(200).json({
+        success: result.success,
+        partialSuccess: result.partialSuccess,
+        message: result.partialSuccess
+          ? 'Trend ingestion completed with partial success'
+          : 'Trend ingestion completed successfully',
+        data: {
+          startedAt: result.startedAt,
+          completedAt: result.completedAt,
+          sourcesChecked: result.sourcesChecked,
+          sourcesSucceeded: result.sourcesSucceeded,
+          sourcesFailed: result.sourcesFailed,
+          articlesFetched: result.totalFetched,
+          normalizedCount: result.normalizedItemsCount,
+          deduplicatedCount: result.deduplicatedItemsCount,
+          insertedCount: result.persistence.insertedCount,
+          updatedCount: result.persistence.updatedCount,
+          skippedCount: result.persistence.skippedCount,
+          duplicateInputCount: result.persistence.duplicateInputCount,
+          failedRowCount: result.persistence.failedRowCount,
+          sourceLevelErrors: result.sourceLevelErrors,
+        },
+      });
+    } catch (error) {
+      console.error('Trend ingestion trigger error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error running trend ingestion',
+        error: error.message,
       });
     }
   }

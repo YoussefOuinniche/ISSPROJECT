@@ -6,5 +6,6 @@ module.exports = {
   UserSkill: require('./Userskill'),
   SkillGap: require('./Skillgap'),
   Trend: require('./Trend'),
+  RoleMarket: require('./RoleMarket'),
   Recommendation: require('./Reccomandation'),
 };

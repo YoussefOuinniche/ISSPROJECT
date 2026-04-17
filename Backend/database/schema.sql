@@ -327,36 +327,9 @@ INSERT INTO user_skills (user_id, skill_id, proficiency_level, years_of_experien
 ON CONFLICT (user_id, skill_id) DO NOTHING;
 
 -- ============================================================
--- SEED: Trends
+-- Trends are intentionally not seeded.
+-- Source of truth: external ingestion pipeline -> public.trends
 -- ============================================================
-INSERT INTO trends (id, domain, title, description, source) VALUES
-    ('30000000-0000-0000-0000-000000000001', 'AI/ML',           'Generative AI in the Workplace',       'Companies are rapidly integrating LLMs and generative AI tools into daily workflows, increasing demand for prompt engineering and AI-literacy skills.',        'McKinsey 2025'),
-    ('30000000-0000-0000-0000-000000000002', 'DevOps',          'Platform Engineering Rise',             'Platform engineering teams are becoming standard in mid-to-large organisations, abstracting infrastructure complexity away from developers.',                   'CNCF Survey 2025'),
-    ('30000000-0000-0000-0000-000000000003', 'Data Science',    'Real-Time Analytics Adoption',         'Streaming data pipelines (Kafka, Flink) are replacing batch ETL in most new data architecture projects.',                                                    'Databricks Report 2025'),
-    ('30000000-0000-0000-0000-000000000004', 'Web Development', 'Edge Computing & Edge Functions',      'Serverless edge functions (Cloudflare Workers, Vercel Edge) are becoming mainstream for low-latency web applications.',                                       'Netlify State of Web 2025'),
-    ('30000000-0000-0000-0000-000000000005', 'Security',        'Zero Trust Security Adoption',         'Zero-trust architecture is now a baseline requirement in enterprise security frameworks, driving demand for IAM and network security skills.',                 'Gartner 2025'),
-    ('30000000-0000-0000-0000-000000000006', 'Cloud',           'FinOps & Cloud Cost Optimisation',     'With cloud costs rising, FinOps roles and cost-aware engineering practices are growing in importance across all cloud providers.',                            'FinOps Foundation 2025'),
-    ('30000000-0000-0000-0000-000000000007', 'AI/ML',           'AI Agents and Autonomous Workflows',   'Agentic AI frameworks (LangChain, AutoGen, CrewAI) are enabling multi-step autonomous task execution, creating new engineering roles.',                       'GitHub Octoverse 2025')
-ON CONFLICT (id) DO NOTHING;
-
--- ============================================================
--- SEED: Trend Skills
--- ============================================================
-INSERT INTO trend_skills (trend_id, skill_id, relevance_score) VALUES
-    ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000008', 0.95),
-    ('30000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 0.80),
-    ('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000007', 0.90),
-    ('30000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000015', 0.88),
-    ('30000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000010', 0.92),
-    ('30000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000011', 0.75),
-    ('30000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000004', 0.85),
-    ('30000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000002', 0.70),
-    ('30000000-0000-0000-0000-000000000005', '10000000-0000-0000-0000-000000000018', 0.95),
-    ('30000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000016', 0.88),
-    ('30000000-0000-0000-0000-000000000006', '10000000-0000-0000-0000-000000000017', 0.80),
-    ('30000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000008', 0.93),
-    ('30000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000009', 0.85)
-ON CONFLICT (trend_id, skill_id) DO NOTHING;
 
 -- ============================================================
 -- SEED: Skill Gaps
@@ -392,51 +365,30 @@ INSERT INTO recommendations (user_id, type, title, content, skill_name, skill_id
     ('20000000-0000-0000-0000-000000000001', 'skill', 'Master PostgreSQL Query Optimisation',
      'Study execution plans with EXPLAIN ANALYSE, learn indexing strategies, and practise on real datasets to close your database gap.',
      'PostgreSQL', '10000000-0000-0000-0000-000000000006', NULL, NULL),
-    ('20000000-0000-0000-0000-000000000001', 'trend', 'Adopt Edge Functions for Your React Apps',
-     'Your strong React skills make you a natural fit for edge rendering. Experiment with Vercel Edge Functions or Cloudflare Workers.',
-     NULL, NULL, 'Edge Computing & Edge Functions', '30000000-0000-0000-0000-000000000004'),
-
     -- Tamjid Trabelsi
     ('20000000-0000-0000-0000-000000000002', 'skill', 'Build Your First Neural Network with PyTorch',
      'Start with the fast.ai course to bridge the gap between ML theory and hands-on deep learning practice.',
      'Deep Learning', '10000000-0000-0000-0000-000000000009', NULL, NULL),
-    ('20000000-0000-0000-0000-000000000002', 'trend', 'Level Up with Real-Time Analytics',
-     'Your data analysis and SQL background is a great foundation for streaming pipelines. Try Apache Kafka on Confluent Cloud.',
-     NULL, NULL, 'Real-Time Analytics Adoption', '30000000-0000-0000-0000-000000000003'),
 
     -- Youssef Ouenniche
     ('20000000-0000-0000-0000-000000000003', 'skill', 'Deploy ML Models with Kubernetes',
      'Pursue the CKA certification path and explore KubeFlow to orchestrate your ML pipelines reliably at scale.',
      'Kubernetes', '10000000-0000-0000-0000-000000000015', NULL, NULL),
-    ('20000000-0000-0000-0000-000000000003', 'trend', 'Build Autonomous AI Agents',
-     'Your LLM expertise positions you well to lead agentic AI projects. Explore LangChain and CrewAI for multi-step autonomous workflows.',
-     NULL, NULL, 'AI Agents and Autonomous Workflows', '30000000-0000-0000-0000-000000000007'),
 
     -- Rayen Chanchah
     ('20000000-0000-0000-0000-000000000004', 'skill', 'Integrate ML Inference into Your APIs',
      'Take the Coursera ML Specialisation to understand the fundamentals, then serve scikit-learn or ONNX models via your existing Node.js/Express APIs.',
      'Machine Learning', '10000000-0000-0000-0000-000000000008', NULL, NULL),
-    ('20000000-0000-0000-0000-000000000004', 'trend', 'Containerise Your Microservices',
-     'Your backend expertise makes Docker adoption straightforward. Start with Docker Compose for local dev, then move to production-ready setups.',
-     NULL, NULL, 'Platform Engineering Rise', '30000000-0000-0000-0000-000000000002'),
 
     -- Sara Benmoussa
     ('20000000-0000-0000-0000-000000000005', 'skill', 'Adopt TypeScript in Your React Projects',
      'Migrate one existing React component to TypeScript, use the official TS handbook as a reference, and leverage VS Code IntelliSense for a smooth transition.',
      'TypeScript', '10000000-0000-0000-0000-000000000003', NULL, NULL),
 
-    -- Karim Ajroudi
-    ('20000000-0000-0000-0000-000000000006', 'trend', 'Lead FinOps Practices in Your Team',
-     'Your cloud expertise is ideal for driving cost optimisation. Explore the FinOps Foundation certification and implement tagging strategies on AWS.',
-     NULL, NULL, 'FinOps & Cloud Cost Optimisation', '30000000-0000-0000-0000-000000000006'),
-
     -- Lina Dridi
     ('20000000-0000-0000-0000-000000000007', 'skill', 'AWS Security Specialisation',
      'Study AWS IAM, Security Hub, and GuardDuty. The AWS Security Specialty certification will directly address your cloud security skill gap.',
      'AWS', '10000000-0000-0000-0000-000000000016', NULL, NULL),
-    ('20000000-0000-0000-0000-000000000007', 'trend', 'Implement Zero Trust Architecture',
-     'Your cybersecurity background is the perfect base. Deep-dive into NIST Zero Trust guidelines and practise with AWS IAM Identity Centre.',
-     NULL, NULL, 'Zero Trust Security Adoption', '30000000-0000-0000-0000-000000000005'),
 
     -- Nadia Boukhalfa
     ('20000000-0000-0000-0000-000000000009', 'skill', 'Automate Agile Reporting with Python',

@@ -1,0 +1,30 @@
+DELETE FROM public.recommendations
+WHERE trend_id IN (
+    '30000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000002',
+    '30000000-0000-0000-0000-000000000003',
+    '30000000-0000-0000-0000-000000000004',
+    '30000000-0000-0000-0000-000000000005',
+    '30000000-0000-0000-0000-000000000006',
+    '30000000-0000-0000-0000-000000000007'
+)
+OR trend_title IN (
+    'Generative AI in the Workplace',
+    'Platform Engineering Rise',
+    'Real-Time Analytics Adoption',
+    'Edge Computing & Edge Functions',
+    'Zero Trust Security Adoption',
+    'FinOps & Cloud Cost Optimisation',
+    'AI Agents and Autonomous Workflows'
+);
+
+DELETE FROM public.trends
+WHERE id IN (
+    '30000000-0000-0000-0000-000000000001',
+    '30000000-0000-0000-0000-000000000002',
+    '30000000-0000-0000-0000-000000000003',
+    '30000000-0000-0000-0000-000000000004',
+    '30000000-0000-0000-0000-000000000005',
+    '30000000-0000-0000-0000-000000000006',
+    '30000000-0000-0000-0000-000000000007'
+);

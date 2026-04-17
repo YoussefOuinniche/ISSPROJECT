@@ -1,4 +1,4 @@
-const { User, Profile, ChatHistory, UserSkill, SkillGap, Recommendation } = require('../models');
+const { User, Profile, ChatHistory, UserSkill, SkillGap, Recommendation, RoleMarket } = require('../models');
 const {
   recomputeUserAnalysis,
   requestAiSkillGapAnalysis,
@@ -638,6 +638,104 @@ class UserController {
           message: 'Dashboard insights are temporarily unavailable.',
           error: error.message,
         }
+      });
+    }
+  }
+
+  static async getRolesCatalog(req, res) {
+    try {
+      const countryCode = String(req.query?.country || req.query?.countryCode || '').trim().toUpperCase();
+      const search = String(req.query?.search || '').trim();
+      const limit = Number(req.query?.limit);
+
+      const roles = await RoleMarket.getRolesCatalog({
+        countryCode: countryCode || undefined,
+        search: search || undefined,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      });
+
+      res.status(200).json({
+        success: true,
+        data: roles,
+      });
+    } catch (error) {
+      console.error('Get roles catalog error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching roles catalog',
+        error: error.message,
+      });
+    }
+  }
+
+  static async getRoleBySlug(req, res) {
+    try {
+      const slug = String(req.params?.slug || '').trim().toLowerCase();
+      const role = await RoleMarket.findRoleBySlug(slug);
+
+      if (!role) {
+        return res.status(404).json({
+          success: false,
+          message: 'Role not found',
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        data: role,
+      });
+    } catch (error) {
+      console.error('Get role by slug error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching role',
+        error: error.message,
+      });
+    }
+  }
+
+  static async getCountriesCatalog(req, res) {
+    try {
+      const countries = await RoleMarket.getCountriesCatalog();
+
+      res.status(200).json({
+        success: true,
+        data: countries,
+      });
+    } catch (error) {
+      console.error('Get countries catalog error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching countries catalog',
+        error: error.message,
+      });
+    }
+  }
+
+  static async getRoleMarketOverview(req, res) {
+    try {
+      const slug = String(req.params?.slug || '').trim().toLowerCase();
+      const countryCode = String(req.query?.country || req.query?.countryCode || '').trim().toUpperCase();
+
+      const payload = await RoleMarket.getRoleMarketOverview(slug, countryCode || undefined);
+
+      if (!payload) {
+        return res.status(404).json({
+          success: false,
+          message: 'Role not found',
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        data: payload,
+      });
+    } catch (error) {
+      console.error('Get role market overview error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error fetching role market overview',
+        error: error.message,
       });
     }
   }

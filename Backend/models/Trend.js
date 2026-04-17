@@ -1,12 +1,80 @@
 const { supabase } = require('../config/database');
 
+const UPSERT_BATCH_SIZE = 100;
+
+function asText(value, fallback = '') {
+  const text = String(value || '').trim();
+  return text || fallback;
+}
+
+function normalizeTimestamp(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+
+  const parsed = new Date(text);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
+function uniqueValues(values) {
+  return [...new Set((Array.isArray(values) ? values : []).filter(Boolean))];
+}
+
+function chunkArray(items, size) {
+  const rows = Array.isArray(items) ? items : [];
+  const chunkSize = Math.max(1, Number(size) || UPSERT_BATCH_SIZE);
+  const chunks = [];
+
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    chunks.push(rows.slice(index, index + chunkSize));
+  }
+
+  return chunks;
+}
+
+function normalizeTrendPayload(trendData, options = {}) {
+  const sourceName = asText(trendData?.source_name || trendData?.source, 'Unknown Source');
+  const source = asText(trendData?.source || sourceName, sourceName);
+  const row = {
+    domain: asText(trendData?.domain, 'General Tech'),
+    title: asText(trendData?.title),
+    description: asText(trendData?.description) || null,
+    source,
+    source_name: sourceName,
+    source_url: asText(trendData?.source_url) || null,
+    published_at: normalizeTimestamp(trendData?.published_at),
+    scraped_at: normalizeTimestamp(options.scrapedAt || new Date().toISOString()),
+  };
+
+  const errors = [];
+  if (!row.title) {
+    errors.push('title is required');
+  }
+
+  if (options.requireSourceUrl !== false && !row.source_url) {
+    errors.push('source_url is required');
+  }
+
+  return {
+    row,
+    errors,
+  };
+}
+
 class Trend {
   // Create a new trend
   static async create(trendData) {
-    const { domain, title, description, source } = trendData;
+    const { row, errors } = normalizeTrendPayload(trendData, { requireSourceUrl: false });
+    if (errors.length > 0) {
+      throw new Error(`Invalid trend payload: ${errors.join(', ')}`);
+    }
+
     const { data, error } = await supabase
       .from('trends')
-      .insert({ domain, title, description, source })
+      .insert(row)
       .select()
       .single();
     if (error) throw error;
@@ -62,7 +130,7 @@ class Trend {
   // Update trend
   static async update(id, updates) {
     const dbUpdates = {};
-    Object.keys(updates).forEach(key => {
+    Object.keys(updates).forEach((key) => {
       if (updates[key] !== undefined) dbUpdates[key] = updates[key];
     });
     if (Object.keys(dbUpdates).length === 0) throw new Error('No fields to update');
@@ -96,7 +164,7 @@ class Trend {
       .not('domain', 'is', null)
       .order('domain', { ascending: true });
     if (error) throw error;
-    return [...new Set((data || []).map(r => r.domain))];
+    return [...new Set((data || []).map((row) => row.domain))];
   }
 
   // Get trend with related skills (via trend_skills junction)
@@ -108,13 +176,13 @@ class Trend {
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
-    // Reshape to match the original JSON structure
+
     const { trend_skills, ...trend } = data;
-    trend.skills = (trend_skills || []).map(ts => ({
-      skill_id: ts.skills?.id,
-      skill_name: ts.skills?.name,
-      skill_category: ts.skills?.category,
-      relevance_score: ts.relevance_score,
+    trend.skills = (trend_skills || []).map((row) => ({
+      skill_id: row.skills?.id,
+      skill_name: row.skills?.name,
+      skill_category: row.skills?.category,
+      relevance_score: row.relevance_score,
     }));
     return trend;
   }
@@ -134,12 +202,162 @@ class Trend {
 
   // Bulk create trends
   static async bulkCreate(trends) {
+    const rows = (Array.isArray(trends) ? trends : [])
+      .map((trend) => normalizeTrendPayload(trend, { requireSourceUrl: false }))
+      .filter((entry) => entry.errors.length === 0)
+      .map((entry) => entry.row);
+
+    if (rows.length === 0) {
+      return [];
+    }
+
     const { data, error } = await supabase
       .from('trends')
-      .insert(trends.map(t => ({ domain: t.domain, title: t.title, description: t.description, source: t.source })))
+      .insert(rows)
       .select();
     if (error) throw error;
     return data || [];
+  }
+
+  static async getExistingSourceUrlSet(sourceUrls) {
+    const uniqueSourceUrls = uniqueValues(sourceUrls);
+    if (uniqueSourceUrls.length === 0) {
+      return new Set();
+    }
+
+    const existing = new Set();
+    const chunks = chunkArray(uniqueSourceUrls, UPSERT_BATCH_SIZE);
+
+    for (const chunk of chunks) {
+      const { data, error } = await supabase
+        .from('trends')
+        .select('source_url')
+        .in('source_url', chunk);
+
+      if (error) throw error;
+
+      (data || []).forEach((row) => {
+        const sourceUrl = asText(row?.source_url);
+        if (sourceUrl) {
+          existing.add(sourceUrl);
+        }
+      });
+    }
+
+    return existing;
+  }
+
+  static async upsertTrends(items, options = {}) {
+    const scrapedAt = new Date().toISOString();
+    const normalizedByUrl = new Map();
+    const invalidRows = [];
+    const failedRows = [];
+    let duplicateInputCount = 0;
+
+    for (const item of Array.isArray(items) ? items : []) {
+      const { row, errors } = normalizeTrendPayload(item, {
+        requireSourceUrl: true,
+        scrapedAt,
+      });
+
+      if (errors.length > 0) {
+        invalidRows.push({
+          source_url: row.source_url,
+          title: row.title,
+          errors,
+        });
+        continue;
+      }
+
+      if (normalizedByUrl.has(row.source_url)) {
+        duplicateInputCount += 1;
+      }
+
+      normalizedByUrl.set(row.source_url, row);
+    }
+
+    const rows = Array.from(normalizedByUrl.values());
+    const existingSourceUrls = await Trend.getExistingSourceUrlSet(
+      rows.map((row) => row.source_url)
+    );
+
+    let insertedCount = 0;
+    let updatedCount = 0;
+
+    const persistChunk = async (chunk) => {
+      const { error } = await supabase
+        .from('trends')
+        .upsert(chunk, { onConflict: 'source_url' });
+
+      if (error) throw error;
+
+      chunk.forEach((row) => {
+        if (existingSourceUrls.has(row.source_url)) {
+          updatedCount += 1;
+        } else {
+          insertedCount += 1;
+          existingSourceUrls.add(row.source_url);
+        }
+      });
+    };
+
+    for (const chunk of chunkArray(rows, options.batchSize || UPSERT_BATCH_SIZE)) {
+      try {
+        await persistChunk(chunk);
+      } catch (error) {
+        console.warn('[TrendModel] batch upsert failed, retrying row-by-row:', error.message);
+
+        for (const row of chunk) {
+          try {
+            await persistChunk([row]);
+          } catch (rowError) {
+            failedRows.push({
+              source_url: row.source_url,
+              title: row.title,
+              message: rowError.message,
+            });
+          }
+        }
+      }
+    }
+
+    const result = {
+      success: failedRows.length === 0,
+      scrapedAt,
+      receivedCount: Array.isArray(items) ? items.length : 0,
+      deduplicatedCount: rows.length,
+      insertedCount,
+      updatedCount,
+      skippedCount: invalidRows.length + duplicateInputCount,
+      duplicateInputCount,
+      failedRowCount: failedRows.length,
+      invalidRows,
+      failedRows,
+    };
+
+    console.info('[TrendModel] upsert complete', {
+      receivedCount: result.receivedCount,
+      deduplicatedCount: result.deduplicatedCount,
+      insertedCount: result.insertedCount,
+      updatedCount: result.updatedCount,
+      skippedCount: result.skippedCount,
+      duplicateInputCount: result.duplicateInputCount,
+      failedRowCount: result.failedRowCount,
+    });
+
+    if (failedRows.length > 0) {
+      console.warn('[TrendModel] trend upsert had failed rows', {
+        failedRows: failedRows.slice(0, 10),
+      });
+    }
+
+    if (invalidRows.length > 0) {
+      console.warn('[TrendModel] trend upsert skipped invalid rows', {
+        invalidRows: invalidRows.slice(0, 10),
+      });
+    }
+
+    return result;
   }
 }
 

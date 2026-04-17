@@ -148,12 +148,119 @@ export async function deleteUserSkill(skillId: string) {
   return request<{ success: boolean; message?: string }>("DELETE", `/api/user/skills/${skillId}`);
 }
 
-export async function getTrends() {
+export type TrendCatalogItem = {
+  id: string;
+  domain?: string | null;
+  title: string;
+  description?: string | null;
+  source?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  published_at?: string | null;
+  scraped_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export async function getTrends(options?: { limit?: number; domain?: string | null }) {
+  const safeLimit = Number.isFinite(Number(options?.limit)) ? Number(options?.limit) : 100;
+  const domain = String(options?.domain || "").trim();
+  const query = [`limit=${safeLimit}`, ...(domain ? [`domain=${encodeURIComponent(domain)}`] : [])].join("&");
   const response = await request<{ success: boolean; data: Record<string, unknown>[] }>(
     "GET",
-    "/api/trends?limit=100"
+    `/api/trends?${query}`
+  );
+  return Array.isArray(response.data) ? (response.data as TrendCatalogItem[]) : [];
+}
+
+export async function getTrendDomains() {
+  const response = await request<{ success: boolean; data: string[] }>(
+    "GET",
+    "/api/trends/domains"
   );
   return Array.isArray(response.data) ? response.data : [];
+}
+
+export type CountryCatalogItem = {
+  name: string;
+  code: string;
+  currency: string;
+  flag_emoji?: string | null;
+};
+
+export type RoleMarketRow = {
+  country_code: string;
+  country_name?: string | null;
+  flag_emoji?: string | null;
+  avg_salary?: number | null;
+  currency?: string | null;
+  salary_source_name?: string | null;
+  salary_source_url?: string | null;
+  salary_collected_at?: string | null;
+  job_count?: number | null;
+  demand_source_name?: string | null;
+  demand_collected_at?: string | null;
+  source_name?: string | null;
+  source_url?: string | null;
+  collected_at?: string | null;
+};
+
+export type RoleCatalogItem = {
+  slug: string;
+  name: string;
+  description?: string | null;
+  market?: RoleMarketRow | null;
+};
+
+export type RoleMarketDetailResponse = {
+  role: {
+    slug: string;
+    name: string;
+    description?: string | null;
+  };
+  selected_country?: CountryCatalogItem | null;
+  market?: RoleMarketRow | null;
+  available_markets: RoleMarketRow[];
+};
+
+export async function getCountriesCatalog() {
+  const response = await request<{ success: boolean; data: CountryCatalogItem[] }>(
+    "GET",
+    "/api/user/countries"
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function getRolesCatalog(options?: {
+  countryCode?: string | null;
+  search?: string | null;
+  limit?: number;
+}) {
+  const safeLimit = Number.isFinite(Number(options?.limit)) ? Number(options?.limit) : 250;
+  const countryCode = String(options?.countryCode || "").trim().toUpperCase();
+  const search = String(options?.search || "").trim();
+  const query = [
+    `limit=${safeLimit}`,
+    ...(countryCode ? [`country=${encodeURIComponent(countryCode)}`] : []),
+    ...(search ? [`search=${encodeURIComponent(search)}`] : []),
+  ].join("&");
+
+  const response = await request<{ success: boolean; data: RoleCatalogItem[] }>(
+    "GET",
+    `/api/user/roles?${query}`
+  );
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function getRoleMarketDetail(slug: string, options?: { countryCode?: string | null }) {
+  const countryCode = String(options?.countryCode || "").trim().toUpperCase();
+  const query = countryCode ? `?country=${encodeURIComponent(countryCode)}` : "";
+
+  const response = await request<{ success: boolean; data: RoleMarketDetailResponse }>(
+    "GET",
+    `/api/user/roles/${encodeURIComponent(slug)}/market${query}`
+  );
+  return response.data;
 }
 
 export type MarketTrendRow = {
