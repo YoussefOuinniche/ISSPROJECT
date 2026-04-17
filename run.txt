@@ -1,2 +1,0 @@
-cd "c:\Users\user\Downloads\ISSPROJECT-master (3)\ISSPROJECT-master\Skill-Pulse-1\artifacts\mobile"
-pnpm run start
