@@ -2,8 +2,10 @@ import { router, Tabs } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { Feather } from "@expo/vector-icons";
 import React, { useEffect } from "react";
-import { Platform, Pressable, StyleSheet } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { useGetCurrentUser } from "@workspace/api-client-react";
+import { LinearGradient } from "expo-linear-gradient";
+import Colors from "@/constants/colors";
 
 function ClassicTabLayout() {
   const isIOS = Platform.OS === "ios";
@@ -15,21 +17,33 @@ function ClassicTabLayout() {
         headerShown: false,
         tabBarActiveTintColor: "#FFFFFF",
         tabBarInactiveTintColor: "#333333",
-        tabBarActiveBackgroundColor: "#111111",
+        tabBarActiveBackgroundColor: Colors.gradientAccentTertiary[0],
         tabBarHideOnKeyboard: true,
         tabBarButton: (props) => {
           const { style, ...pressableProps } = props as any;
+          const flatStyle = StyleSheet.flatten(style);
+          const isActive = !!flatStyle?.backgroundColor && flatStyle.backgroundColor !== "transparent";
 
           return (
-            <Pressable
-              {...pressableProps}
-              android_ripple={{ color: "rgba(17,17,17,0.08)", borderless: false }}
-              style={({ pressed }) => [
-                style,
-                styles.tabButton,
-                pressed && styles.tabButtonPressed,
-              ]}
-            />
+            <View style={[style, { borderRadius: 10, overflow: "hidden" }]}>
+              {isActive && (
+                <LinearGradient
+                  colors={Colors.gradientAccentTertiary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFillObject}
+                  pointerEvents="none"
+                />
+              )}
+              <Pressable
+                {...pressableProps}
+                android_ripple={{ color: "rgba(255,255,255,0.12)", borderless: false }}
+                style={({ pressed }) => [
+                  { flex: 1 },
+                  pressed && styles.tabButtonPressed,
+                ]}
+              />
+            </View>
           );
         },
         tabBarStyle: {
@@ -147,11 +161,10 @@ export default function TabLayout() {
 
 const styles = StyleSheet.create({
   tabButton: {
-    borderRadius: 14,
+    borderRadius: 10,
     overflow: "hidden",
   },
   tabButtonPressed: {
-    opacity: 0.92,
+    opacity: 0.85,
   },
 });
-

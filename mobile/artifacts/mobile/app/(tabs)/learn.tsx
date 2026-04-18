@@ -12,6 +12,7 @@ import {
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { Badge } from "@/components/ui/Badge";
@@ -123,7 +124,7 @@ export default function LearnScreen() {
             <View style={styles.roleFooter}>
               <Text style={styles.marketNote}>{role.marketNote}</Text>
               <Pressable
-                style={styles.openButton}
+                style={[styles.openButton, { overflow: "hidden" }]}
                 onPress={() =>
                   router.push({
                     pathname: "/learn/[id]",
@@ -134,8 +135,14 @@ export default function LearnScreen() {
                   })
                 }
               >
-                <Text style={styles.openButtonText}>Open Roadmap</Text>
-                <Feather name="arrow-right" size={14} color={Colors.background} />
+                <LinearGradient
+                  colors={Colors.gradientAccentTertiary}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Text style={[styles.openButtonText, { zIndex: 1 }]}>Open Roadmap</Text>
+                <Feather name="arrow-right" size={14} color={Colors.background} style={{ zIndex: 1 }} />
               </Pressable>
             </View>
           </GlassCard>

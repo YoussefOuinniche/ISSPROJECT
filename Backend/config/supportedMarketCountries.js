@@ -5,9 +5,10 @@ const SUPPORTED_MARKET_COUNTRY_CODES = Object.freeze([
   'DE',
   'FR',
   'NL',
-  'AU',
+  'CH',
+  'ES',
+  'IT',
   'SG',
-  'IN',
   'AE',
 ]);
 

@@ -1,5 +1,6 @@
 import React from "react";
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 import Colors from "@/constants/colors";
 import { AppRadius, AppSpacing, AppType } from "@/constants/theme";
@@ -16,14 +17,14 @@ type AppButtonProps = {
 
 const VARIANT_STYLES = {
   primary: {
-    backgroundColor: Colors.textPrimary,
-    borderColor: Colors.textPrimary,
-    textColor: Colors.textInverse,
+    backgroundColor: Colors.accentTertiary,
+    borderColor: Colors.accentTertiary,
+    textColor: Colors.background,
   },
   accent: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-    textColor: Colors.textInverse,
+    backgroundColor: Colors.accentTertiary,
+    borderColor: Colors.accentTertiary,
+    textColor: Colors.background,
   },
   secondary: {
     backgroundColor: Colors.background,
@@ -47,6 +48,7 @@ export function AppButton({
   style,
 }: AppButtonProps) {
   const variantStyle = VARIANT_STYLES[variant];
+  const isGradient = variant === "primary" || variant === "accent";
 
   return (
     <Pressable
@@ -54,17 +56,30 @@ export function AppButton({
       onPress={onPress}
       style={({ pressed }) => [
         styles.base,
-        {
+        !isGradient && {
           backgroundColor: variantStyle.backgroundColor,
           borderColor: variantStyle.borderColor,
-          opacity: disabled ? 0.45 : pressed ? 0.88 : 1,
         },
+        isGradient && {
+          borderColor: "transparent",
+          backgroundColor: "transparent",
+        },
+        { opacity: disabled ? 0.45 : pressed ? 0.88 : 1 },
         variant === "ghost" && styles.ghost,
         style,
+        { overflow: "hidden" }
       ]}
     >
+      {isGradient && (
+        <LinearGradient
+          colors={Colors.gradientAccentTertiary}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       {leading ? <View style={styles.iconWrap}>{leading}</View> : null}
-      <Text style={[styles.label, { color: variantStyle.textColor }]}>{label}</Text>
+      <Text style={[styles.label, { color: variantStyle.textColor, zIndex: 1 }]}>{label}</Text>
       {trailing ? <View style={styles.iconWrap}>{trailing}</View> : null}
     </Pressable>
   );

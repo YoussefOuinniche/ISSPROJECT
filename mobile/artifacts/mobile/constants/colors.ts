@@ -1,10 +1,10 @@
-﻿const Colors = {
+const Colors = {
   primary: "#111827",
   primaryDark: "#000000",
   primaryLight: "#F3F4F6",
   accent: "#2563EB",
   accentLight: "#DBEAFE",
-  accentTertiary: "#1E3A8A",
+  accentTertiary: "#162A6B",
   accentTertiaryLight: "#E0E7FF",
   success: "#059669",
   successLight: "#D1FAE5",
@@ -31,6 +31,7 @@
   gradientWarm: ["#D97706", "#B45309"] as [string, string],
   gradientDark: ["#111827", "#000000"] as [string, string],
   gradientCard: ["#FFFFFF", "#F9FAFB"] as [string, string],
+  gradientAccentTertiary: ["#1E3A8A", "#0A1633"] as [string, string],
 
   tint: "#2563EB",
   tabIconDefault: "#9CA3AF",

@@ -1071,13 +1071,32 @@ class UserController {
     }
   }
 
-  // Return AI chat advice immediately and trigger profile extraction asynchronously.
+  static async getChatSessions(req, res) {
+    try {
+      const sessions = await ChatHistory.getSessions(req.user.id);
+      res.status(200).json({ success: true, data: sessions });
+    } catch (error) {
+      console.error('Get chat sessions error:', error);
+      res.status(500).json({ success: false, message: 'Failed to retrieve sessions' });
+    }
+  }
+
   static async chatWithAi(req, res) {
     try {
       const userId = req.user.id;
       const message = String(req.body?.message || '').trim();
+      let sessionId = String(req.body?.sessionId || '').trim() || null;
 
-      const result = await requestAiChat(userId, message);
+      if (!sessionId) {
+        let title = message.length > 35 ? message.substring(0, 32) + '...' : message;
+        if (!title) title = 'New Conversation';
+        const newSession = await ChatHistory.createSession(userId, title);
+        if (newSession && newSession.id) {
+          sessionId = newSession.id;
+        }
+      }
+
+      const result = await requestAiChat(userId, message, sessionId);
       if (!result.degraded) {
         triggerAiProfileExtraction(userId, message);
       }
@@ -1085,6 +1104,7 @@ class UserController {
       const payload = {
         response: result.response,
         message_id: result.messageId,
+        session_id: sessionId,
         conversation_summary: result.conversationSummary,
       };
 
@@ -1100,21 +1120,15 @@ class UserController {
         success: true,
         response: 'The AI assistant is temporarily unavailable. Please try again in a moment.',
         message_id: null,
-        conversation_summary: {
-          skills_mentioned: [],
-          goals_mentioned: [],
-        },
+        session_id: null,
+        conversation_summary: { skills_mentioned: [], goals_mentioned: [] },
         data: {
           response: 'The AI assistant is temporarily unavailable. Please try again in a moment.',
           message_id: null,
-          conversation_summary: {
-            skills_mentioned: [],
-            goals_mentioned: [],
-          },
+          session_id: null,
+          conversation_summary: { skills_mentioned: [], goals_mentioned: [] },
         },
-        meta: {
-          degraded: true,
-        },
+        meta: { degraded: true },
       });
     }
   }
@@ -1122,12 +1136,18 @@ class UserController {
   static async getAiHistory(req, res) {
     try {
       const userId = req.user.id;
-      const requestedLimit = Number(req.query?.limit);
-      const limit = Number.isFinite(requestedLimit)
-        ? Math.max(1, Math.min(200, requestedLimit))
-        : 100;
+      const sessionId = req.query?.sessionId ? String(req.query.sessionId).trim() : null;
 
-      const messages = await ChatHistory.findByUserId(userId, limit);
+      let messages = [];
+      if (sessionId) {
+        messages = await ChatHistory.findSessionMessages(sessionId, userId, 100);
+      } else {
+        const requestedLimit = Number(req.query?.limit);
+        const limit = Number.isFinite(requestedLimit)
+          ? Math.max(1, Math.min(200, requestedLimit))
+          : 100;
+        messages = await ChatHistory.findByUserId(userId, limit);
+      }
 
       res.status(200).json({
         success: true,

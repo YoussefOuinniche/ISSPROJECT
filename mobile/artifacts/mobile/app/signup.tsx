@@ -11,6 +11,7 @@ import { AuthBackground } from "@/components/AuthBackground";
 import { MotionPressable } from "@/components/MotionPressable";
 import Colors from "@/constants/colors";
 import { storeMobileAccessToken } from "@/lib/api/runtime";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function SignupScreen() {
   const navigation = useNavigation();
@@ -135,11 +136,17 @@ export default function SignupScreen() {
           />
 
           <MotionPressable
-            containerStyle={[styles.cta, registerMutation.isPending && styles.ctaDisabled]}
+            containerStyle={[styles.cta, registerMutation.isPending && styles.ctaDisabled, { overflow: "hidden" }]}
             onPress={submitSignup}
             disabled={registerMutation.isPending}
           >
-            <Text style={styles.ctaText}>{registerMutation.isPending ? "Creating Account..." : "Create Account"}</Text>
+            <LinearGradient
+              colors={Colors.gradientAccentTertiary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <Text style={[styles.ctaText, { zIndex: 1 }]}>{registerMutation.isPending ? "Creating Account..." : "Create Account"}</Text>
           </MotionPressable>
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -230,7 +237,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     height: 52,
     borderRadius: 16,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.accentTertiary,
     alignItems: "center",
     justifyContent: "center",
   },

@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { LinearGradient } from "expo-linear-gradient";
 import { AnimatedCounter } from "@/components/AnimatedCounter";
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { MotionPressable } from "@/components/MotionPressable";
@@ -31,17 +31,6 @@ import {
   useGetUserDashboard,
   useLogoutAuth,
 } from "@workspace/api-client-react";
-
-type ManagementModule = {
-  id: string;
-  icon: string;
-  title: string;
-  description: string;
-  metric: string;
-  tone: string;
-  actionLabel: string;
-  onPress: () => void;
-};
 
 function MenuItem({
   icon,
@@ -70,22 +59,13 @@ function MenuItem({
   );
 }
 
-function ManagementCard({ module }: { module: ManagementModule }) {
+function InfoRow({ label, value, icon }: { label: string; value: string; icon?: string }) {
   return (
-    <GlassCard style={styles.managementCard} padding={16} radius={18}>
-      <View style={styles.managementCardTopRow}>
-        <View style={[styles.managementIcon, { backgroundColor: `${module.tone}22` }]}>
-          <Feather name={module.icon as never} size={18} color={module.tone} />
-        </View>
-        <Text style={styles.managementMetric}>{module.metric}</Text>
-      </View>
-      <Text style={styles.managementTitle}>{module.title}</Text>
-      <Text style={styles.managementDescription}>{module.description}</Text>
-      <Pressable style={styles.managementAction} onPress={module.onPress}>
-        <Text style={styles.managementActionText}>{module.actionLabel}</Text>
-        <Feather name="arrow-up-right" size={15} color={Colors.accentTertiary} />
-      </Pressable>
-    </GlassCard>
+    <View style={styles.infoRow}>
+      {icon && <Feather name={icon as never} size={14} color={Colors.textTertiary} style={styles.infoRowIcon} />}
+      <Text style={styles.infoLabel}>{label}</Text>
+      <Text style={styles.infoValue} numberOfLines={1}>{value}</Text>
+    </View>
   );
 }
 
@@ -125,7 +105,17 @@ export default function ProfileScreen() {
   const title = String(profile.title ?? "Career Builder");
   const company = String(profile.domain ?? "NexaPath");
   const email = String(currentUser.email ?? "No email available");
-  const joined = String(currentUser.created_at ?? "Recently").slice(0, 10);
+  
+  // Format joined date beautifully
+  const rawJoinDate = String(currentUser.created_at || new Date().toISOString());
+  const joinDateObj = new Date(rawJoinDate);
+  const joined = !isNaN(joinDateObj.getTime()) 
+    ? joinDateObj.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : "Recently";
+
+  // Bio or fallback intro
+  const bio = String(profile.bio || "No bio added yet. Tell us about your journey.");
+  const experienceLevel = String(profile.experience_level || "Not specified").replace("_", " ");
 
   const initials = fullName
     .split(" ")
@@ -158,68 +148,20 @@ export default function ProfileScreen() {
         })
     : [];
 
-  const gapStats =
-    dashboard.gapStatistics && typeof dashboard.gapStatistics === "object"
-      ? (dashboard.gapStatistics as Record<string, unknown>)
-      : {};
-
   const skillScore = computeProfileCompleteness(profile, skills);
-  const highPriority = typeof gapStats.high_priority_count === "number" ? gapStats.high_priority_count : 0;
-  const aiTopSkills = Array.isArray(aiProfile?.skills) ? aiProfile.skills.slice(0, 3) : [];
+  
+  // AI Derived goals
   const aiTopGoal =
     aiSummary?.top_goal ||
-    (Array.isArray(aiProfile?.goals) && aiProfile.goals.length > 0 ? aiProfile.goals[0] : null);
-  const aiHint =
-    aiSummary?.profile_completion_hint ||
-    "Use AI chat to sharpen your profile and keep recommendations relevant.";
+    String(profile.explicit_target_role || "") ||
+    (Array.isArray(aiProfile?.goals) && aiProfile.goals.length > 0 ? aiProfile.goals[0] : "Set your target role");
+  
+  const aiTopSkills = Array.isArray(aiProfile?.skills) ? aiProfile.skills.slice(0, 4) : [];
 
-  const isWide = width >= 980;
   const isTablet = width >= 760;
+  const isWide = width >= 980;
   const horizontalPadding = width >= 1200 ? 34 : width >= 980 ? 28 : 20;
   const topPadding = Platform.OS === "web" ? insets.top + 54 : insets.top + 10;
-
-  const managementModules: ManagementModule[] = [
-    {
-      id: "identity",
-      icon: "user",
-      title: "Identity",
-      description: "Update your public profile details and account basics.",
-      metric: "Core",
-      tone: Colors.accentTertiary,
-      actionLabel: "Edit profile",
-      onPress: () => router.push("/settings"),
-    },
-    {
-      id: "skills",
-      icon: "target",
-      title: "Skills",
-      description: "Track strengths, close gaps, and keep your profile current.",
-      metric: `${skills.length} tracked`,
-      tone: Colors.primary,
-      actionLabel: "Manage skills",
-      onPress: () => router.push("/(tabs)/skills"),
-    },
-    {
-      id: "assistant",
-      icon: "cpu",
-      title: "AI Assistant",
-      description: "Use NexaPath AI to enrich your profile and action plan.",
-      metric: aiTopGoal ? "Goal set" : "No goal",
-      tone: Colors.accentTertiary,
-      actionLabel: "Open assistant",
-      onPress: () => router.push("/ai-assistant"),
-    },
-    {
-      id: "privacy",
-      icon: "shield",
-      title: "Security",
-      description: "Control privacy settings, session access, and safeguards.",
-      metric: "Protected",
-      tone: Colors.success,
-      actionLabel: "Privacy settings",
-      onPress: () => router.push("/settings"),
-    },
-  ];
 
   const onSignOut = async () => {
     try {
@@ -256,220 +198,178 @@ export default function ProfileScreen() {
             />
           </View>
           <View style={styles.headerTitleWrap} pointerEvents="none">
-            <Text style={styles.screenTitle}>Profile</Text>
+            <Text style={styles.screenTitle}>My Profile</Text>
           </View>
           <Pressable style={styles.settingsBtn} onPress={() => router.push("/settings")}>
             <Feather name="settings" size={20} color={Colors.textSecondary} />
           </Pressable>
         </AnimatedSection>
 
+        {/* SECTION A: Identity Header */}
         <AnimatedSection delay={40}>
-          <GlassCard style={styles.heroCard} padding={isTablet ? 22 : 18} radius={24}>
-            <View style={[styles.heroContent, isTablet && styles.heroContentWide]}>
+          <GlassCard style={styles.heroCard} padding={isTablet ? 24 : 20} radius={24}>
+            <View style={styles.heroTopRow}>
               <View style={styles.avatarWrap}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>{initials || "NP"}</Text>
                 </View>
                 <View style={styles.statusDot} />
               </View>
+              
+              <MotionPressable
+                onPress={() => router.push("/settings")}
+                containerStyle={styles.editBtn}
+              >
+                <Feather name="edit-3" size={14} color={Colors.textPrimary} />
+                <Text style={styles.editBtnText}>Edit</Text>
+              </MotionPressable>
+            </View>
 
-              <View style={styles.heroInfo}>
-                <Text style={styles.heroName}>{fullName}</Text>
-                <Text style={styles.heroTitle}>{title}</Text>
-                <Text style={styles.heroMeta}>{company}</Text>
-                <View style={styles.heroBadgeRow}>
-                  <Badge label={`Joined ${joined}`} variant="neutral" size="sm" />
-                  <Badge label={`${skills.length} skills`} variant="primary" size="sm" />
-                </View>
+            <View style={styles.heroInfo}>
+              <Text style={styles.heroName}>{fullName}</Text>
+              <Text style={styles.heroTitle}>{title}</Text>
+              
+              <View style={styles.heroBadgeRow}>
+                <Badge label={company} variant="neutral" size="sm" />
+                <Badge label={`${skills.length} Skills Logged`} variant="primary" size="sm" />
               </View>
 
-              <View style={[styles.heroActions, isTablet && styles.heroActionsWide]}>
-                <MotionPressable
-                  onPress={() => router.push("/settings")}
-                  containerStyle={styles.primaryActionBtn}
-                >
-                  <Feather name="edit-3" size={14} color={Colors.background} />
-                  <Text style={styles.primaryActionText}>Manage</Text>
-                </MotionPressable>
-                <MotionPressable
-                  onPress={() => router.push("/ai-assistant")}
-                  containerStyle={styles.secondaryActionBtn}
-                >
-                  <Feather name="cpu" size={14} color={Colors.textPrimary} />
-                  <Text style={styles.secondaryActionText}>NexaPath AI</Text>
-                </MotionPressable>
-              </View>
+              <Text style={styles.heroBio}>{bio}</Text>
             </View>
           </GlassCard>
         </AnimatedSection>
 
-        <AnimatedSection delay={70} style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Profile Management</Text>
-          <Text style={styles.sectionMeta}>{isWide ? "Responsive" : "Mobile-first"}</Text>
-        </AnimatedSection>
-
-        <View style={[styles.managementGrid, isWide && styles.managementGridWide]}>
-          {managementModules.map((module, index) => (
-            <AnimatedSection
-              key={module.id}
-              delay={90 + index * 35}
-              style={[styles.managementCell, isWide && styles.managementCellWide]}
-            >
-              <ManagementCard module={module} />
-            </AnimatedSection>
-          ))}
-        </View>
-
-        <AnimatedSection delay={230}>
-          <GlassCard style={styles.managementSystemCard} padding={18} radius={20}>
-            <Text style={styles.cardTitle}>Profile Management System</Text>
-            <View style={styles.systemRow}>
-              <Text style={styles.systemLabel}>Full name</Text>
-              <Text style={styles.systemValue}>{fullName}</Text>
-            </View>
-            <View style={styles.systemDivider} />
-            <View style={styles.systemRow}>
-              <Text style={styles.systemLabel}>Email</Text>
-              <Text style={styles.systemValue}>{email}</Text>
-            </View>
-            <View style={styles.systemDivider} />
-            <View style={styles.systemRow}>
-              <Text style={styles.systemLabel}>Current role</Text>
-              <Text style={styles.systemValue}>{title}</Text>
-            </View>
-            <View style={styles.systemDivider} />
-            <View style={styles.systemRow}>
-              <Text style={styles.systemLabel}>Organization</Text>
-              <Text style={styles.systemValue}>{company}</Text>
-            </View>
-            <MotionPressable containerStyle={styles.systemActionBtn} onPress={() => router.push("/settings")}>
-              <Feather name="sliders" size={14} color={Colors.background} />
-              <Text style={styles.systemActionText}>Open full profile settings</Text>
-            </MotionPressable>
+        {/* SECTION B: Main Information */}
+        <AnimatedSection delay={80}>
+          <Text style={styles.sectionTitle}>Overview</Text>
+          <GlassCard style={styles.infoCard} padding={16} radius={20}>
+            <InfoRow icon="mail" label="Email Address" value={email} />
+            <View style={styles.divider} />
+            <InfoRow icon="briefcase" label="Experience" value={experienceLevel.charAt(0).toUpperCase() + experienceLevel.slice(1)} />
+            <View style={styles.divider} />
+            <InfoRow icon="calendar" label="Member Since" value={joined} />
+            <View style={styles.divider} />
+            <InfoRow icon="target" label="Target Goal" value={aiTopGoal} />
           </GlassCard>
         </AnimatedSection>
 
-        <View style={[styles.analyticsGrid, isWide && styles.analyticsGridWide]}>
-          <AnimatedSection delay={260} style={[styles.analyticsCell, isWide && styles.analyticsCellWide]}>
-            <GlassCard style={styles.scoreCard} padding={20} radius={20}>
-              <Text style={styles.cardTitle}>Skill Score</Text>
-              <View style={styles.scoreRow}>
+        <View style={[styles.gridContainer, isWide && styles.gridWide]}>
+          {/* SECTION D: Stats / Activity */}
+          <AnimatedSection delay={120} style={[styles.gridCell, isWide && styles.gridCellWide]}>
+            <Text style={styles.sectionTitle}>Activity Score</Text>
+            <GlassCard style={styles.statsCard} padding={20} radius={20}>
+              <View style={styles.scoreLayout}>
                 <ScoreRing
                   score={skillScore}
-                  size={104}
+                  size={96}
                   strokeWidth={8}
                   primaryColor={Colors.accentTertiary}
                   trackColor={Colors.backgroundSecondary}
                   label="SCORE"
                 />
-                <View style={styles.scoreStats}>
-                  <View style={styles.scoreItem}>
-                    <Text style={styles.scoreValue}>Top 18%</Text>
-                    <Text style={styles.scoreLabel}>field ranking</Text>
-                  </View>
-                  <View style={styles.scoreDivider} />
-                  <View style={styles.scoreItem}>
+                <View style={styles.statsDetails}>
+                  <Text style={styles.statsHeading}>Profile Strength</Text>
+                  <Text style={styles.statsDesc}>
+                    Keep adding skills and running AI evaluations to boost your ranking.
+                  </Text>
+                  <View style={styles.statsMetricRow}>
+                    <Feather name="trending-up" size={14} color={Colors.success} />
                     <AnimatedCounter
                       value={Math.max(1, Math.round(skillScore / 18))}
                       prefix="+"
-                      style={[styles.scoreValue, { color: Colors.success }]}
+                      style={styles.statsMetricValue}
                     />
-                    <Text style={styles.scoreLabel}>weekly gain</Text>
+                    <Text style={styles.statsMetricLabel}>pts this week</Text>
                   </View>
                 </View>
               </View>
             </GlassCard>
           </AnimatedSection>
 
-          <AnimatedSection delay={290} style={[styles.analyticsCell, isWide && styles.analyticsCellWide]}>
-            <GlassCard style={styles.skillsCard} padding={20} radius={20}>
-              <View style={styles.skillsCardHeader}>
-                <Text style={styles.cardTitle}>Top Skills</Text>
-                <Pressable onPress={() => router.push("/(tabs)/skills")}>
-                  <Text style={styles.seeAll}>View all</Text>
-                </Pressable>
-              </View>
+          {/* SECTION C: Skills / Interests */}
+          <AnimatedSection delay={160} style={[styles.gridCell, isWide && styles.gridCellWide]}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitle}>Top Skills</Text>
+              <Pressable onPress={() => router.push("/(tabs)/skills")}>
+                <Text style={styles.actionText}>Manage</Text>
+              </Pressable>
+            </View>
+            <GlassCard style={styles.skillsCard} padding={16} radius={20}>
               {skills.length > 0 ? (
-                skills.slice(0, 4).map((skill, index) => (
-                  <View key={skill.id} style={[styles.skillRow, index > 0 && styles.skillRowBorder]}>
-                    <SkillBar
-                      label={skill.name}
-                      current={skill.level}
-                      color={
-                        skill.level >= 80
-                          ? Colors.success
-                          : skill.level >= 60
-                          ? Colors.accentTertiary
-                          : Colors.warning
-                      }
-                      height={6}
-                    />
+                <>
+                  <View style={styles.skillsList}>
+                    {skills.slice(0, 4).map((skill, index) => (
+                      <View key={skill.id} style={[styles.skillItem, index > 0 && styles.skillItemBorder]}>
+                        <SkillBar
+                          label={skill.name}
+                          current={skill.level}
+                          color={
+                            skill.level >= 80
+                              ? Colors.success
+                              : skill.level >= 60
+                              ? Colors.primary
+                              : Colors.accentTertiary
+                          }
+                          height={6}
+                        />
+                      </View>
+                    ))}
                   </View>
-                ))
+                  
+                  {aiTopSkills.length > 0 && (
+                    <View style={styles.aiRecommendedContainer}>
+                      <Text style={styles.aiRecommendedLabel}>
+                        <Feather name="cpu" size={12} color={Colors.accentTertiary} /> AI Focus Areas
+                      </Text>
+                      <View style={styles.aiTagRow}>
+                        {aiTopSkills.map((st) => (
+                          <Badge key={st.skill_name} label={st.skill_name} variant="neutral" size="sm" />
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </>
               ) : (
-                <Text style={styles.emptyText}>No skills yet. Add skills to activate smart recommendations.</Text>
+                <View style={styles.emptyState}>
+                  <Feather name="target" size={32} color={Colors.border} />
+                  <Text style={styles.emptyText}>No skills tracked yet.</Text>
+                  <MotionPressable containerStyle={[styles.emptyBtn, { overflow: "hidden" }]} onPress={() => router.push("/(tabs)/skills")}>
+                    <LinearGradient
+                      colors={Colors.gradientAccentTertiary}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <Text style={[styles.emptyBtnText, { zIndex: 1 }]}>Add Skills</Text>
+                  </MotionPressable>
+                </View>
               )}
             </GlassCard>
           </AnimatedSection>
         </View>
 
-        <AnimatedSection delay={320}>
-          <GlassCard style={styles.aiCard} padding={18} radius={20}>
-            <View style={styles.aiCardHeader}>
-              <Text style={styles.cardTitle}>AI Insights</Text>
-              <Feather name="cpu" size={18} color={Colors.accentTertiary} />
-            </View>
-            {aiTopGoal ? (
-              <View style={styles.aiBlock}>
-                <Text style={styles.aiLabel}>Top goal</Text>
-                <Text style={styles.aiValue}>{aiTopGoal}</Text>
-              </View>
-            ) : null}
-            {aiTopSkills.length > 0 ? (
-              <View style={styles.aiBlock}>
-                <Text style={styles.aiLabel}>Top skills</Text>
-                <View style={styles.aiSkillChips}>
-                  {aiTopSkills.map((skill) => (
-                    <Badge key={skill.skill_name} label={skill.skill_name} variant="primary" size="sm" />
-                  ))}
-                </View>
-              </View>
-            ) : null}
-            <Text style={styles.aiHint}>{aiHint}</Text>
-          </GlassCard>
-        </AnimatedSection>
-
-        <AnimatedSection delay={350}>
-          <Text style={styles.sectionTitle}>Account</Text>
-        </AnimatedSection>
-
-        <AnimatedSection delay={380}>
+        {/* SECTION E: Settings / Actions */}
+        <AnimatedSection delay={200}>
+          <Text style={styles.sectionTitle}>Account & Settings</Text>
           <GlassCard style={styles.menuCard} padding={4} radius={20}>
             <MenuItem
-              icon="user"
-              label="Edit Profile"
-              sublabel="Update your details and preferences"
-              color={Colors.accentTertiary}
+              icon="sliders"
+              label="Preferences"
+              sublabel="App settings and notifications"
+              color={Colors.primary}
               onPress={() => router.push("/settings")}
             />
             <MenuItem
               icon="star"
-              label="Recommendations"
-              sublabel="Open your latest AI guidance"
-              color={Colors.primary}
+              label="Saved Recommendations"
+              sublabel="View your past AI insights"
+              color={Colors.warning}
               onPress={() => router.push("/recommendations")}
             />
             <MenuItem
-              icon="cpu"
-              label="NexaPath AI"
-              sublabel="Chat with your profile context"
-              color={Colors.accentTertiary}
-              onPress={() => router.push("/ai-assistant")}
-            />
-            <MenuItem
               icon="shield"
-              label="Privacy"
-              sublabel="Manage security and sessions"
+              label="Privacy & Security"
+              sublabel="Manage sessions and tokens"
               color={Colors.success}
               onPress={() => router.push("/settings")}
             />
@@ -483,10 +383,10 @@ export default function ProfileScreen() {
           </GlassCard>
         </AnimatedSection>
 
-        <AnimatedSection delay={410}>
+        <AnimatedSection delay={240}>
           <MotionPressable containerStyle={styles.refreshBtn} onPress={() => refetch()}>
             <Feather name="refresh-cw" size={16} color={Colors.textSecondary} />
-            <Text style={styles.refreshBtnText}>Refresh profile data</Text>
+            <Text style={styles.refreshBtnText}>Synchronize Data</Text>
           </MotionPressable>
         </AnimatedSection>
       </ScrollView>
@@ -504,7 +404,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    gap: 14,
+    gap: 20, // Increased gap for better separation of sections
   },
   header: {
     minHeight: 46,
@@ -545,345 +445,262 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.border,
   },
-  heroCard: {
-    marginBottom: 2,
-  },
-  heroContent: {
-    gap: 14,
-  },
-  heroContentWide: {
+  
+  // SECTION TITLE
+  sectionHeaderRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: -4,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: Colors.textPrimary,
+    marginBottom: 2,
+    marginLeft: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  actionText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.accentTertiary,
+    marginRight: 4,
+  },
+
+  // HERO CARD
+  heroCard: {
+    marginTop: 4,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
   },
   avatarWrap: {
     position: "relative",
-    alignSelf: "flex-start",
   },
   avatar: {
-    width: 76,
-    height: 76,
-    borderRadius: 24,
+    width: 82,
+    height: 82,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.accentTertiary,
   },
   avatarText: {
-    fontSize: 26,
+    fontSize: 28,
     fontFamily: "Inter_700Bold",
     color: Colors.background,
   },
   statusDot: {
     position: "absolute",
-    right: -1,
-    bottom: -1,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 2,
+    right: -2,
+    bottom: -2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 3,
     borderColor: Colors.surface,
     backgroundColor: Colors.success,
   },
+  editBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: Colors.background,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  editBtnText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+    color: Colors.textPrimary,
+  },
   heroInfo: {
-    flex: 1,
-    gap: 2,
+    gap: 4,
   },
   heroName: {
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 26,
+    lineHeight: 32,
     fontFamily: "Inter_700Bold",
     color: Colors.textPrimary,
   },
   heroTitle: {
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: "Newsreader_500Medium",
     color: Colors.textSecondary,
-  },
-  heroMeta: {
-    fontSize: 12,
-    fontFamily: "Newsreader_400Regular",
-    color: Colors.textTertiary,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   heroBadgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginTop: 2,
+    marginBottom: 12,
   },
-  heroActions: {
-    flexDirection: "row",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  heroActionsWide: {
-    maxWidth: 300,
-    justifyContent: "flex-end",
-  },
-  primaryActionBtn: {
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.accentTertiary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  primaryActionText: {
-    color: Colors.background,
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-  },
-  secondaryActionBtn: {
-    height: 40,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-  },
-  secondaryActionText: {
-    color: Colors.textPrimary,
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  sectionHeader: {
-    marginTop: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    color: Colors.textPrimary,
-  },
-  sectionMeta: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.accentTertiary,
-  },
-  managementGrid: {
-    gap: 10,
-  },
-  managementGridWide: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-  },
-  managementCell: {
-    width: "100%",
-  },
-  managementCellWide: {
-    width: "49%",
-  },
-  managementCard: {
-    minHeight: 168,
-  },
-  managementCardTopRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  managementIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  managementMetric: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  managementTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    color: Colors.textPrimary,
-    marginBottom: 6,
-  },
-  managementDescription: {
-    fontSize: 13,
-    lineHeight: 18,
+  heroBio: {
+    fontSize: 14,
+    lineHeight: 22,
     fontFamily: "Newsreader_400Regular",
     color: Colors.textSecondary,
-    marginBottom: 14,
   },
-  managementAction: {
+
+  // INFO CARD
+  infoCard: {
+    gap: 0,
+  },
+  infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    paddingVertical: 2,
+    paddingVertical: 12,
   },
-  managementActionText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.accentTertiary,
+  infoRowIcon: {
+    marginRight: 10,
   },
-  managementSystemCard: {
-    gap: 8,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontFamily: "Inter_700Bold",
-    color: Colors.textPrimary,
-    marginBottom: 2,
-  },
-  systemRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingVertical: 6,
-  },
-  systemLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.textTertiary,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  systemValue: {
+  infoLabel: {
     flex: 1,
-    textAlign: "right",
     fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    color: Colors.textSecondary,
+  },
+  infoValue: {
+    flex: 1.5,
+    textAlign: "right",
+    fontSize: 14,
     fontFamily: "Newsreader_500Medium",
     color: Colors.textPrimary,
   },
-  systemDivider: {
+  divider: {
     height: 1,
-    backgroundColor: Colors.border,
+    backgroundColor: Colors.borderLight,
   },
-  systemActionBtn: {
-    marginTop: 8,
-    height: 42,
-    borderRadius: 20,
-    backgroundColor: Colors.accentTertiary,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
+
+  // GRID FOR STATS/SKILLS
+  gridContainer: {
+    gap: 20,
   },
-  systemActionText: {
-    color: Colors.background,
-    fontSize: 13,
-    fontFamily: "Inter_700Bold",
-  },
-  analyticsGrid: {
-    gap: 10,
-  },
-  analyticsGridWide: {
+  gridWide: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  analyticsCell: {
+  gridCell: {
     width: "100%",
   },
-  analyticsCellWide: {
-    width: "49%",
+  gridCellWide: {
+    width: "48%",
   },
-  scoreCard: {
-    minHeight: 190,
+
+  // STATS CARD
+  statsCard: {
+    minHeight: 160,
   },
-  scoreRow: {
+  scoreLayout: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    marginTop: 4,
+    alignItems: "flex-start",
+    gap: 20,
   },
-  scoreStats: {
+  statsDetails: {
     flex: 1,
+    paddingTop: 4,
   },
-  scoreItem: {
-    paddingVertical: 8,
-  },
-  scoreValue: {
-    fontSize: 18,
+  statsHeading: {
+    fontSize: 16,
     fontFamily: "Inter_700Bold",
     color: Colors.textPrimary,
-  },
-  scoreLabel: {
-    fontSize: 11,
-    fontFamily: "Newsreader_400Regular",
-    color: Colors.textSecondary,
-  },
-  scoreDivider: {
-    height: 1,
-    backgroundColor: Colors.border,
-  },
-  skillsCard: {
-    minHeight: 190,
-  },
-  skillsCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     marginBottom: 4,
   },
-  seeAll: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.accentTertiary,
-  },
-  skillRow: {
-    paddingVertical: 9,
-  },
-  skillRowBorder: {
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-  },
-  emptyText: {
-    marginTop: 8,
+  statsDesc: {
     fontSize: 13,
     lineHeight: 18,
     fontFamily: "Newsreader_400Regular",
     color: Colors.textSecondary,
+    marginBottom: 12,
   },
-  aiCard: {
-    gap: 12,
-  },
-  aiCardHeader: {
+  statsMetricRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  aiBlock: {
     gap: 6,
+    backgroundColor: `${Colors.success}1A`,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    alignSelf: "flex-start",
   },
-  aiLabel: {
+  statsMetricValue: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: Colors.success,
+  },
+  statsMetricLabel: {
     fontSize: 12,
+    fontFamily: "Inter_500Medium",
+    color: Colors.success,
+  },
+
+  // SKILLS CARD
+  skillsCard: {
+    minHeight: 160,
+  },
+  skillsList: {
+    gap: 0,
+  },
+  skillItem: {
+    paddingVertical: 10,
+  },
+  skillItemBorder: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  aiRecommendedContainer: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  aiRecommendedLabel: {
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
     color: Colors.textTertiary,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    letterSpacing: 0.5,
+    marginBottom: 10,
   },
-  aiValue: {
-    fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
-    color: Colors.textPrimary,
-  },
-  aiSkillChips: {
+  aiTagRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
   },
-  aiHint: {
-    fontSize: 12,
-    lineHeight: 18,
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 20,
+    gap: 12,
+  },
+  emptyText: {
+    fontSize: 14,
     fontFamily: "Newsreader_400Regular",
     color: Colors.textSecondary,
   },
+  emptyBtn: {
+    backgroundColor: Colors.accentTertiary,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  emptyBtnText: {
+    color: Colors.background,
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+
+  // MENU CARD
   menuCard: {
-    marginTop: -2,
+    marginTop: 4,
   },
   menuItem: {
     flexDirection: "row",
@@ -913,6 +730,8 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
     marginTop: 1,
   },
+  
+  // REFRESH
   refreshBtn: {
     height: 44,
     borderRadius: 22,
@@ -924,7 +743,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 8,
     marginBottom: 8,
-    marginTop: 2,
+    marginTop: 10,
   },
   refreshBtnText: {
     color: Colors.textSecondary,

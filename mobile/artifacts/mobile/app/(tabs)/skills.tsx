@@ -12,6 +12,7 @@ import {
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { MotionPressable } from "@/components/MotionPressable";
@@ -695,16 +696,23 @@ export default function SkillsScreen() {
               styles.analysisButton,
               (!selectedRole || selectedSkills.length === 0 || analysisRefreshing) &&
                 styles.analysisButtonDisabled,
+              { overflow: "hidden" }
             ]}
             disabled={!selectedRole || selectedSkills.length === 0 || analysisRefreshing}
             onPress={runManagedGapAnalysis}
           >
+            <LinearGradient
+              colors={Colors.gradientAccentTertiary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
             {analysisRefreshing ? (
-              <ActivityIndicator size="small" color={Colors.background} />
+              <ActivityIndicator size="small" color={Colors.background} style={{ zIndex: 1 }} />
             ) : (
-              <Feather name="cpu" size={16} color={Colors.background} />
+              <Feather name="cpu" size={16} color={Colors.background} style={{ zIndex: 1 }} />
             )}
-            <Text style={styles.analysisButtonText}>
+            <Text style={[styles.analysisButtonText, { zIndex: 1 }]}>
               {analysisRefreshing ? "Running analysis..." : "Run Skill Gap Analysis"}
             </Text>
           </MotionPressable>

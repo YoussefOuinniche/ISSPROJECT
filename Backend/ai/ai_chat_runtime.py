@@ -21,19 +21,36 @@ async def ensure_ai_chat_schema(db_pool: asyncpg.Pool) -> None:
     async with db_pool.acquire() as connection:
         await connection.execute(
             """
-            CREATE TABLE IF NOT EXISTS chat_history (
+            CREATE TABLE IF NOT EXISTS ai_chat_sessions (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
-                message TEXT NOT NULL,
+                title VARCHAR(255) NOT NULL DEFAULT 'New Conversation',
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+            """
+        )
+        await connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_ai_chat_sessions_user_id
+                ON ai_chat_sessions (user_id)
+            """
+        )
+        await connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ai_chat_messages (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                session_id UUID NOT NULL REFERENCES ai_chat_sessions(id) ON DELETE CASCADE,
+                role VARCHAR(20) NOT NULL,
+                content TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT NOW()
             )
             """
         )
         await connection.execute(
             """
-            CREATE INDEX IF NOT EXISTS idx_chat_history_user_created_at
-                ON chat_history (user_id, created_at DESC)
+            CREATE INDEX IF NOT EXISTS idx_ai_chat_messages_session_id
+                ON ai_chat_messages (session_id)
             """
         )
         await connection.execute(

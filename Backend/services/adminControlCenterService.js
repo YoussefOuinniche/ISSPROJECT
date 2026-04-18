@@ -518,7 +518,7 @@ async function getAdminControlCenterData() {
     safeQuery('trends', () => supabase.from('trends').select('id, domain, title, description, source, created_at')),
     safeQuery('recommendations', () => supabase.from('recommendations').select('id, user_id, type, title, content, created_at')),
     safeQuery('user_ai_profile', () => supabase.from('user_ai_profile').select('user_id, profile_json')),
-    safeQuery('chat_history', () => supabase.from('chat_history').select('user_id, role, created_at')),
+    safeQuery('ai_chat_sessions', () => supabase.from('ai_chat_sessions').select('user_id, created_at, updated_at')),
     safeQuery('skill_trends', () => supabase.from('skill_trends').select('skill, demand_score, trend, window_start, source_count, created_at'), []),
     safeQuery(
       'trend_skills',
@@ -538,7 +538,7 @@ async function getAdminControlCenterData() {
   const trends = trendsRes.data || [];
   const recommendations = recommendationsRes.data || [];
   const aiProfileRows = aiProfilesRes.data || [];
-  const chatHistory = chatHistoryRes.data || [];
+  const chatSessions = chatHistoryRes.data || [];
 
   const userMap = new Map(users.map((user) => [user.id, user]));
   const profileMap = new Map(profiles.map((profile) => [profile.user_id, profile]));
@@ -603,8 +603,8 @@ async function getAdminControlCenterData() {
   }).length;
 
   const activeUserIds = new Set();
-  chatHistory.forEach((row) => {
-    if (isRecent(row.created_at, last30Days)) activeUserIds.add(row.user_id);
+  chatSessions.forEach((row) => {
+    if (isRecent(row.updated_at || row.created_at, last30Days)) activeUserIds.add(row.user_id);
   });
   profiles.forEach((profile) => {
     if (isRecent(profile.last_analysis_at || profile.updated_at, last30Days)) activeUserIds.add(profile.user_id);
@@ -619,14 +619,14 @@ async function getAdminControlCenterData() {
     if (isRecent(user.created_at, last30Days)) activeUserIds.add(user.id);
   });
 
-  const chatRequests = chatHistory.filter((row) => asText(row.role, 'assistant') === 'user');
-  const aiRequestsLast7 = chatRequests.filter((row) => isRecent(row.created_at, last7Days)).length;
-  const aiRequestsPrev7 = chatRequests.filter((row) => {
-    const timestamp = new Date(row.created_at).getTime();
+  // Since we only query chat sessions now for overall app-usage metrics, we map "requests" conceptually by active sessions.
+  const aiRequestsLast7 = chatSessions.filter((row) => isRecent(row.updated_at || row.created_at, last7Days)).length;
+  const aiRequestsPrev7 = chatSessions.filter((row) => {
+    const timestamp = new Date(row.updated_at || row.created_at).getTime();
     return Number.isFinite(timestamp) && timestamp >= last14Days && timestamp < last7Days;
   }).length;
-  const activeChatUsers = new Set(chatRequests.map((row) => row.user_id));
-  const hourlyRequests = buildHourlySeries(chatRequests, (row) => row.created_at);
+  const activeChatUsers = new Set(chatSessions.map((row) => row.user_id));
+  const hourlyRequests = buildHourlySeries(chatSessions, (row) => row.updated_at || row.created_at);
   const peakHour = [...hourlyRequests].sort((a, b) => b.value - a.value)[0] || { label: '00:00', value: 0 };
 
   const skillUsageMap = new Map();

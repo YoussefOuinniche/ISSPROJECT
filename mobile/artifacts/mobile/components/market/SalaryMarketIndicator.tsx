@@ -1,7 +1,9 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-
 import Colors from "@/constants/colors";
+import { AppTheme } from "@/constants/theme";
+import { MetricCard } from "@/components/design-system/MetricCard";
+import { formatCurrencyValue } from "@/lib/marketFormat";
 
 type SalaryMarketIndicatorProps = {
   hasSalary: boolean;
@@ -10,7 +12,6 @@ type SalaryMarketIndicatorProps = {
   salaryReferenceValues?: number[];
   currencyCode?: string | null;
   countryLabel: string;
-  explanation: string;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -19,11 +20,7 @@ function clamp(value: number, min: number, max: number) {
 
 function getFallbackSignalPercent(rawSalary: number | null | undefined) {
   const salary = Number(rawSalary);
-  if (!Number.isFinite(salary) || salary <= 0) {
-    return 0;
-  }
-
-  // Fallback normalization when peer market values are unavailable.
+  if (!Number.isFinite(salary) || salary <= 0) return 0;
   const normalized = Math.log10(salary + 1) / Math.log10(400000 + 1);
   return clamp(Math.round(normalized * 100), 12, 88);
 }
@@ -34,34 +31,15 @@ function getRelativeSignalPercent(rawSalary: number | null | undefined, referenc
     .map((value) => Number(value))
     .filter((value) => Number.isFinite(value) && value > 0);
 
-  if (!Number.isFinite(salary) || salary <= 0) {
-    return 0;
-  }
-
-  if (values.length < 2) {
-    return getFallbackSignalPercent(salary);
-  }
+  if (!Number.isFinite(salary) || salary <= 0) return 0;
+  if (values.length < 2) return getFallbackSignalPercent(salary);
 
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
-  if (maxValue <= minValue) {
-    return getFallbackSignalPercent(salary);
-  }
+  if (maxValue <= minValue) return getFallbackSignalPercent(salary);
 
   const normalized = (salary - minValue) / (maxValue - minValue);
   return clamp(Math.round(normalized * 100), 8, 92);
-}
-
-function getSalaryLevelLabel(percent: number) {
-  if (percent >= 67) {
-    return "Higher market level";
-  }
-
-  if (percent >= 34) {
-    return "Mid market level";
-  }
-
-  return "Entry market level";
 }
 
 export function SalaryMarketIndicator({
@@ -71,156 +49,80 @@ export function SalaryMarketIndicator({
   salaryReferenceValues,
   currencyCode,
   countryLabel,
-  explanation,
 }: SalaryMarketIndicatorProps) {
-  const signalPercent = hasSalary
-    ? getRelativeSignalPercent(averageSalary, salaryReferenceValues || [])
-    : 0;
-  const salaryLevelLabel = getSalaryLevelLabel(signalPercent);
+  const signalPercent = hasSalary ? getRelativeSignalPercent(averageSalary, salaryReferenceValues || []) : 0;
+  const monthlySalary = hasSalary && Number.isFinite(Number(averageSalary)) && Number(averageSalary) > 0
+    ? formatCurrencyValue(Number(averageSalary) / 12, currencyCode)
+    : null;
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.kicker}>Average market salary</Text>
-      <Text style={styles.country}>{countryLabel}</Text>
-
-      {hasSalary && salaryValue ? (
-        <Text style={styles.value}>{salaryValue}</Text>
-      ) : (
-        <Text style={styles.unavailable}>Salary data is not available yet for this market</Text>
-      )}
-
-      <Text style={styles.meta}>
-        {currencyCode ? `Currency: ${currencyCode}` : "Currency: Not available yet"}
-      </Text>
-      {hasSalary ? <Text style={styles.meta}>{`Market salary level: ${salaryLevelLabel}`}</Text> : null}
-
+    <MetricCard
+      label={`Average salary per year in ${countryLabel}`}
+      value={hasSalary && salaryValue ? salaryValue : "Data not available"}
+      contextText={currencyCode ? `Currency: ${currencyCode}` : "Currency: Not available"}
+    >
       <View style={styles.scaleWrap}>
         <View style={styles.scaleTrack}>
-          <View style={[styles.segment, styles.segmentEntry]} />
-          <View style={[styles.segment, styles.segmentMid]} />
-          <View style={[styles.segment, styles.segmentSenior]} />
+          <View style={styles.segmentActive} />
           {hasSalary ? <View style={[styles.marker, { left: `${signalPercent}%` }]} /> : null}
         </View>
-
-        <View style={styles.scaleLabels}>
-          <Text style={styles.scaleLabel}>Entry</Text>
-          <Text style={styles.scaleLabel}>Mid</Text>
-          <Text style={styles.scaleLabel}>Senior</Text>
-        </View>
       </View>
-
-      <Text style={styles.helperLabel}>Market salary indicator</Text>
-      <Text style={styles.description}>{explanation}</Text>
-      <Text style={styles.disclaimer}>
-        Visualized relative to a general career progression scale.
-      </Text>
-    </View>
+      {monthlySalary && (
+        <View style={styles.monthlyRow}>
+          <Text style={styles.monthlyLabel}>Est. monthly</Text>
+          <Text style={styles.monthlyValue}>~{monthlySalary}/mo</Text>
+        </View>
+      )}
+    </MetricCard>
   );
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
-    backgroundColor: Colors.backgroundSecondary,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 6,
-  },
-  kicker: {
-    color: Colors.textTertiary,
-    fontSize: 11,
-    textTransform: "uppercase",
-    letterSpacing: 0.7,
-    fontFamily: "Inter_700Bold",
-  },
-  country: {
-    color: Colors.textPrimary,
-    fontSize: 14,
-    lineHeight: 19,
-    fontFamily: "Inter_600SemiBold",
-  },
-  value: {
-    color: Colors.textPrimary,
-    fontSize: 30,
-    lineHeight: 34,
-    letterSpacing: -0.9,
-    fontFamily: "Inter_700Bold",
-  },
-  unavailable: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-    fontFamily: "Newsreader_500Medium",
-  },
-  meta: {
-    color: Colors.textTertiary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontFamily: "Inter_600SemiBold",
-  },
   scaleWrap: {
-    gap: 8,
-    marginTop: 4,
+    gap: AppTheme.spacing.xs,
+    marginTop: AppTheme.spacing.md,
   },
   scaleTrack: {
-    height: 14,
-    borderRadius: 999,
+    height: 12,
+    borderRadius: AppTheme.radius.pill,
     overflow: "hidden",
     flexDirection: "row",
     backgroundColor: Colors.borderLight,
     position: "relative",
   },
-  segment: {
+  segmentActive: { 
     flex: 1,
-  },
-  segmentEntry: {
-    backgroundColor: "#DCE8FF",
-  },
-  segmentMid: {
-    backgroundColor: "#9FB8F0",
-  },
-  segmentSenior: {
-    backgroundColor: "#4E71C8",
+    backgroundColor: Colors.border,
   },
   marker: {
     position: "absolute",
-    top: -3,
-    marginLeft: -7,
-    width: 14,
+    top: -4,
+    marginLeft: -4,
+    width: 8,
     height: 20,
-    borderRadius: 8,
-    backgroundColor: Colors.accentTertiary,
-    borderWidth: 2,
-    borderColor: Colors.background,
+    borderRadius: AppTheme.radius.pill,
+    backgroundColor: Colors.textPrimary,
   },
-  scaleLabels: {
+  monthlyRow: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: AppTheme.spacing.sm,
+    paddingTop: AppTheme.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
   },
-  scaleLabel: {
-    color: Colors.textTertiary,
-    fontSize: 11,
+  monthlyLabel: {
+    fontSize: 12,
     fontFamily: "Inter_600SemiBold",
-  },
-  helperLabel: {
-    marginTop: 4,
-    color: Colors.textPrimary,
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-  },
-  description: {
-    color: Colors.textSecondary,
-    fontSize: 14,
-    lineHeight: 21,
-    fontFamily: "Newsreader_400Regular",
-  },
-  disclaimer: {
     color: Colors.textTertiary,
-    fontSize: 12,
-    lineHeight: 17,
-    fontFamily: "Newsreader_400Regular",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  monthlyValue: {
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    color: Colors.textPrimary,
+    letterSpacing: -0.3,
   },
 });

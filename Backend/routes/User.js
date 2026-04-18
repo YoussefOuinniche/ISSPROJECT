@@ -49,32 +49,7 @@ const addSkillValidation = [
   body('yearsOfExperience').optional().isFloat({ min: 0 })
 ];
 
-const aiSkillGapValidation = [
-  body('targetRole').optional().isString().trim(),
-];
 
-const aiRoadmapValidation = [
-  body('role').optional().isString().trim(),
-  body('targetRole').optional().isString().trim(),
-  body('timeframeMonths').optional().isInt({ min: 1, max: 24 }),
-];
-
-const aiRecommendationsValidation = [
-  body('count').optional().isInt({ min: 1, max: 20 }),
-];
-
-const aiCareerAdviceValidation = [
-  body('question').isString().trim().isLength({ min: 5 }),
-];
-
-const aiChatValidation = [
-  body('message').isString().trim().isLength({ min: 1, max: 4000 }),
-];
-
-const aiJobDescriptionValidation = [
-  body('role').isString().trim().isLength({ min: 2 }),
-  body('perSourceLimit').optional().isInt({ min: 1, max: 10 }),
-];
 
 // Temporary request logs for Home page catalog endpoints.
 router.use((req, res, next) => {
@@ -121,14 +96,7 @@ router.get('/skill-gaps', UserController.getSkillGaps);
 // Recommendations routes
 router.get('/recommendations', UserController.getRecommendations);
 
-// AI routes
-router.post('/ai/skill-gaps/analyze', aiSkillGapValidation, validate, UserController.analyzeSkillGapsWithAi);
-router.post('/ai/roadmap', aiRoadmapValidation, validate, UserController.generateRoadmapWithAi);
-router.post('/ai/recommendations/generate', aiRecommendationsValidation, validate, UserController.generateRecommendationsWithAi);
-router.post('/ai/career-advice', aiCareerAdviceValidation, validate, UserController.getCareerAdviceWithAi);
-router.get('/ai/history', UserController.getAiHistory);
-router.post('/ai/chat', aiChatValidation, validate, UserController.chatWithAi);
-router.post('/ai/job-description', aiJobDescriptionValidation, validate, UserController.generateJobDescriptionWithAi);
+// AI routes are mounted via /api/user/ai → routes/UserAi.js
 // Dashboard route
 router.get('/dashboard', UserController.getDashboard);
 

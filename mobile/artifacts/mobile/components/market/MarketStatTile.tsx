@@ -1,5 +1,6 @@
 import React from "react";
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 import Colors from "@/constants/colors";
 
@@ -14,11 +15,11 @@ type MarketStatTileProps = {
 
 const TONES = {
   salary: {
-    backgroundColor: "#0F1D3A",
-    borderColor: "#1E3A8A",
-    labelColor: "rgba(255,255,255,0.68)",
+    backgroundColor: "transparent",
+    borderColor: "transparent",
+    labelColor: "rgba(255,255,255,0.75)",
     valueColor: Colors.background,
-    metaColor: "rgba(255,255,255,0.82)",
+    metaColor: "rgba(255,255,255,0.85)",
   },
   demand: {
     backgroundColor: "#F8FAFC",
@@ -54,20 +55,29 @@ export function MarketStatTile({
         {
           backgroundColor: palette.backgroundColor,
           borderColor: palette.borderColor,
+          overflow: "hidden", // needed for the gradient radius
         },
         style,
       ]}
     >
-      <Text style={[styles.label, { color: palette.labelColor }]}>{label}</Text>
+      {tone === "salary" && (
+        <LinearGradient
+          colors={Colors.gradientAccentTertiary}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+      <Text style={[styles.label, { color: palette.labelColor, zIndex: 1 }]}>{label}</Text>
       <Text
         numberOfLines={1}
         adjustsFontSizeToFit
         minimumFontScale={0.72}
-        style={[styles.value, compact && styles.compactValue, { color: palette.valueColor }]}
+        style={[styles.value, compact && styles.compactValue, { color: palette.valueColor, zIndex: 1 }]}
       >
         {value}
       </Text>
-      {meta ? <Text style={[styles.meta, { color: palette.metaColor }]}>{meta}</Text> : null}
+      {meta ? <Text style={[styles.meta, { color: palette.metaColor, zIndex: 1 }]}>{meta}</Text> : null}
     </View>
   );
 }

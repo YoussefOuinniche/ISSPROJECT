@@ -10,6 +10,7 @@ import { AuthBackground } from "@/components/AuthBackground";
 import { MotionPressable } from "@/components/MotionPressable";
 import Colors from "@/constants/colors";
 import { getMobileAccessToken } from "@/lib/api/runtime";
+import { LinearGradient } from "expo-linear-gradient";
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
@@ -79,8 +80,17 @@ export default function WelcomeScreen() {
         
 
         <View style={styles.actions}>
-          <MotionPressable containerStyle={styles.primaryBtn} onPress={() => router.push("/login")}>
-            <Text style={styles.primaryBtnText}>Log In</Text>
+          <MotionPressable 
+            containerStyle={[styles.primaryBtn, { overflow: "hidden" }]} 
+            onPress={() => router.push("/login")}
+          >
+            <LinearGradient
+              colors={Colors.gradientAccentTertiary}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <Text style={[styles.primaryBtnText, { zIndex: 1 }]}>Log In</Text>
           </MotionPressable>
 
           <MotionPressable

@@ -1,78 +1,108 @@
 const { supabase } = require('../config/database');
-const { appendChatMessage, getChatHistory } = require('./LocalAiFallbackStore');
-
-let hasWarnedAboutMissingChatHistoryTable = false;
-
-function isMissingChatHistoryTableError(error) {
-  if (!error || typeof error !== 'object') return false;
-
-  return (
-    error.code === 'PGRST205' &&
-    typeof error.message === 'string' &&
-    error.message.includes('chat_history')
-  );
-}
-
-function warnMissingChatHistoryTable(error) {
-  if (hasWarnedAboutMissingChatHistoryTable) {
-    return;
-  }
-
-  hasWarnedAboutMissingChatHistoryTable = true;
-  console.warn(
-    '[ChatHistory] chat_history table is missing or not exposed yet. Returning an empty history until the migration is applied.',
-    error.message
-  );
-}
 
 class ChatHistory {
-  static async findByUserId(userId, limit = 100) {
+  // --- Sessions ---
+  static async getSessions(userId) {
+    const { data, error } = await supabase
+      .from('ai_chat_sessions')
+      .select('id, title, created_at, updated_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      // Graceful fallback for local development if table isn't migrated
+      console.warn("Could not load sessions", error.message);
+      return [];
+    }
+    return data || [];
+  }
+
+  static async createSession(userId, title = 'New Conversation') {
+    const { data, error } = await supabase
+      .from('ai_chat_sessions')
+      .insert({ user_id: userId, title })
+      .select('id, title, created_at, updated_at')
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  static async updateSessionTitle(sessionId, title) {
+    const { data, error } = await supabase
+      .from('ai_chat_sessions')
+      .update({ title, updated_at: new Date().toISOString() })
+      .eq('id', sessionId)
+      .select('id, title')
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  // --- Messages ---
+  static async findSessionMessages(sessionId, userId, limit = 100) {
+    if (!sessionId) return [];
+    
     const safeLimit = Number.isFinite(limit)
       ? Math.max(1, Math.min(200, Number(limit)))
       : 100;
 
     const { data, error } = await supabase
-      .from('chat_history')
-      .select('id, role, message, created_at')
-      .eq('user_id', userId)
+      .from('ai_chat_messages')
+      .select('id, role, content, created_at, session_id')
+      .eq('session_id', sessionId)
       .order('created_at', { ascending: true })
       .limit(safeLimit);
 
-    if (error) {
-      if (isMissingChatHistoryTableError(error)) {
-        warnMissingChatHistoryTable(error);
-        return getChatHistory(userId).slice(-safeLimit);
-      }
-      throw error;
-    }
-    return data || [];
+    if (error) throw error;
+
+    // Map `content` -> `message` to minimize breaking changes downstream
+    return (data || []).map(row => ({
+      ...row,
+      message: row.content
+    }));
   }
 
-  static async create(userId, role, message) {
+  // Keep `findByUserId` strictly as a fallback or return empty since chat_history is deprecated
+  static async findByUserId(userId, limit = 100) {
+    // If a generic history call is made without a session, return empty
+    // since we strictly use ai_chat_sessions now.
+    return [];
+  }
+
+  static async create(userId, role, message, sessionId = null) {
+    if (!sessionId) {
+      const newSession = await this.createSession(userId, message.substring(0, 32));
+      sessionId = newSession.id;
+    }
+
     const payload = {
-      user_id: userId,
+      session_id: sessionId,
       role,
-      message,
+      content: message, // mapped to the new schema
     };
 
     const { data, error } = await supabase
-      .from('chat_history')
+      .from('ai_chat_messages')
       .insert(payload)
-      .select('id, role, message, created_at')
+      .select('id, role, content, created_at, session_id')
       .single();
 
     if (error) {
-      if (isMissingChatHistoryTableError(error)) {
-        warnMissingChatHistoryTable(error);
-        return appendChatMessage(userId, {
-          role,
-          message,
-        });
-      }
       throw error;
     }
 
-    return data;
+    await supabase
+      .from('ai_chat_sessions')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', sessionId);
+
+    // Map `content` -> `message` to minimize breaking changes
+    return {
+      ...data,
+      message: data.content
+    };
   }
 }
 

@@ -58,7 +58,9 @@ export function RoleMarketCard({ role, selectedCountry, onPressDetails }: RoleMa
         <MarketStatTile
           label="Average Salary"
           value={salaryText}
-          meta={hasSalary && market?.currency ? `${market.currency} annual average` : undefined}
+          meta={hasSalary && market?.currency
+            ? `${market.currency} annual · ~${formatCurrencyValue(Number(market.avg_salary) / 12, market.currency)}/mo`
+            : undefined}
           tone="salary"
           compact
           style={styles.salaryTile}
@@ -193,6 +195,5 @@ const styles = StyleSheet.create({
   button: {
     minHeight: 54,
     borderRadius: 20,
-    backgroundColor: Colors.textPrimary,
   },
 });

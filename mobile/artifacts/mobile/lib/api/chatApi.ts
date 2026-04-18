@@ -78,10 +78,34 @@ async function request(path: string, options: RequestInit): Promise<unknown> {
   return payload;
 }
 
-export async function sendChatMessageAI(message: string): Promise<AIChatResponse> {
+export interface ChatSession {
+  id: string;
+  title: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function fetchChatSessionsAI(): Promise<ChatSession[]> {
+  try {
+    const payload = await request("/api/user/ai/chat-sessions", {
+      method: "GET",
+    });
+
+    const envelope = payload && typeof payload === "object" && "data" in payload
+      ? (payload as { data?: unknown }).data
+      : payload;
+
+    return Array.isArray(envelope) ? envelope : [];
+  } catch (error) {
+    console.error("[chatApi] chat sessions request failed", error);
+    return [];
+  }
+}
+
+export async function sendChatMessageAI(message: string, sessionId?: string | null): Promise<AIChatResponse & { session_id?: string | null }> {
   const payload = await request("/api/user/ai/chat", {
     method: "POST",
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, sessionId: sessionId || null }),
   });
 
   const envelope = payload && typeof payload === "object" && "data" in payload
@@ -95,13 +119,15 @@ export async function sendChatMessageAI(message: string): Promise<AIChatResponse
       typeof record.message_id === "string" && record.message_id.trim().length > 0
         ? record.message_id.trim()
         : null,
+    session_id: typeof record.session_id === "string" ? record.session_id.trim() : null,
     conversation_summary: normalizeConversationSummary(record.conversation_summary),
   };
 }
 
-export async function fetchChatHistoryAI(): Promise<ChatHistoryMessage[]> {
+export async function fetchChatHistoryAI(sessionId?: string | null): Promise<ChatHistoryMessage[]> {
   try {
-    const payload = await request("/api/user/ai/history", {
+    const query = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : '';
+    const payload = await request(`/api/user/ai/history${query}`, {
       method: "GET",
     });
 

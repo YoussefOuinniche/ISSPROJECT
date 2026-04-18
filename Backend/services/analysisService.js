@@ -380,9 +380,9 @@ async function requestAiCareerAdvice(question, userId) {
   });
 }
 
-async function requestAiChat(userId, message) {
+async function requestAiChat(userId, message, sessionId = null) {
   const [recentMessages, profile, storedAiProfile, skillCatalog, userSkills, skillGaps, recommendations] = await Promise.all([
-    ChatHistory.findByUserId(userId, 12),
+    sessionId ? ChatHistory.findSessionMessages(sessionId, userId, 20) : Promise.resolve([]),
     Profile.getFullProfile(userId),
     Profile.getStoredAiProfile(userId),
     Skill.findAll(250, 0),
@@ -421,20 +421,6 @@ async function requestAiChat(userId, message) {
         userSkills,
       });
 
-      console.info('[AIChat] market context attached', {
-        userId,
-        role: marketData.role || null,
-        cachePath: marketData?.background_refresh_triggered
-          ? 'cached_stale_background_refresh'
-          : marketData?.stale
-          ? 'cached_stale_no_refresh'
-          : 'cached_fresh',
-        trendCount: Array.isArray(marketData?.trends) ? marketData.trends.length : 0,
-        missingSkillsCount: Array.isArray(personalization?.missing_skills)
-          ? personalization.missing_skills.length
-          : 0,
-      });
-
       profilePayload.market_intelligence = {
         role: marketData.role,
         stale: Boolean(marketData.stale),
@@ -455,19 +441,43 @@ async function requestAiChat(userId, message) {
     } catch (marketError) {
       console.warn('Unable to load market context for AI chat:', marketError.message);
     }
-  } else {
-    console.info('[AIChat] non-market query path', {
-      userId,
-      triggered: false,
-      messagePreview: String(message || '').slice(0, 120),
-    });
   }
+
+  const SYSTEM_PROMPT = `You are a specialized AI assistant inside the SkillPulse career and market intelligence app.
+Your domain is strictly limited to:
+- roles
+- salaries
+- demand
+- trends
+- skills
+- roadmaps
+- Guidance based on the app's data.
+
+IMPORTANT INSTRUCTIONS:
+1. Always use previous messages from the current conversation context to inform your answers.
+2. If the user asks something outside this domain (e.g. general trivia, coding help unrelated to careers, random life questions), politely refuse.
+3. Example refusal: "I’m designed to help with roles, salaries, demand, trends, skills, and roadmaps inside this app. I cannot assist with that topic."
+4. Do NOT act as a general-purpose chatbot. Keep responses professional, clear, and concise.
+
+FORMATTING REQUIREMENTS:
+- Your responses MUST be formatted using high-quality Markdown.
+- Use **bold** intros or short ` + '`### headings`' + ` for new topics.
+- Break up explanations using concise bulleted (` + '`-`' + `) or numbered lists.
+- AVOID walls of plain text. Use clean readable sections.
+- When mentioning technologies, highlight them ` + '`like this`' + `.
+- DO NOT over-format every sentence, keep it natural and professional.
+- NO LaTeX or mathematical equations whatsoever.`;
+
+  const messagesPayload = [
+    { role: 'system', message: SYSTEM_PROMPT },
+    ...recentMessages.map(msg => ({ role: msg.role, message: msg.message }))
+  ];
 
   try {
     const result = await postAi('/ai/chat', {
       user_id: userId,
       message,
-      recent_messages: recentMessages,
+      recent_messages: messagesPayload,
       profile: profilePayload,
       skill_catalog: (skillCatalog || []).map((skill) => skill?.name).filter(Boolean),
     });
@@ -478,11 +488,12 @@ async function requestAiChat(userId, message) {
         : null;
 
     if (!userMessageId) {
-      const userMessageRow = await ChatHistory.create(userId, 'user', message);
+      const userMessageRow = await ChatHistory.create(userId, 'user', message, sessionId);
       await ChatHistory.create(
         userId,
         'assistant',
-        String(result?.response || '').trim() || CHAT_FALLBACK_RESPONSE
+        String(result?.response || '').trim() || CHAT_FALLBACK_RESPONSE,
+        sessionId
       );
       userMessageId =
         typeof userMessageRow?.id === 'string' && userMessageRow.id.trim()

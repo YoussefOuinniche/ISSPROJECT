@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import Colors from "@/constants/colors";
 
 interface ChatInputProps {
@@ -31,11 +32,17 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
         editable={!disabled}
       />
       <TouchableOpacity
-        style={[styles.sendButton, (!text.trim() || disabled) && styles.sendButtonDisabled]}
+        style={[styles.sendButton, (!text.trim() || disabled) && styles.sendButtonDisabled, { overflow: "hidden" }]}
         onPress={handleSend}
         disabled={!text.trim() || disabled}
       >
-        <Feather name="send" size={18} color={Colors.textInverse} />
+        <LinearGradient
+          colors={Colors.gradientAccentTertiary}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Feather name="send" size={18} color={Colors.textInverse} style={{ zIndex: 1 }} />
       </TouchableOpacity>
     </View>
   );

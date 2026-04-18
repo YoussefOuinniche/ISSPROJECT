@@ -28,37 +28,37 @@ async def user_exists(connection: asyncpg.Connection, user_id: str) -> bool:
 
 async def insert_chat_message(
     connection: asyncpg.Connection,
-    user_id: str,
+    session_id: str,
     role: str,
-    message: str,
+    content: str,
 ) -> dict[str, Any]:
     row = await connection.fetchrow(
         """
-        INSERT INTO chat_history (user_id, role, message)
+        INSERT INTO ai_chat_messages (session_id, role, content)
         VALUES ($1, $2, $3)
-        RETURNING id, user_id, role, message, created_at
+        RETURNING id, session_id, role, content as message, created_at
         """,
-        user_id,
+        session_id,
         role,
-        message,
+        content,
     )
     return dict(row) if row else {}
 
 
 async def fetch_recent_messages(
     connection: asyncpg.Connection,
-    user_id: str,
+    session_id: str,
     limit: int,
 ) -> list[dict[str, Any]]:
     rows = await connection.fetch(
         """
-        SELECT id, role, message, created_at
-        FROM chat_history
-        WHERE user_id = $1
+        SELECT id, role, content as message, created_at
+        FROM ai_chat_messages
+        WHERE session_id = $1
         ORDER BY created_at DESC
         LIMIT $2
         """,
-        user_id,
+        session_id,
         limit,
     )
     ordered_rows = reversed(rows)

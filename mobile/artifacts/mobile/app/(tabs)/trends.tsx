@@ -14,6 +14,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { Badge } from "@/components/ui/Badge";
@@ -334,16 +335,22 @@ export default function TrendsScreen() {
                         Published: {formatSnapshotTime(item.published_at || item.scraped_at || item.created_at)}
                       </Text>
                       <Pressable
-                        style={[styles.newsActionBtn, !item.source_url && styles.newsActionBtnDisabled]}
+                        style={[styles.newsActionBtn, !item.source_url && styles.newsActionBtnDisabled, { overflow: "hidden" }]}
                         onPress={() => {
                           openTrendOnWeb(item.source_url).catch(() => undefined);
                         }}
                         disabled={!item.source_url}
                       >
-                        <Text style={styles.newsActionText}>
+                       <LinearGradient
+                          colors={Colors.gradientAccentTertiary}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={StyleSheet.absoluteFill}
+                        />
+                        <Text style={[styles.newsActionText, { zIndex: 1 }]}>
                           {item.source_url ? "Open source" : "No source URL"}
                         </Text>
-                        <Feather name="external-link" size={13} color={Colors.background} />
+                        <Feather name="external-link" size={13} color={Colors.background} style={{ zIndex: 1 }} />
                       </Pressable>
                     </View>
                   </GlassCard>

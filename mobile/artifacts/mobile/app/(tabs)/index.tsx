@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AnimatedSection } from "@/components/AnimatedSection";
@@ -211,8 +212,16 @@ export default function HomeScreen() {
                   <Pressable
                     key={country.code}
                     onPress={() => setSelectedCountryCode(country.code)}
-                    style={[styles.countryChip, active && styles.countryChipActive]}
+                    style={[styles.countryChip, active && styles.countryChipActive, active && { overflow: "hidden" }]}
                   >
+                    {active && (
+                      <LinearGradient
+                        colors={Colors.gradientAccentTertiary}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFillObject}
+                      />
+                    )}
                     <Text style={[styles.countryChipText, active && styles.countryChipTextActive]}>
                       {country.flag_emoji ? `${country.flag_emoji} ` : ""}
                       {country.name}
