@@ -44,6 +44,10 @@ function RootLayoutNav() {
         name="signup"
         options={{ headerShown: false, presentation: "card", animation: "fade" }}
       />
+      <Stack.Screen
+        name="auth/callback"
+        options={{ headerShown: false, presentation: "transparentModal", animation: "fade" }}
+      />
       <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: "fade" }} />
       <Stack.Screen
         name="learn/[id]"
@@ -59,6 +63,30 @@ function RootLayoutNav() {
       />
       <Stack.Screen
         name="settings"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
+        name="settings/account"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
+        name="settings/career"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
+        name="settings/skills"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
+        name="settings/security"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
+        name="settings/preferences"
+        options={{ headerShown: false, presentation: "card", animation: "fade" }}
+      />
+      <Stack.Screen
+        name="settings/support"
         options={{ headerShown: false, presentation: "card", animation: "fade" }}
       />
       <Stack.Screen

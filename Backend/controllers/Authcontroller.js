@@ -1,5 +1,6 @@
 // Models come from models/index.js and use Supabase-backed model helpers.
 const { User, Profile } = require('../models');
+const { supabase } = require('../config/database');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
@@ -46,6 +47,57 @@ const generateRefreshToken = (userId, role) => {
 };
 
 class AuthController {
+  static async resolveSocialUser(accessToken, requestedProvider) {
+    const { data, error } = await supabase.auth.getUser(accessToken);
+    if (error) {
+      throw error;
+    }
+
+    const socialUser = data?.user || null;
+    if (!socialUser) {
+      throw new Error('Unable to resolve Supabase user from social access token.');
+    }
+
+    const email = String(socialUser.email || '').trim().toLowerCase();
+    if (!email) {
+      throw new Error('The social account did not provide an email address.');
+    }
+
+    const provider = String(
+      socialUser.app_metadata?.provider ||
+      socialUser.user_metadata?.provider ||
+      requestedProvider ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+    if (requestedProvider && provider && requestedProvider !== provider) {
+      throw new Error('The returned social identity provider did not match the requested provider.');
+    }
+
+    const fullName = String(
+      socialUser.user_metadata?.full_name ||
+      socialUser.user_metadata?.name ||
+      socialUser.user_metadata?.user_name ||
+      email.split('@')[0] ||
+      ''
+    ).trim();
+
+    let appUser = await User.findByEmail(email);
+    if (!appUser) {
+      appUser = await User.createSocial(email, fullName);
+    } else if (!appUser.full_name && fullName) {
+      appUser = await User.update(appUser.id, { full_name: fullName });
+    }
+
+    return {
+      provider: provider || requestedProvider || 'social',
+      socialUser,
+      user: appUser,
+    };
+  }
+
   // Register new user
   static async register(req, res) {
     try {
@@ -193,6 +245,48 @@ class AuthController {
         success: false,
         message: 'Error logging in',
         error: error.message || 'internal error'
+      });
+    }
+  }
+
+  static async socialLogin(req, res) {
+    try {
+      const accessToken = String(req.body?.accessToken || '').trim();
+      const requestedProvider = String(req.body?.provider || '').trim().toLowerCase() || null;
+
+      if (!accessToken) {
+        return res.status(400).json({
+          success: false,
+          message: 'Supabase access token is required',
+        });
+      }
+
+      const { user, provider } = await AuthController.resolveSocialUser(accessToken, requestedProvider);
+
+      const token = generateToken(user.id, user.role || 'user');
+      const refreshToken = generateRefreshToken(user.id, user.role || 'user');
+      await User.updateRefreshToken(user.id, refreshToken);
+
+      res.status(200).json({
+        success: true,
+        message: `${provider.charAt(0).toUpperCase()}${provider.slice(1)} login successful`,
+        data: {
+          user: {
+            id: user.id,
+            email: user.email,
+            fullName: user.full_name,
+            role: user.role || 'user',
+          },
+          token,
+          refreshToken,
+        },
+      });
+    } catch (error) {
+      console.error('Social login error:', error);
+      res.status(401).json({
+        success: false,
+        message: 'Error completing social login',
+        error: error.message || 'social_auth_failed',
       });
     }
   }

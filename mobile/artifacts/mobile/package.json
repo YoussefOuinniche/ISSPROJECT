@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@expo-google-fonts/newsreader": "^0.4.1",
+    "@supabase/supabase-js": "^2.103.3",
     "expo-linear-gradient": "~15.0.8",
     "lottie-react-native": "^7.3.6",
-    "react-native-markdown-display": "^7.0.2"
+    "react-native-markdown-display": "^7.0.2",
+    "react-native-url-polyfill": "^3.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

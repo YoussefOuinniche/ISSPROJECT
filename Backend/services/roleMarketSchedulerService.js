@@ -75,12 +75,19 @@ async function runScheduledRoleMarketIngestion() {
 
 function startRoleMarketScheduler() {
   if (!isRoleMarketSchedulerEnabled()) {
-    console.info('[RoleMarketScheduler] disabled by configuration');
-    return false;
+    return {
+      enabled: false,
+      started: false,
+      intervalHours: null,
+    };
   }
 
   if (schedulerHandle) {
-    return true;
+    return {
+      enabled: true,
+      started: true,
+      intervalHours: resolveIntervalMs() / (60 * 60 * 1000),
+    };
   }
 
   const intervalMs = resolveIntervalMs();
@@ -92,11 +99,11 @@ function startRoleMarketScheduler() {
     schedulerHandle.unref();
   }
 
-  console.info('[RoleMarketScheduler] started', {
+  return {
+    enabled: true,
+    started: true,
     intervalHours: intervalMs / (60 * 60 * 1000),
-  });
-
-  return true;
+  };
 }
 
 async function stopRoleMarketScheduler() {
@@ -106,7 +113,6 @@ async function stopRoleMarketScheduler() {
 
   clearInterval(schedulerHandle);
   schedulerHandle = null;
-  console.info('[RoleMarketScheduler] stopped');
 }
 
 module.exports = {

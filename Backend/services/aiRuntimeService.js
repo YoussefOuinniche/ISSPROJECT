@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
+const { logAI, logError, logWarn } = require('../utils/logger');
+
 const BACKEND_DIR = path.join(__dirname, '..');
 const REPO_ROOT = path.join(BACKEND_DIR, '..');
 const AI_DIR = path.join(BACKEND_DIR, 'ai');
@@ -36,7 +38,9 @@ function getAiHealthTimeoutMs() {
 }
 
 function isLocalAiUrl(baseUrl) {
-  if (!baseUrl) return false;
+  if (!baseUrl) {
+    return false;
+  }
 
   try {
     const parsed = new URL(baseUrl);
@@ -75,11 +79,13 @@ function resolvePythonCommand() {
           'python',
         ];
 
-  return candidates.find((candidate) => candidate.includes(path.sep) ? fs.existsSync(candidate) : true);
+  return candidates.find((candidate) => (candidate.includes(path.sep) ? fs.existsSync(candidate) : true));
 }
 
 async function isAiRuntimeHealthy(baseUrl = getAiBaseUrl()) {
-  if (!baseUrl) return false;
+  if (!baseUrl) {
+    return false;
+  }
 
   try {
     const response = await axios.get(`${baseUrl}/health`, {
@@ -129,7 +135,12 @@ function attachChildLogs(child) {
 async function startLocalAiRuntime() {
   const baseUrl = getAiBaseUrl();
   if (!baseUrl || !shouldAutoStartLocalAi(baseUrl)) {
-    return false;
+    return {
+      enabled: false,
+      ready: false,
+      url: baseUrl || null,
+      message: 'Local AI runtime auto-start disabled',
+    };
   }
 
   if (!fs.existsSync(AI_ENTRYPOINT)) {
@@ -137,7 +148,13 @@ async function startLocalAiRuntime() {
   }
 
   if (aiProcess && aiProcess.exitCode == null) {
-    return waitForAiRuntime(baseUrl);
+    const ready = await waitForAiRuntime(baseUrl);
+    return {
+      enabled: true,
+      ready,
+      url: baseUrl,
+      message: ready ? `Runtime ready at ${baseUrl}` : `Runtime unavailable at ${baseUrl}`,
+    };
   }
 
   const pythonCommand = resolvePythonCommand();
@@ -162,7 +179,7 @@ async function startLocalAiRuntime() {
   child.once('error', (error) => {
     lastStartFailureAt = Date.now();
     lastStartFailureMessage = error.message;
-    console.error('Local AI runtime failed to start:', error.message);
+    logError('Local AI runtime failed to start:', error.message);
   });
 
   child.once('exit', (code, signal) => {
@@ -173,43 +190,59 @@ async function startLocalAiRuntime() {
     if (code !== 0 && signal !== 'SIGTERM') {
       lastStartFailureAt = Date.now();
       lastStartFailureMessage = `exit code ${code ?? 'unknown'} signal ${signal ?? 'none'}`;
-      console.error(
+      logError(
         `Local AI runtime exited unexpectedly (${lastStartFailureMessage}). See ${AI_STDERR_LOG}.`
       );
     }
   });
 
-  console.log(`Starting local AI runtime from ${AI_ENTRYPOINT}`);
   const healthy = await waitForAiRuntime(baseUrl);
   if (!healthy) {
-    throw new Error(
-      `Local AI runtime did not become healthy at ${baseUrl}. See ${AI_STDERR_LOG}.`
-    );
+    throw new Error(`Local AI runtime did not become healthy at ${baseUrl}. See ${AI_STDERR_LOG}.`);
   }
 
-  console.log(`Local AI runtime is ready at ${baseUrl}`);
-  return true;
+  return {
+    enabled: true,
+    ready: true,
+    url: baseUrl,
+    message: `Runtime ready at ${baseUrl}`,
+  };
 }
 
 async function ensureLocalAiRuntime() {
   const baseUrl = getAiBaseUrl();
   if (!baseUrl || !shouldAutoStartLocalAi(baseUrl)) {
-    return false;
+    return {
+      enabled: false,
+      ready: false,
+      url: baseUrl || null,
+      message: 'Auto-start disabled',
+    };
   }
 
   if (await isAiRuntimeHealthy(baseUrl)) {
-    return true;
+    return {
+      enabled: true,
+      ready: true,
+      url: baseUrl,
+      message: `Runtime ready at ${baseUrl}`,
+    };
   }
 
   const recentlyFailed =
     lastStartFailureAt > 0 && Date.now() - lastStartFailureAt < START_FAILURE_COOLDOWN_MS;
   if (recentlyFailed) {
-    console.warn(
-      `Skipping AI auto-start retry for ${Math.ceil(
-        (START_FAILURE_COOLDOWN_MS - (Date.now() - lastStartFailureAt)) / 1000
-      )}s after failure: ${lastStartFailureMessage || 'unknown error'}`
+    const retryDelaySeconds = Math.ceil(
+      (START_FAILURE_COOLDOWN_MS - (Date.now() - lastStartFailureAt)) / 1000
     );
-    return false;
+    const message = `Skipping retry for ${retryDelaySeconds}s after failure: ${lastStartFailureMessage || 'unknown error'}`;
+    logWarn(message);
+    return {
+      enabled: true,
+      ready: false,
+      url: baseUrl,
+      message,
+    };
   }
 
   if (aiStartPromise) {
@@ -220,8 +253,13 @@ async function ensureLocalAiRuntime() {
     .catch((error) => {
       lastStartFailureAt = Date.now();
       lastStartFailureMessage = error.message;
-      console.error('AI auto-start failed:', error.message);
-      return false;
+      logError('AI auto-start failed:', error.message);
+      return {
+        enabled: true,
+        ready: false,
+        url: baseUrl,
+        message: error.message,
+      };
     })
     .finally(() => {
       aiStartPromise = null;
@@ -257,6 +295,7 @@ async function shutdownLocalAiRuntime() {
 
 module.exports = {
   ensureLocalAiRuntime,
+  getAiBaseUrl,
   isAiRuntimeHealthy,
   shutdownLocalAiRuntime,
   shouldAutoStartLocalAi,

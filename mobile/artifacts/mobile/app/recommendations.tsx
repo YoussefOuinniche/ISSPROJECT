@@ -1,10 +1,11 @@
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import React, { useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,7 +19,10 @@ import {
   useGetUserRecommendations,
   useRecomputeUserProfileAnalysis,
 } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getBottomContentPadding } from "@/lib/layout";
+import { generateRecommendationsWithAi } from "@/lib/api/mobileApi";
+import { refreshProfile } from "@/hooks/useAIProfile";
 
 type UiRecommendation = {
   id: string;
@@ -101,8 +105,27 @@ function normalizeRecommendation(item: Record<string, unknown>, index: number): 
   };
 }
 
+function clampMatchScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function formatLiveUpdateLabel(updatedAt: number | undefined, isRefreshing: boolean) {
+  if (isRefreshing) return "Updating live recommendations...";
+  if (!updatedAt) return "Waiting for live recommendation data";
+
+  const secondsAgo = Math.max(0, Math.round((Date.now() - updatedAt) / 1000));
+  if (secondsAgo < 10) return "Updated just now";
+  if (secondsAgo < 60) return `Updated ${secondsAgo}s ago`;
+
+  const minutesAgo = Math.round(secondsAgo / 60);
+  if (minutesAgo < 60) return `Updated ${minutesAgo}m ago`;
+
+  return "Updated recently";
+}
+
 export default function RecommendationsScreen() {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const [activeType, setActiveType] = useState("All");
   const types = ["All", "Courses", "Articles", "Books"];
 
@@ -121,7 +144,11 @@ export default function RecommendationsScreen() {
     isError,
     refetch,
     isRefetching,
-  } = useGetUserRecommendations({ type: queryType, limit: 50 });
+    dataUpdatedAt,
+    queryKey,
+  } = useGetUserRecommendations(
+    { type: queryType, limit: 50 }
+  );
 
   const recomputeAnalysis = useRecomputeUserProfileAnalysis();
 
@@ -142,6 +169,55 @@ export default function RecommendationsScreen() {
       ? sourceRecommendations.filter((r) => r.type === "article")
       : sourceRecommendations.filter((r) => r.type === "book");
 
+  const liveMatchScore = useMemo(() => {
+    if (filtered.length > 0) {
+      const average = filtered.reduce((sum, item) => sum + item.matchScore, 0) / filtered.length;
+      return clampMatchScore(average);
+    }
+
+    if (sourceRecommendations.length > 0) {
+      const average =
+        sourceRecommendations.reduce((sum, item) => sum + item.matchScore, 0) /
+        sourceRecommendations.length;
+      return clampMatchScore(average);
+    }
+
+    return 0;
+  }, [filtered, sourceRecommendations]);
+
+  const liveUpdateLabel = useMemo(
+    () => formatLiveUpdateLabel(dataUpdatedAt, isRefetching || recomputeAnalysis.isPending),
+    [dataUpdatedAt, isRefetching, recomputeAnalysis.isPending]
+  );
+
+  const refreshRecommendations = useCallback(
+    async (options?: { forceGenerate?: boolean }) => {
+      if (options?.forceGenerate) {
+        await recomputeAnalysis.mutateAsync({ data: {} });
+        await generateRecommendationsWithAi({ count: 8 });
+        await refreshProfile();
+      }
+
+      await queryClient.invalidateQueries({ queryKey });
+      await refetch();
+    },
+    [queryClient, queryKey, recomputeAnalysis, refetch]
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshRecommendations().catch(() => undefined);
+    }, [refreshRecommendations])
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshRecommendations().catch(() => undefined);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [refreshRecommendations]);
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -160,9 +236,7 @@ export default function RecommendationsScreen() {
         <View>
           <Text style={styles.navTitle}>Recommendations</Text>
         </View>
-        <Pressable style={styles.filterBtn} onPress={() => router.push("/ai-assistant")}>
-          <Feather name="cpu" size={18} color={Colors.textSecondary} />
-        </Pressable>
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView
@@ -170,6 +244,15 @@ export default function RecommendationsScreen() {
           styles.content,
           { paddingBottom: getBottomContentPadding(insets.bottom) },
         ]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching || recomputeAnalysis.isPending}
+            onRefresh={() => {
+              refreshRecommendations({ forceGenerate: true }).catch(() => undefined);
+            }}
+            tintColor={Colors.accentTertiary}
+          />
+        }
         showsVerticalScrollIndicator={false}
       >
         {/* Match Banner */}
@@ -198,12 +281,12 @@ export default function RecommendationsScreen() {
                   ? "We could not load your recommendations"
                   : isRefetching
                   ? "Refreshing your latest matches"
-                  : "Based on your skill gaps and goals"}
+                  : `${liveUpdateLabel} • Based on your skill gaps and goals`}
               </Text>
             </View>
             <View style={styles.matchScore}>
-              <Text style={styles.matchScoreValue}>98%</Text>
-              <Text style={styles.matchScoreLabel}>match</Text>
+              <Text style={styles.matchScoreValue}>{liveMatchScore}%</Text>
+              <Text style={styles.matchScoreLabel}>live match</Text>
             </View>
           </View>
         </LinearGradient>
@@ -240,14 +323,15 @@ export default function RecommendationsScreen() {
           <Pressable
             style={styles.recomputeBtn}
             onPress={async () => {
-              await recomputeAnalysis.mutateAsync({ data: {} });
-              await refetch();
+              await refreshRecommendations({ forceGenerate: true });
             }}
-            disabled={recomputeAnalysis.isPending}
+            disabled={recomputeAnalysis.isPending || isRefetching}
           >
             <Feather name="refresh-cw" size={14} color={Colors.primary} />
             <Text style={styles.recomputeBtnText}>
-              {recomputeAnalysis.isPending ? "Refreshing..." : "Refresh Recommendations"}
+              {recomputeAnalysis.isPending || isRefetching
+                ? "Refreshing live data..."
+                : "Refresh Recommendations"}
             </Text>
           </Pressable>
         </View>
@@ -391,6 +475,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Colors.border,
+  },
+  headerSpacer: {
+    width: 40,
+    height: 40,
   },
   content: { paddingHorizontal: 20, paddingTop: 20 },
   recomputeRow: {

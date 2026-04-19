@@ -3,7 +3,7 @@ import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from "react-n
 import { LinearGradient } from "expo-linear-gradient";
 
 import Colors from "@/constants/colors";
-import { AppRadius, AppSpacing, AppType } from "@/constants/theme";
+import { AppRadius, AppSpacing } from "@/constants/theme";
 
 type AppButtonProps = {
   label: string;
@@ -87,8 +87,8 @@ export function AppButton({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 50,
-    borderRadius: AppRadius.md,
+    minHeight: 56,
+    borderRadius: AppRadius.lg,
     borderWidth: 1,
     paddingHorizontal: AppSpacing.lg,
     alignItems: "center",
@@ -103,7 +103,9 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   label: {
-    ...AppType.label,
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: "Inter_600SemiBold",
   },
   iconWrap: {
     alignItems: "center",

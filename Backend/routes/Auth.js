@@ -43,6 +43,11 @@ const loginValidation = [
   body('password').notEmpty().withMessage('Password is required')
 ];
 
+const socialLoginValidation = [
+  body('accessToken').isString().trim().notEmpty().withMessage('Supabase access token is required'),
+  body('provider').optional().isIn(['google', 'github']).withMessage('Unsupported social provider'),
+];
+
 const forgotPasswordValidation = [
   body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email')
 ];
@@ -60,6 +65,7 @@ const changePasswordValidation = [
 // Routes
 router.post('/register', authAttemptLimiter, registerValidation, validate, AuthController.register);
 router.post('/login', authAttemptLimiter, loginValidation, validate, AuthController.login);
+router.post('/social', authAttemptLimiter, socialLoginValidation, validate, AuthController.socialLogin);
 router.post('/refresh-token', tokenRefreshLimiter, AuthController.refreshToken);
 router.post('/forgot-password', authAttemptLimiter, forgotPasswordValidation, validate, AuthController.forgotPassword);
 router.post('/reset-password', authAttemptLimiter, resetPasswordValidation, validate, AuthController.resetPassword);

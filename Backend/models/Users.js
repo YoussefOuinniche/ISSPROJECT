@@ -1,5 +1,6 @@
 const { supabase } = require('../config/database');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 class User {
   // Create a new user (role defaults to 'user' at DB level)
@@ -8,6 +9,18 @@ class User {
     const { data, error } = await supabase
       .from('users')
       .insert({ email, password_hash: hashedPassword, full_name: fullName })
+      .select('id, email, full_name, role, created_at')
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  static async createSocial(email, fullName) {
+    const generatedPassword = crypto.randomBytes(32).toString('hex');
+    const hashedPassword = await bcrypt.hash(generatedPassword, 10);
+    const { data, error } = await supabase
+      .from('users')
+      .insert({ email, password_hash: hashedPassword, full_name: fullName || null })
       .select('id, email, full_name, role, created_at')
       .single();
     if (error) throw error;
@@ -53,7 +66,7 @@ class User {
       .from('users')
       .update(dbUpdates)
       .eq('id', id)
-      .select('id, email, full_name, updated_at')
+      .select('id, email, full_name, role, updated_at')
       .single();
     if (error) throw error;
     return data;

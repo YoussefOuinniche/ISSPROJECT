@@ -870,7 +870,7 @@ async function getAdminControlCenterData() {
     .slice(0, 5);
 
   const signupsSeries = buildDailySeries(users, (user) => user.created_at, 14);
-  const requestSeries = buildDailySeries(chatRequests, (row) => row.created_at, 14);
+  const requestSeries = buildDailySeries(chatSessions, (row) => row.created_at, 14);
   const aiHealth = await getAiServiceHealth();
   const topGap = topGapRows[0] || null;
   const topSignal = activeTrendSignals[0] || null;
@@ -889,7 +889,7 @@ async function getAdminControlCenterData() {
       urgentSkillGaps: urgentGapCount,
       totalTrends: trends.length,
       totalRecommendations: recommendations.length,
-      totalAiRequests: chatRequests.length,
+      totalAiRequests: chatSessions.length,
       totalAiConversations: activeChatUsers.size,
       roadmapCount: journeyRows.length,
       activeJourneys: journeyRows.filter((row) => row.stageCount > 0).length,
@@ -919,7 +919,7 @@ async function getAdminControlCenterData() {
       {
         id: 'ai-requests',
         label: 'AI requests',
-        value: chatRequests.length,
+        value: chatSessions.length,
         delta: deltaPercent(aiRequestsLast7, aiRequestsPrev7),
         deltaLabel: `${activeChatUsers.size} users have interacted with AI`,
         icon: 'smart_toy',
@@ -961,9 +961,9 @@ async function getAdminControlCenterData() {
       targetRoles: topJourneyRoles,
     },
     aiActivity: {
-      totalRequests: chatRequests.length,
+      totalRequests: chatSessions.length,
       totalConversations: activeChatUsers.size,
-      avgRequestsPerUser: activeChatUsers.size ? Number((chatRequests.length / activeChatUsers.size).toFixed(2)) : 0,
+      avgRequestsPerUser: activeChatUsers.size ? Number((chatSessions.length / activeChatUsers.size).toFixed(2)) : 0,
       requestsSeries: requestSeries,
       hourlyRequests,
       peakHour,

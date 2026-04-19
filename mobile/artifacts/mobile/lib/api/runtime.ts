@@ -3,6 +3,8 @@ import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { setAuthTokenGetter, setBaseUrl } from "@workspace/api-client-react";
 
+import { getMobileSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+
 const ACCESS_TOKEN_KEY = "sp.accessToken";
 const SIGNED_OUT_KEY = "sp.signedOut";
 const FALLBACK_API_BASE_URL = "http://localhost:4000";
@@ -89,6 +91,9 @@ export async function storeMobileAccessToken(token: string) {
 }
 
 export async function clearMobileAccessToken() {
+  if (isSupabaseConfigured()) {
+    await getMobileSupabase().auth.signOut().catch(() => undefined);
+  }
   await AsyncStorage.multiRemove([ACCESS_TOKEN_KEY]);
   await AsyncStorage.setItem(SIGNED_OUT_KEY, "1");
 }

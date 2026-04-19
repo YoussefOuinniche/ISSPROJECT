@@ -10,7 +10,7 @@ import {
 } from "react-native";
 
 import Colors from "@/constants/colors";
-import { AppRadius, AppSpacing, AppType } from "@/constants/theme";
+import { AppRadius, AppSpacing } from "@/constants/theme";
 
 type TextFieldProps = TextInputProps & {
   label?: string;
@@ -56,34 +56,41 @@ export function TextField({
 
 const styles = StyleSheet.create({
   label: {
-    ...AppType.label,
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: "Inter_600SemiBold",
     color: Colors.textPrimary,
     marginBottom: 8,
   },
   input: {
-    minHeight: 52,
-    borderRadius: AppRadius.md,
+    minHeight: 56,
+    borderRadius: AppRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
-    paddingHorizontal: AppSpacing.md,
+    paddingHorizontal: AppSpacing.lg,
     color: Colors.textPrimary,
-    fontFamily: AppType.body.fontFamily,
-    fontSize: AppType.body.fontSize,
+    fontFamily: "Inter_500Medium",
+    fontSize: 14,
+    lineHeight: 20,
   },
   inputFocused: {
-    borderColor: Colors.textPrimary,
+    borderColor: Colors.accentTertiary,
   },
   inputError: {
     borderColor: Colors.danger,
   },
   hint: {
-    ...AppType.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: "Newsreader_400Regular",
     color: Colors.textTertiary,
     marginTop: 6,
   },
   error: {
-    ...AppType.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: "Inter_500Medium",
     color: Colors.danger,
     marginTop: 6,
   },

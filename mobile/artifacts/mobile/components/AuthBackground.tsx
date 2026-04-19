@@ -1,7 +1,8 @@
 import React, { type ReactNode } from "react";
-import { ImageBackground, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
-const authBackgroundImage = require("../assets/images/auth/auth-background.png");
+import Colors from "@/constants/colors";
 
 type AuthBackgroundProps = {
   children: ReactNode;
@@ -12,33 +13,35 @@ type AuthBackgroundProps = {
 export function AuthBackground({
   children,
   contentStyle,
-  overlayOpacity = 0.26,
 }: AuthBackgroundProps) {
   return (
-    <ImageBackground
-      source={authBackgroundImage}
-      resizeMode="cover"
-      style={styles.background}
-      imageStyle={styles.image}
-      blurRadius={3}
-    >
-      <View pointerEvents="none" style={[styles.overlay, { opacity: overlayOpacity }]} />
+    <View style={styles.background}>
+      <LinearGradient
+        colors={["#F8FAFC", "#FFFFFF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+      <View pointerEvents="none" style={styles.overlay} />
       <View style={[styles.content, contentStyle]}>{children}</View>
-    </ImageBackground>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   background: {
     flex: 1,
-    backgroundColor: "#E9EDF2",
-  },
-  image: {
-    backgroundColor: "#E9EDF2",
+    backgroundColor: Colors.background,
   },
   overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#0F1D2E",
+    position: "absolute",
+    top: -120,
+    left: -30,
+    right: -30,
+    height: 260,
+    backgroundColor: "rgba(30, 58, 138, 0.06)",
+    borderBottomLeftRadius: 220,
+    borderBottomRightRadius: 220,
   },
   content: {
     flex: 1,

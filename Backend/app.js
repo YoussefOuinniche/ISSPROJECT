@@ -6,11 +6,13 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-const { supabase } = require('./config/database');
+const logger = require('./utils/logger');
+logger.installConsoleBridge();
+
+const { supabase, testDatabaseConnection, isDatabaseConfigured } = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
 const { ensureLocalAiRuntime, shutdownLocalAiRuntime } = require('./services/aiRuntimeService');
 
-// Import routes
 const authRoutes = require('./routes/Auth');
 const userRoutes = require('./routes/User');
 const userAiRoutes = require('./routes/UserAi');
@@ -20,17 +22,14 @@ const marketRoutes = require('./routes/Market');
 const publicRoutes = require('./routes/Public');
 const { startRoleMarketScheduler, stopRoleMarketScheduler } = require('./services/roleMarketSchedulerService');
 
-// Initialize express app
 const app = express();
-
-// ─────────────────────────────────────────
-//  Security Middleware
-// ─────────────────────────────────────────
+const PORT = parseInt(process.env.PORT, 10) || 4000;
+const environment = process.env.NODE_ENV || 'development';
+const isProduction = environment === 'production';
+const enableHttpLogs = String(process.env.LOG_HTTP || '').trim().toLowerCase() === 'true';
 
 app.use(helmet());
 
-// Global rate limiter – 100 requests per 15 minutes per IP
-const isProduction = process.env.NODE_ENV === 'production';
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isProduction ? 100 : 1000,
@@ -39,33 +38,29 @@ const globalLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many requests, please try again later.',
-    hint: 'If this happens during development, check polling frequency or restart after cooldown.'
+    hint: 'If this happens during development, check polling frequency or restart after cooldown.',
   },
   skip: (req) => req.path === '/health',
 });
 app.use(globalLimiter);
 
-// ─────────────────────────────────────────
-//  CORS
-// ─────────────────────────────────────────
-
 const defaultDevOrigins = 'http://localhost:3000,http://127.0.0.1:3000';
 const configuredOrigins =
-  process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? '' : defaultDevOrigins);
+  process.env.FRONTEND_URL || (isProduction ? '' : defaultDevOrigins);
 
 const allowedOrigins = configuredOrigins
   .split(',')
-  .map((o) => o.trim())
+  .map((origin) => origin.trim())
   .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, curl)
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
 
-      // In production, FRONTEND_URL should be explicitly set.
-      callback(new Error(`CORS policy: origin ${origin} not allowed`));
+      return callback(new Error(`CORS policy: origin ${origin} not allowed`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -73,46 +68,28 @@ app.use(
   })
 );
 
-// ─────────────────────────────────────────
-//  General Middleware
-// ─────────────────────────────────────────
+if (enableHttpLogs) {
+  app.use(morgan(isProduction ? 'combined' : 'dev'));
+}
 
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Temporary request logs for mobile Home page data endpoints.
-app.use((req, res, next) => {
-  const isUserCatalogRequest =
-    req.method === 'GET' &&
-    (req.path === '/api/user/countries' || req.path === '/api/user/roles');
-
-  if (isUserCatalogRequest) {
-    console.log(`[app] Incoming ${req.method} ${req.originalUrl}`);
-  }
-
-  next();
-});
-
-// ─────────────────────────────────────────
-//  Health Check
-// ─────────────────────────────────────────
-
 app.get('/health', async (req, res) => {
   const timestamp = new Date().toISOString();
-  const dbConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const dbConfigured = isDatabaseConfigured();
 
   const health = {
     success: true,
     message: 'Server is healthy',
     timestamp,
-    environment: process.env.NODE_ENV || 'development',
+    environment,
     app: {
       status: 'up',
     },
     database: {
       enabled: dbConfigured,
-      status: 'disabled',
+      status: dbConfigured ? 'unknown' : 'disabled',
     },
   };
 
@@ -122,7 +99,6 @@ app.get('/health', async (req, res) => {
 
   try {
     const { error } = await supabase.from('users').select('id').limit(1);
-
     if (error) {
       throw error;
     }
@@ -134,7 +110,7 @@ app.get('/health', async (req, res) => {
     health.message = 'Server is degraded';
     health.database.status = 'down';
 
-    if (process.env.NODE_ENV !== 'production') {
+    if (!isProduction) {
       health.database.error = error.message;
     }
 
@@ -142,23 +118,13 @@ app.get('/health', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────
-//  API Routes
-// ─────────────────────────────────────────
-
-app.use('/api/auth',    authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/user/ai', userAiRoutes);
-console.log('[app] Mounting /api/user routes');
-app.use('/api/user',    userRoutes);
-console.log('[app] Mounted /api/user routes');
-app.use('/api/skills',  skillRoutes);
-app.use('/api/trends',  trendRoutes);
-app.use('/api/market',  marketRoutes);
-app.use('/api/public',  publicRoutes);
-
-// ─────────────────────────────────────────
-//  404 & Error Handlers
-// ─────────────────────────────────────────
+app.use('/api/user', userRoutes);
+app.use('/api/skills', skillRoutes);
+app.use('/api/trends', trendRoutes);
+app.use('/api/market', marketRoutes);
+app.use('/api/public', publicRoutes);
 
 app.use('*', (req, res) => {
   res.status(404).json({
@@ -167,82 +133,111 @@ app.use('*', (req, res) => {
   });
 });
 
-// Centralized error handler (must be last)
 app.use(errorHandler);
 
-// ─────────────────────────────────────────
-//  Server Initialization
-// ─────────────────────────────────────────
+async function runStartupHealthCheck(port) {
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const endpoints = ['/health', '/api/user/countries', '/api/user/roles'];
 
-const PORT = parseInt(process.env.PORT, 10) || 4000;
+  const results = await Promise.all(
+    endpoints.map(async (endpoint) => {
+      try {
+        const response = await fetch(`${baseUrl}${endpoint}`);
+        return {
+          endpoint,
+          ok: response.ok,
+          status: response.status,
+        };
+      } catch (error) {
+        return {
+          endpoint,
+          ok: false,
+          status: null,
+          error: error.message,
+        };
+      }
+    })
+  );
 
-const closeDatabaseResources = async () => {
-  // Supabase JS is primarily an HTTP client (no pg pool to close).
-  // Cleanup is only needed if realtime resources were created.
-  if (!supabase) {
-    console.log('Database client unavailable. Skipping database cleanup.');
+  const failures = results.filter((result) => !result.ok);
+  if (failures.length === 0) {
+    return {
+      ok: true,
+      message: 'OK',
+    };
+  }
+
+  return {
+    ok: false,
+    message: failures
+      .map((result) => `${result.endpoint} (${result.status || result.error || 'failed'})`)
+      .join(', '),
+  };
+}
+
+async function closeDatabaseResources() {
+  if (!supabase || typeof supabase.removeAllChannels !== 'function') {
     return;
   }
 
-  if (typeof supabase.removeAllChannels === 'function') {
-    try {
-      await supabase.removeAllChannels();
-      console.log('Supabase realtime channels closed.');
-    } catch (err) {
-      console.error('Error closing Supabase realtime channels:', err.message);
-    }
-    return;
+  try {
+    await supabase.removeAllChannels();
+  } catch (error) {
+    logger.logError('Database cleanup failed:', error.message);
+  }
+}
+
+async function bootstrapStartup() {
+  logger.logServer(`SkillPulse Backend running on port ${PORT}`);
+  logger.logEnv(environment);
+
+  const dbStatus = await testDatabaseConnection();
+  logger.logDB(dbStatus.message, { success: dbStatus.connected });
+
+  const aiStatus = await ensureLocalAiRuntime();
+  if (!aiStatus.enabled) {
+    logger.logAI(aiStatus.message);
+  } else {
+    logger.logAI(aiStatus.message, { success: aiStatus.ready });
   }
 
-  console.log('No closable database resources found. Skipping database cleanup.');
-};
+  const healthStatus = await runStartupHealthCheck(PORT);
+  logger.logHealth(healthStatus.message, { success: healthStatus.ok });
+
+  logger.logStatus('Server running');
+  startRoleMarketScheduler();
+}
 
 const server = app.listen(PORT, () => {
-  console.log(`
-╔════════════════════════════════════════╗
-║   Skill Pulse Backend Server           
-║   Port: ${PORT}                        ║
-║   Environment: ${process.env.NODE_ENV || 'development'}           ║
-║   Status: Running ✓                    ║
-╚════════════════════════════════════════╝
-  `);
-  console.log('[app] Startup check: /api/user/countries and /api/user/roles should resolve.');
-  void ensureLocalAiRuntime();
-  startRoleMarketScheduler();
+  void bootstrapStartup();
 });
 
-// ─────────────────────────────────────────
-//  Graceful Shutdown
-// ─────────────────────────────────────────
+function shutdown(signal) {
+  logger.logWarn(`${signal} received. Shutting down gracefully.`);
 
-const shutdown = (signal) => {
-  console.log(`\n${signal} received. Shutting down gracefully...`);
   server.close(async () => {
-    console.log('HTTP server closed.');
-
     await stopRoleMarketScheduler();
     await closeDatabaseResources();
     await shutdownLocalAiRuntime();
     process.exit(0);
   });
 
-  // Force exit if graceful shutdown takes too long
   setTimeout(() => {
-    console.error('Forced shutdown after timeout.');
+    logger.logError('Forced shutdown after timeout.');
     process.exit(1);
   }, 10_000);
-};
+}
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT',  () => shutdown('SIGINT'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Promise Rejection:', reason);
+  logger.logError('Unhandled Promise Rejection:', reason);
   shutdown('unhandledRejection');
 });
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+process.on('uncaughtException', (error) => {
+  logger.logError('Uncaught Exception:', error);
   shutdown('uncaughtException');
 });
 

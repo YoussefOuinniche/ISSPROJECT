@@ -1,6 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleProp, StyleSheet, Text, TextStyle, View } from "react-native";
 
 import Colors from "@/constants/colors";
 import { AppTheme, AppSpacing, AppType } from "@/constants/theme";
@@ -14,6 +14,8 @@ type ListRowProps = {
   onPress?: () => void;
   divider?: boolean;
   accent?: "default" | "danger" | "success";
+  titleStyle?: StyleProp<TextStyle>;
+  subtitleStyle?: StyleProp<TextStyle>;
 };
 
 const ACCENT_COLORS = {
@@ -31,16 +33,18 @@ export function ListRow({
   onPress,
   divider = true,
   accent = "default",
+  titleStyle,
+  subtitleStyle,
 }: ListRowProps) {
   const content = (
     <View style={[styles.row, divider && styles.rowDivider]}>
       {leading ? <View style={styles.leading}>{leading}</View> : null}
       <View style={styles.copy}>
         <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: ACCENT_COLORS[accent] }]}>{title}</Text>
+          <Text style={[styles.title, { color: ACCENT_COLORS[accent] }, titleStyle]}>{title}</Text>
           {meta ? <Text style={styles.meta}>{meta}</Text> : null}
         </View>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        {subtitle ? <Text style={[styles.subtitle, subtitleStyle]}>{subtitle}</Text> : null}
       </View>
       <View style={styles.trailing}>
         {trailing || (onPress ? <Feather name="chevron-right" size={16} color={Colors.textTertiary} /> : null)}
@@ -85,7 +89,9 @@ const styles = StyleSheet.create({
     gap: AppSpacing.sm,
   },
   title: {
-    ...AppType.label,
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: "Inter_600SemiBold",
     flex: 1,
   },
   meta: {
@@ -93,7 +99,9 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
   subtitle: {
-    ...AppType.body,
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Newsreader_400Regular",
     color: Colors.textSecondary,
     marginTop: 4,
   },

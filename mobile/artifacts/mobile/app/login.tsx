@@ -3,13 +3,14 @@ import { Image } from "expo-image";
 import { router, useNavigation } from "expo-router";
 import React, { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLoginAuth } from "@workspace/api-client-react";
 
 import { AuthBackground } from "@/components/AuthBackground";
 import { MotionPressable } from "@/components/MotionPressable";
+import { SocialAuthButtons } from "@/components/SocialAuthButtons";
 import Colors from "@/constants/colors";
+import { beginSocialAuth, type SocialProvider } from "@/lib/auth/socialAuth";
 import { storeMobileAccessToken } from "@/lib/api/runtime";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -19,6 +20,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [socialLoadingProvider, setSocialLoadingProvider] = useState<SocialProvider | null>(null);
 
   const loginMutation = useLoginAuth();
 
@@ -53,6 +55,23 @@ export default function LoginScreen() {
     }
   };
 
+  const handleSocialAuth = async (provider: SocialProvider) => {
+    setError(null);
+    setSocialLoadingProvider(provider);
+
+    try {
+      const outcome = await beginSocialAuth(provider);
+      if (outcome.status === "success") {
+        router.replace("/(tabs)");
+        return;
+      }
+
+      setError(outcome.message);
+    } finally {
+      setSocialLoadingProvider(null);
+    }
+  };
+
   return (
     <AuthBackground>
       <ScrollView
@@ -61,68 +80,90 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          onPress={() => {
-            if (navigation.canGoBack()) {
-              router.back();
-              return;
-            }
-            router.replace("/");
-          }}
-          style={styles.backBtn}
-        >
-          <Feather name="arrow-left" size={18} color="#111111" />
-        </Pressable>
-
-        <Animated.View entering={FadeInDown.duration(500)} style={styles.logoWrap}>
-          <Image
-            source={require("@/assets/images/logo-Photoroom.png")}
-            contentFit="contain"
-            style={styles.logo}
-          />
-         
-        </Animated.View>
-
-        <View style={styles.formSection}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="you@example.com"
-            placeholderTextColor="#98A1AB"
-            autoCapitalize="none"
-            value={email}
-            onChangeText={setEmail}
-          />
-
-          <Text style={[styles.label, { marginTop: 14 }]}>Password</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="********"
-            placeholderTextColor="#98A1AB"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
-
-          <MotionPressable
-            containerStyle={[styles.cta, loginMutation.isPending && styles.ctaDisabled, { overflow: "hidden" }]}
-            onPress={submitLogin}
-            disabled={loginMutation.isPending}
+        <View style={styles.shell}>
+          <Pressable
+            onPress={() => {
+              if (navigation.canGoBack()) {
+                router.back();
+                return;
+              }
+              router.replace("/");
+            }}
+            style={styles.backBtn}
           >
-            <LinearGradient
-              colors={Colors.gradientAccentTertiary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <Text style={[styles.ctaText, { zIndex: 1 }]}>{loginMutation.isPending ? "Logging In..." : "Log In"}</Text>
-          </MotionPressable>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <Pressable style={styles.authSwitch} onPress={() => router.push("/signup")}>
-            <Text style={styles.note}>New to SkillPulse? Create your account</Text>
+            <Feather name="arrow-left" size={18} color={Colors.textPrimary} />
           </Pressable>
+
+          <View style={styles.heroBlock}>
+            <Image
+              source={require("@/assets/images/logo-nexapath.png")}
+              contentFit="contain"
+              style={styles.logo}
+            />
+            <View style={styles.heroCopy}>
+              <Text style={styles.title}>Log in to NexaPath</Text>
+            </View>
+          </View>
+
+          <View style={styles.formSection}>
+            <View style={styles.field}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="you@example.com"
+                placeholderTextColor={Colors.textTertiary}
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter your password"
+                placeholderTextColor={Colors.textTertiary}
+                secureTextEntry
+                value={password}
+                onChangeText={setPassword}
+              />
+            </View>
+
+            <View style={styles.socialWrap}>
+              <SocialAuthButtons
+                disabled={loginMutation.isPending || Boolean(socialLoadingProvider)}
+                loadingProvider={socialLoadingProvider}
+                onPress={handleSocialAuth}
+              />
+            </View>
+
+            <MotionPressable
+              containerStyle={[
+                styles.cta,
+                (loginMutation.isPending || Boolean(socialLoadingProvider)) && styles.ctaDisabled,
+                { overflow: "hidden" },
+              ]}
+              onPress={submitLogin}
+              disabled={loginMutation.isPending || Boolean(socialLoadingProvider)}
+            >
+              <LinearGradient
+                colors={Colors.gradientAccentTertiary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <Text style={[styles.ctaText, { zIndex: 1 }]}>
+                {loginMutation.isPending ? "Logging In..." : "Log In"}
+              </Text>
+            </MotionPressable>
+
+            {error ? <Text style={styles.error}>{error}</Text> : null}
+
+            <Pressable style={styles.authSwitch} onPress={() => router.push("/signup")}>
+              <Text style={styles.note}>New to NexaPath? Create your account</Text>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
     </AuthBackground>
@@ -134,78 +175,71 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    justifyContent: "center",
+    paddingHorizontal: 20,
+  },
+  shell: {
+    width: "100%",
+    maxWidth: 460,
+    alignSelf: "center",
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.52)",
-    backgroundColor: "rgba(255,255,255,0.72)",
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    marginBottom: 28,
   },
-  logoWrap: {
-    marginTop: 28,
+  heroBlock: {
+    marginBottom: 30,
+    gap: 18,
     alignItems: "center",
-    gap: 14,
   },
   logo: {
-    width: 124,
-    height: 124,
+    width: 64,
+    height: 64,
   },
-  heroTextCard: {
+  heroCopy: {
+    gap: 8,
     alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 22,
-    backgroundColor: "rgba(255,255,255,0.8)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.56)",
   },
   title: {
-    color: "#111111",
+    color: Colors.textPrimary,
     fontFamily: "Inter_700Bold",
-    fontSize: 30,
-    letterSpacing: -0.8,
-  },
-  subTitle: {
-    color: "#2E3742",
-    fontFamily: "Inter_500Medium",
+    fontSize: 34,
+    lineHeight: 40,
+    letterSpacing: -1.2,
     textAlign: "center",
-    lineHeight: 23,
-    maxWidth: 310,
   },
   formSection: {
-    marginTop: 34,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.48)",
-    backgroundColor: "rgba(255,255,255,0.82)",
-    padding: 18,
+    gap: 16,
+  },
+  field: {
+    gap: 8,
   },
   label: {
-    color: "#202124",
+    color: Colors.textSecondary,
     fontFamily: "Inter_600SemiBold",
     fontSize: 13,
-    marginBottom: 8,
   },
   input: {
-    height: 52,
-    borderRadius: 14,
+    height: 56,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(180,188,197,0.9)",
-    backgroundColor: "rgba(255,255,255,0.9)",
-    paddingHorizontal: 14,
-    color: "#111111",
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 16,
+    color: Colors.textPrimary,
     fontFamily: "Inter_500Medium",
   },
   cta: {
-    marginTop: 20,
-    height: 52,
-    borderRadius: 16,
+    marginTop: 8,
+    height: 56,
+    borderRadius: 18,
     backgroundColor: Colors.accentTertiary,
     alignItems: "center",
     justifyContent: "center",
@@ -220,19 +254,22 @@ const styles = StyleSheet.create({
   },
   error: {
     marginTop: 12,
-    color: "#C62828",
+    color: Colors.danger,
     fontSize: 12,
     textAlign: "center",
     fontFamily: "Inter_500Medium",
   },
   note: {
-    marginTop: 14,
-    color: "#33404D",
+    marginTop: 8,
+    color: Colors.textSecondary,
     fontSize: 13,
     textAlign: "center",
     fontFamily: "Inter_500Medium",
   },
   authSwitch: {
     marginTop: 2,
+  },
+  socialWrap: {
+    marginTop: 8,
   },
 });

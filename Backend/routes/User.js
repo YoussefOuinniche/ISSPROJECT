@@ -18,8 +18,6 @@ for (const handlerName of requiredCatalogHandlers) {
   }
 }
 
-console.log('[routes/User] Loaded');
-
 // Validation rules
 const profileValidation = [
   body('domain').optional().trim(),
@@ -48,22 +46,6 @@ const addSkillValidation = [
   body('proficiencyLevel').optional().isIn(['beginner', 'intermediate', 'advanced', 'expert']),
   body('yearsOfExperience').optional().isFloat({ min: 0 })
 ];
-
-
-
-// Temporary request logs for Home page catalog endpoints.
-router.use((req, res, next) => {
-  const isCatalogRoute =
-    req.method === 'GET' &&
-    (req.path === '/countries' || req.path === '/roles' || req.path.startsWith('/roles/'));
-
-  if (isCatalogRoute) {
-    console.log(`[routes/User] ${req.method} ${req.originalUrl}`);
-  }
-
-  next();
-});
-
 // Public catalog routes consumed by mobile Home page.
 router.get('/countries', UserController.getCountriesCatalog);
 router.get('/roles', UserController.getRolesCatalog);

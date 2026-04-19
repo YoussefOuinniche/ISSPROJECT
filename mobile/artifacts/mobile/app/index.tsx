@@ -1,8 +1,8 @@
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { FadeInUp } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetCurrentUser } from "@workspace/api-client-react";
 
@@ -59,55 +59,58 @@ export default function WelcomeScreen() {
       <ScrollView
         style={styles.screen}
         contentContainerStyle={{
-          paddingTop: insets.top + 32,
+          paddingTop: insets.top + 24,
           paddingBottom: insets.bottom + 28,
-          paddingHorizontal: 24,
+          paddingHorizontal: 20,
           flexGrow: 1,
           justifyContent: "center",
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.heroBlock}>
+        <View style={styles.shell}>
           <Animated.View entering={FadeInUp.duration(450)} style={styles.logoWrap}>
             <Image
-              source={require("@/assets/images/logo-Photoroom.png")}
+              source={require("@/assets/images/logo-nexapath.png")}
               contentFit="contain"
               style={styles.logo}
             />
           </Animated.View>
-        </View>
 
-        
+          <View style={styles.heroBlock}>
+            <Text style={styles.eyebrow}>Welcome to Nexapath</Text>
+            <Text style={styles.title}>Build your path with clarity.</Text>
+          </View>
 
-        <View style={styles.actions}>
-          <MotionPressable 
-            containerStyle={[styles.primaryBtn, { overflow: "hidden" }]} 
-            onPress={() => router.push("/login")}
-          >
-            <LinearGradient
-              colors={Colors.gradientAccentTertiary}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <Text style={[styles.primaryBtnText, { zIndex: 1 }]}>Log In</Text>
-          </MotionPressable>
-
-          <MotionPressable
-            containerStyle={styles.secondaryBtn}
-            onPress={() => router.push("/signup")}
-          >
-            <Text style={styles.secondaryBtnText}>Create Account</Text>
-          </MotionPressable>
-
-          {hasStoredSession && !currentUserQuery.isLoading ? (
+          <View style={styles.actions}>
             <MotionPressable
-              containerStyle={styles.inlineLink}
-              onPress={() => router.replace("/(tabs)")}
+              containerStyle={[styles.primaryBtn, { overflow: "hidden" }]}
+              onPress={() => router.push("/login")}
             >
-              <Text style={styles.inlineLinkText}>Continue with saved session</Text>
+              <LinearGradient
+                colors={Colors.gradientAccentTertiary}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <Text style={[styles.primaryBtnText, { zIndex: 1 }]}>Log In</Text>
             </MotionPressable>
-          ) : null}
+
+            <MotionPressable
+              containerStyle={styles.secondaryBtn}
+              onPress={() => router.push("/signup")}
+            >
+              <Text style={styles.secondaryBtnText}>Create Account</Text>
+            </MotionPressable>
+
+            {hasStoredSession && !currentUserQuery.isLoading ? (
+              <MotionPressable
+                containerStyle={styles.inlineLink}
+                onPress={() => router.replace("/(tabs)")}
+              >
+                <Text style={styles.inlineLinkText}>Continue with saved session</Text>
+              </MotionPressable>
+            ) : null}
+          </View>
         </View>
       </ScrollView>
     </AuthBackground>
@@ -118,31 +121,50 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
   },
-  heroBlock: {
-    alignItems: "center",
-    marginTop: 0,
-    gap: 20,
-  },
-  logoWrap: {
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logo: {
-    width: 188,
-    height: 188,
-  },
-  actions: {
-    marginTop: 36,
-    gap: 14,
+  shell: {
     width: "100%",
+    maxWidth: 460,
     alignSelf: "center",
   },
+  heroBlock: {
+    marginTop: 8,
+    marginBottom: 32,
+    gap: 8,
+    alignItems: "center",
+  },
+  logoWrap: {
+    marginBottom: 24,
+    alignItems: "center",
+  },
+  logo: {
+    width: 112,
+    height: 112,
+  },
+  eyebrow: {
+    color: Colors.textTertiary,
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  title: {
+    color: Colors.textPrimary,
+    fontSize: 36,
+    lineHeight: 42,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -1.2,
+    textAlign: "center",
+  },
+  actions: {
+    gap: 14,
+    width: "100%",
+  },
   primaryBtn: {
+    height: 56,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: Colors.primary,
-    borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 18,
   },
   primaryBtnText: {
     color: "#FFFFFF",
@@ -150,15 +172,16 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
   },
   secondaryBtn: {
-    borderRadius: 16,
+    height: 56,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.58)",
-    paddingVertical: 15,
+    borderColor: Colors.border,
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.72)",
+    justifyContent: "center",
+    backgroundColor: Colors.surface,
   },
   secondaryBtnText: {
-    color: "#000000",
+    color: Colors.textPrimary,
     fontSize: 14,
     fontFamily: "Inter_600SemiBold",
   },
@@ -167,7 +190,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   inlineLinkText: {
-    color: "#38414B",
+    color: Colors.textSecondary,
     fontSize: 13,
     fontFamily: "Inter_500Medium",
   },
