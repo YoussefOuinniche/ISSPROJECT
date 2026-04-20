@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v node_modules find \"/c/Users/youss/ISSPROJECT\" -maxdepth 3 -type d -name \"src\")"
+    ]
+  }
+}

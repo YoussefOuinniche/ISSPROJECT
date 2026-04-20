@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone *)",
+      "Bash(npx skills *)",
+      "Bash(python3 \".agents/skills/ui-ux-pro-max/scripts/search.py\" \"career intelligence job market Tunisia AI roadmap professional mobile app\" --design-system -p \"NexaPath\")",
+      "Bash(python \".agents/skills/ui-ux-pro-max/scripts/search.py\" \"career intelligence job market Tunisia AI roadmap professional mobile app\" --design-system -p \"NexaPath\")",
+      "Bash(py \".agents/skills/ui-ux-pro-max/scripts/search.py\" \"career intelligence job market Tunisia AI roadmap professional mobile app\" --design-system -p \"NexaPath\")",
+      "Bash(python \"C:\\\\Users\\\\youss\\\\OneDrive\\\\Desktop\\\\ui-ux-pro-max-skill-main\\\\ui-ux-pro-max-skill-main\\\\src\\\\ui-ux-pro-max\\\\scripts\\\\search.py\" \"career job fintech dark mode professional premium AI analytics\" --design-system -p \"NexaPath\")",
+      "Bash(xargs grep *)",
+      "Bash(npm install *)",
+      "Bash(pnpm install *)",
+      "Bash(python -m pip install -r requirements.txt)",
+      "Bash(where pnpm *)",
+      "Bash(npm root *)",
+      "Bash(export PATH=\"$PATH:/c/Users/youss/AppData/Roaming/npm\")",
+      "Bash(pnpm --version)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
+      "Bash(find . -type f \\\\\\( -name \"*.js\" -o -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) ! -path \"*/node_modules/*\" ! -path \"*/.git/*\" -exec basename {} \\\\;)",
+      "Bash(ls -la backend/src/)",
+      "Bash(ls -la backend/database/)",
+      "Bash(awk '{print $1}')",
+      "Bash(grep -r \"Reccomand\" . --include=\"*.js\" --include=\"*.ts\" ! -path \"*/node_modules/*\" ! -path \"*/.git/*\")"
+    ]
+  }
+}
