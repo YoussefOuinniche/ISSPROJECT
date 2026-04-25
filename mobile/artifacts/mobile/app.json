@@ -4,12 +4,12 @@
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/logo-Photoroom.png",
+    "icon": "./assets/images/icon.png",
     "scheme": "nexapath",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/logo-Photoroom.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#0A0E1A"
     },
@@ -18,7 +18,7 @@
     },
     "android": {},
     "web": {
-      "favicon": "./assets/images/logo-Photoroom.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       [
@@ -36,3 +36,4 @@
     }
   }
 }
+

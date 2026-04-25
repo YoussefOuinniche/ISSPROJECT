@@ -279,7 +279,7 @@ export default function AIChatScreen() {
                   <Feather name="menu" size={20} color={Colors.textPrimary} />
                 </Pressable>
                 <Image
-                  source={require("@/assets/images/logo-nexapath.png")}
+                  source={require("@/assets/images/nexapath.png")}
                   style={styles.logo}
                   resizeMode="contain"
                 />
@@ -487,8 +487,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   logo: {
-    width: 32,
-    height: 32,
+    width: 96,
+    height: 38,
   },
   screenTitle: {
     fontFamily: "Inter_700Bold",
@@ -562,3 +562,4 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
 });
+

@@ -2,7 +2,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   useGetCurrentUser,
@@ -24,7 +24,17 @@ import { clearMobileAccessToken } from "@/lib/api/runtime";
 import { computeProfileCompleteness } from "@/lib/profileScore";
 import { getExperienceLabel, parseStructuredProfileFields } from "@/lib/profileSettings";
 
-function StatBlock({ label, value }: { label: string; value: string }) {
+function StatBlock({
+  label,
+  value,
+  variant = "default",
+}: {
+  label: string;
+  value: string;
+  variant?: "default" | "accentYellow";
+}) {
+  const highlighted = variant === "accentYellow";
+
   return (
     <View
       style={{
@@ -33,12 +43,19 @@ function StatBlock({ label, value }: { label: string; value: string }) {
         paddingVertical: 18,
         paddingHorizontal: 16,
         borderRadius: 18,
-        backgroundColor: Colors.backgroundSecondary,
+        backgroundColor: highlighted ? Colors.accentYellowMuted : Colors.backgroundSecondary,
         borderWidth: 1,
-        borderColor: Colors.border,
+        borderColor: highlighted ? Colors.accentYellow : Colors.border,
       }}
     >
-      <Text style={[AppType.caption, { color: Colors.textTertiary }]}>{label}</Text>
+      <Text
+        style={[
+          AppType.caption,
+          { color: highlighted ? Colors.textSecondary : Colors.textTertiary },
+        ]}
+      >
+        {label}
+      </Text>
       <Text style={styles.statValue}>{value}</Text>
     </View>
   );
@@ -123,6 +140,7 @@ export default function ProfileScreen() {
       title="Profile"
       showBackButton={false}
       hasTabBar
+      action={<Image source={require("@/assets/images/nexapath.png")} style={{ width: 96, height: 38 }} resizeMode="contain" />}
       contentStyle={{ paddingTop: insets.top + 12 }}
       headerEyebrowStyle={styles.headerEyebrow}
       headerTitleStyle={styles.headerTitle}
@@ -138,7 +156,7 @@ export default function ProfileScreen() {
 
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
         <StatBlock label="Profile completeness" value={`${profileScore}%`} />
-        <StatBlock label="Target role" value={targetRole} />
+        <StatBlock label="Target role" value={targetRole} variant="accentYellow" />
       </View>
 
       <View style={styles.actionRow}>

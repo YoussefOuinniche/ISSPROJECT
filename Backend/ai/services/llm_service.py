@@ -44,7 +44,7 @@ def get_ollama_config() -> dict[str, Any]:
     chat_model = (
         os.getenv("OLLAMA_MODEL_CHAT")
         or os.getenv("OLLAMA_MODEL")
-        or "qwen2.5:3b"
+        or "qwen2.5:7b"
     ).strip()
     extract_model = (
         os.getenv("OLLAMA_MODEL_EXTRACT")

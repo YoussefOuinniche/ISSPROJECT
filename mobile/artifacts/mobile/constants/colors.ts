@@ -6,6 +6,9 @@ const Colors = {
   accentLight: "#DBEAFE",
   accentTertiary: "#162A6B",
   accentTertiaryLight: "#E0E7FF",
+  accentYellow: "#FDE68A",
+  accentYellowSoft: "#FFF3C4",
+  accentYellowMuted: "#FFFBEA",
   success: "#059669",
   successLight: "#D1FAE5",
   warning: "#D97706",
@@ -32,6 +35,7 @@ const Colors = {
   gradientDark: ["#111827", "#000000"] as [string, string],
   gradientCard: ["#FFFFFF", "#F9FAFB"] as [string, string],
   gradientAccentTertiary: ["#1E3A8A", "#0A1633"] as [string, string],
+  gradientAccentYellow: ["#FDE68A", "#FCD34D"] as [string, string],
 
   tint: "#2563EB",
   tabIconDefault: "#9CA3AF",

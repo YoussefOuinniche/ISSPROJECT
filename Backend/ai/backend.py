@@ -3,6 +3,7 @@ import json # for parsing and handling JSON data
 import textwrap # for compact scraped context formatting
 import hmac
 import logging
+from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -27,6 +28,19 @@ load_dotenv(os.path.join(BASE_DIR, "..", ".env"))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 logging.basicConfig(level=os.getenv("AI_LOG_LEVEL", "INFO").upper())
+logger = logging.getLogger(__name__)
+
+
+def _database_target(database_url):
+    """Return a sanitized host:port/database label for logging."""
+    try:
+        parsed = urlparse(database_url or "")
+        host = parsed.hostname or "unknown-host"
+        port = parsed.port or "unknown-port"
+        database = (parsed.path or "").lstrip("/") or "unknown-db"
+        return f"{host}:{port}/{database}"
+    except Exception:
+        return "unknown-target"
 
 
 def _env_int(name, default):
@@ -55,7 +69,7 @@ def _env_list(name, default=None):
 
 
 # --- SETTINGS ---
-OLLAMA_MODEL_CHAT = (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2.5:3b").strip()
+OLLAMA_MODEL_CHAT = (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2.5:7b").strip()
 OLLAMA_MODEL_EXTRACT = (os.getenv("OLLAMA_MODEL_EXTRACT") or OLLAMA_MODEL_CHAT).strip()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres") # database connection string
 API_HOST = os.getenv("AI_HOST", "0.0.0.0")
@@ -957,8 +971,14 @@ def check_health():
         cursor.close()
         conn.close()
         status["database"] = "connected"
-    except Exception:
+    except Exception as exc:
         status["database"] = "disconnected"
+        logger.warning(
+            "Database health check failed for %s: %s: %s",
+            _database_target(DATABASE_URL),
+            type(exc).__name__,
+            exc,
+        )
 
     all_good = True
     for key in status:

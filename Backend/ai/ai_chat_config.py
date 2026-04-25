@@ -79,7 +79,7 @@ def load_ai_chat_settings() -> AIChatSettings:
             "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
         ),
         ollama_url=normalize_ollama_url(os.getenv("OLLAMA_URL", "http://localhost:11434/v1")),
-        ollama_model=(os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2.5:3b"),
+        ollama_model=(os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2.5:7b"),
         ollama_api_key=os.getenv("OLLAMA_API_KEY", "ollama"),
         system_instruction=SYSTEM_INSTRUCTION,
         request_timeout_seconds=max(5.0, _env_float("AI_TIMEOUT_SECONDS", 60.0)),

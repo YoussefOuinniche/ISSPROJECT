@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { Profile } = require('../models');
 
-const DEFAULT_MODEL = 'qwen2.5:3b';
+const DEFAULT_MODEL = 'qwen2.5:7b';
 const DEFAULT_TIMEOUT_MS = 40_000;
 const SNAPSHOT_CACHE_TTL_MS = 1000 * 60 * 12;
 const FALLBACK_CACHE_TTL_MS = 1000 * 60 * 2;

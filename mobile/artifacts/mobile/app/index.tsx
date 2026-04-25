@@ -70,8 +70,9 @@ export default function WelcomeScreen() {
         <View style={styles.shell}>
           <Animated.View entering={FadeInUp.duration(450)} style={styles.logoWrap}>
             <Image
-              source={require("@/assets/images/logo-nexapath.png")}
+              source={require("@/assets/images/nexapath.png")}
               contentFit="contain"
+              contentPosition="center"
               style={styles.logo}
             />
           </Animated.View>
@@ -134,11 +135,14 @@ const styles = StyleSheet.create({
   },
   logoWrap: {
     marginBottom: 24,
+    width: "100%",
     alignItems: "center",
+    justifyContent: "center",
   },
   logo: {
-    width: 112,
-    height: 112,
+    width: 280,
+    height: 120,
+    alignSelf: "center",
   },
   eyebrow: {
     color: Colors.textTertiary,
@@ -195,3 +199,4 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
   },
 });
+

@@ -74,8 +74,8 @@ export function HomeHeader({
       <View style={styles.topRow}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Image 
-            source={require("@/assets/images/logo-nexapath.png")}
-            style={{ width: 44, height: 44 }}
+            source={require("@/assets/images/nexapath.png")}
+            style={{ width: 96, height: 38 }}
             resizeMode="contain"
           />
           <Text style={styles.greeting}>{greeting}</Text>
@@ -249,3 +249,4 @@ const styles = StyleSheet.create({
     color: Colors.background,
   },
 });
+

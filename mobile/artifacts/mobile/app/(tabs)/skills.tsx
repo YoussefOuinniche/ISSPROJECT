@@ -579,7 +579,7 @@ export default function SkillsScreen() {
         <View style={styles.headerCopy}>
           <View style={styles.headerBrand}>
             <Image
-              source={require("@/assets/images/logo-nexapath.png")}
+              source={require("@/assets/images/nexapath.png")}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -613,7 +613,7 @@ export default function SkillsScreen() {
           <Text style={styles.kicker}>Step 2</Text>
           <View style={styles.skillsHeaderRow}>
             <Text style={styles.blockTitle}>Choose Current Skills</Text>
-            <Badge label={`${selectedSkills.length} selected`} variant="primary" size="sm" />
+            <Badge label={`${selectedSkills.length} selected`} variant="accentYellow" size="sm" />
           </View>
 
           {selectedSkills.length > 0 ? (
@@ -774,7 +774,7 @@ export default function SkillsScreen() {
                     <Badge label={strength.category || "General"} variant="neutral" size="sm" />
                     <Badge label={`${strength.current_level} ready`} variant="success" size="sm" />
                     {risingSkillSet.has(normalizeSkillText(strength.skill)) ? (
-                      <Badge label="Rising" variant="accent" size="sm" />
+                      <Badge label="Rising" variant="accentYellow" size="sm" />
                     ) : null}
                   </View>
                 </View>
@@ -929,8 +929,8 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   logo: {
-    width: 44,
-    height: 44,
+    width: 96,
+    height: 38,
   },
   screenTitle: {
     fontFamily: "Inter_700Bold",
@@ -1302,3 +1302,4 @@ const styles = StyleSheet.create({
     color: Colors.textTertiary,
   },
 });
+

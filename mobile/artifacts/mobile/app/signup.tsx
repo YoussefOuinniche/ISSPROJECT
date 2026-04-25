@@ -1,4 +1,4 @@
-import { Feather } from "@expo/vector-icons";
+﻿import { Feather } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router, useNavigation } from "expo-router";
 import React, { useState } from "react";
@@ -108,8 +108,9 @@ export default function SignupScreen() {
 
           <View style={styles.heroBlock}>
             <Image
-              source={require("@/assets/images/logo-nexapath.png")}
+              source={require("@/assets/images/nexapath.png")}
               contentFit="contain"
+              contentPosition="center"
               style={styles.logo}
             />
             <View style={styles.heroCopy}>
@@ -235,8 +236,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logo: {
-    width: 64,
-    height: 64,
+    width: 260,
+    height: 108,
+    alignSelf: "center",
   },
   heroCopy: {
     gap: 8,
@@ -308,3 +310,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+

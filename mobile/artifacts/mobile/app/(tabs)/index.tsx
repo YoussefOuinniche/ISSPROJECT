@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AnimatedSection } from "@/components/AnimatedSection";
 import { RoleMarketCard } from "@/components/home/RoleMarketCard";
+import { Badge } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GradientCard";
 import Colors from "@/constants/colors";
 import {
@@ -150,7 +151,7 @@ export default function HomeScreen() {
       <AnimatedSection delay={20} style={styles.header}>
         <View style={styles.headerBrand}>
           <Image
-            source={require("@/assets/images/logo-nexapath.png")}
+            source={require("@/assets/images/nexapath.png")}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -176,7 +177,10 @@ export default function HomeScreen() {
 
       <AnimatedSection delay={80}>
         <GlassCard style={styles.controlsCard} padding={18} radius={24}>
-          <Text style={styles.sectionTitle}>Search Roles</Text>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>Search Roles</Text>
+            <Badge label="Live Market" variant="accentYellow" size="sm" />
+          </View>
           <View style={styles.searchShell}>
             <Feather name="search" size={16} color={Colors.textTertiary} />
             <TextInput
@@ -332,8 +336,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   logo: {
-    width: 42,
-    height: 42,
+    width: 96,
+    height: 38,
   },
   refreshIconBtn: {
     width: 38,
@@ -355,6 +359,12 @@ const styles = StyleSheet.create({
     shadowOpacity: 1,
     shadowRadius: 18,
     elevation: 5,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
   },
   sectionTitle: {
     fontSize: 16,
@@ -520,3 +530,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
+

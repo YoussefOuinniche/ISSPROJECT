@@ -105,7 +105,9 @@ async def initialize_ai_chat_runtime(app: FastAPI) -> None:
         )
         app.state.ai_skill_gap_service = AISkillGapService()
         app.state.ai_roadmap_service = AIRoadmapService()
-        logger.info("AI chat runtime initialized against %s", settings.ollama_url)
+        logger.info("[AI] Ollama URL: %s", settings.ollama_url)
+        logger.info("[AI] Ollama model: %s", settings.ollama_model)
+        logger.info("AI chat runtime initialized")
     except Exception:
         logger.exception("Failed to initialize AI chat runtime.")
         app.state.ai_chat_settings = settings

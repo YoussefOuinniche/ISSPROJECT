@@ -96,8 +96,9 @@ export default function LoginScreen() {
 
           <View style={styles.heroBlock}>
             <Image
-              source={require("@/assets/images/logo-nexapath.png")}
+              source={require("@/assets/images/nexapath.png")}
               contentFit="contain"
+              contentPosition="center"
               style={styles.logo}
             />
             <View style={styles.heroCopy}>
@@ -200,8 +201,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logo: {
-    width: 64,
-    height: 64,
+    width: 260,
+    height: 108,
+    alignSelf: "center",
   },
   heroCopy: {
     gap: 8,
@@ -273,3 +275,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 });
+

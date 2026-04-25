@@ -190,7 +190,7 @@ export default function TrendsScreen() {
       <AnimatedSection delay={20} style={styles.header}>
         <View style={styles.headerSide}>
           <Image
-            source={require("@/assets/images/logo-nexapath.png")}
+            source={require("@/assets/images/nexapath.png")}
             style={styles.logo}
             resizeMode="contain"
           />
@@ -273,7 +273,7 @@ export default function TrendsScreen() {
             </View>
             <Badge
               label={selectedDomain === ALL_DOMAINS_LABEL ? "All domains" : selectedDomain}
-              variant="primary"
+              variant="accentYellow"
               size="sm"
             />
           </View>
@@ -385,14 +385,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   headerSide: {
-    width: 44,
+    width: 104,
     height: 44,
     alignItems: "flex-start",
     justifyContent: "center",
   },
   logo: {
-    width: 38,
-    height: 38,
+    width: 96,
+    height: 36,
   },
   headerTitleWrap: {
     position: "absolute",
@@ -663,3 +663,4 @@ const styles = StyleSheet.create({
     fontFamily: "Newsreader_400Regular",
   },
 });
+
