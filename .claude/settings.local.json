@@ -20,7 +20,24 @@
       "Bash(ls -la backend/src/)",
       "Bash(ls -la backend/database/)",
       "Bash(awk '{print $1}')",
-      "Bash(grep -r \"Reccomand\" . --include=\"*.js\" --include=\"*.ts\" ! -path \"*/node_modules/*\" ! -path \"*/.git/*\")"
+      "Bash(grep -r \"Reccomand\" . --include=\"*.js\" --include=\"*.ts\" ! -path \"*/node_modules/*\" ! -path \"*/.git/*\")",
+      "Bash(where ollama *)",
+      "Bash(ollama list *)",
+      "Bash(python scripts/search.py \"career AI assistant mobile job platform professional dark navy\" --design-system -p \"SkillPulse\" -f markdown)",
+      "Bash(python3 scripts/search.py \"career AI job platform professional\" --design-system -p \"SkillPulse\")",
+      "Bash(py scripts/search.py \"career AI job platform professional\" --design-system -p \"SkillPulse\")",
+      "Bash(py \"c:/Users/youss/.claude/skills/ui-ux-pro-max/scripts/search.py\" \"career AI job platform professional mobile\" --design-system -p \"SkillPulse\")",
+      "Bash(npx expo *)",
+      "Bash(where npm *)",
+      "Bash(where node *)",
+      "Bash(\"C:/Program Files/nodejs/pnpm.cmd\" add expo-auth-session@~7.0.10 --filter @workspace/mobile)",
+      "Bash(\"/c/Users/youss/AppData/Roaming/npm/pnpm\" add *)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('version:', d.get\\('version'\\)\\); print\\('peerDeps:', json.dumps\\(d.get\\('peerDependencies',{}\\), indent=2\\)\\); print\\('deps:', json.dumps\\({k:v for k,v in d.get\\('dependencies',{}\\).items\\(\\) if 'worklet' in k.lower\\(\\)}, indent=2\\)\\)\")",
+      "Bash(node -e \"const d=require\\('./PROJECT/mobile/artifacts/mobile/node_modules/react-native-reanimated/package.json'\\); console.log\\('version:', d.version\\); console.log\\('deps with worklet:', JSON.stringify\\(Object.fromEntries\\(Object.entries\\(d.dependencies||{}\\).filter\\(\\([k]\\)=>k.includes\\('worklet'\\)\\)\\),null,2\\)\\); console.log\\('peerDeps:', JSON.stringify\\(d.peerDependencies,null,2\\)\\)\")",
+      "Bash(node -e \"const d=require\\('./PROJECT/mobile/artifacts/mobile/node_modules/react-native-worklets/package.json'\\); console.log\\('version:', d.version\\)\")",
+      "Bash(node -e \"const d=require\\('./PROJECT/mobile/artifacts/mobile/node_modules/react-native-reanimated/package.json'\\); console.log\\('version:', d.version, 'main:', d.main\\)\")",
+      "Bash(node -e \"const d=require\\('./PROJECT/mobile/artifacts/mobile/node_modules/react-native-is-edge-to-edge/package.json'\\); console.log\\('version:', d.version\\)\")",
+      "Bash(node -e \"const d=require\\('c:/Users/youss/ISSPROJECT/PROJECT/mobile/artifacts/mobile/node_modules/react-native-reanimated/package.json'\\); console.log\\('peerDeps:', JSON.stringify\\(d.peerDependencies,null,2\\)\\); console.log\\('deps:', JSON.stringify\\(d.dependencies,null,2\\)\\)\")"
     ]
   }
 }

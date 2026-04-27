@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(grep -v node_modules find \"/c/Users/youss/ISSPROJECT\" -maxdepth 3 -type d -name \"src\")"
+      "Bash(grep -v node_modules find \"/c/Users/youss/ISSPROJECT\" -maxdepth 3 -type d -name \"src\")",
+      "PowerShell($env:PATH += \";C:\\\\Users\\\\youss\\\\AppData\\\\Roaming\\\\npm\"; pnpm --version)"
     ]
   }
 }
