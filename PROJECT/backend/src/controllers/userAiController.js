@@ -109,7 +109,10 @@ const sendChatMessage = async (req, res) => {
     try {
       const aiRes = await fetch(`${aiServiceUrl}/ai/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ai-service-token': process.env.AI_SERVICE_TOKEN || '',
+        },
         body: JSON.stringify({ message: message.trim(), user_id: req.user.id }),
         signal: AbortSignal.timeout(180000),
       });
@@ -160,6 +163,7 @@ const searchJobs = async (req, res) => {
     try {
       const aiRes = await fetch(`${aiServiceUrl}/api/jobs/search?${params}`, {
         signal: AbortSignal.timeout(20000),
+        headers: { 'x-ai-service-token': process.env.AI_SERVICE_TOKEN || '' },
       });
       if (aiRes.ok) {
         const json = await aiRes.json();
@@ -186,6 +190,7 @@ const getTrendingJobs = async (req, res) => {
     try {
       const aiRes = await fetch(`${aiServiceUrl}/api/jobs/trending?${params}`, {
         signal: AbortSignal.timeout(20000),
+        headers: { 'x-ai-service-token': process.env.AI_SERVICE_TOKEN || '' },
       });
       if (aiRes.ok) {
         const json = await aiRes.json();
@@ -230,7 +235,10 @@ const generateRoadmap = async (req, res) => {
     try {
       const aiRes = await fetch(`${aiServiceUrl}/ai/generate-roadmap`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-ai-service-token': process.env.AI_SERVICE_TOKEN || '',
+        },
         body: JSON.stringify({
           role: resolvedRole,
           user_profile: {

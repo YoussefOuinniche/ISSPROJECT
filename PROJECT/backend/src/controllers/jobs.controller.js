@@ -228,7 +228,10 @@ async function getDemandHistory(req, res) {
       const aiBase = (process.env.AI_SERVICE_URL || 'http://localhost:8000').replace(/\/$/, '');
       const aiRes = await fetch(
         `${aiBase}/api/jobs/search?role=${encodeURIComponent(title)}&limit=30`,
-        { signal: AbortSignal.timeout(10000) }
+        {
+          signal: AbortSignal.timeout(10000),
+          headers: { 'x-ai-service-token': process.env.AI_SERVICE_TOKEN || '' },
+        }
       );
       if (aiRes.ok) {
         const aiJson = await aiRes.json();

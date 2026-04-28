@@ -8,15 +8,25 @@ const config = getDefaultConfig(__dirname);
 config.resolver.assetExts.push('glb', 'gltf', 'bin');
 
 // Stable cache key — prevents "unknown module" errors after file changes
-config.cacheVersion = "8";
+config.cacheVersion = "9";
 
 // Force Three.js to always resolve to the CJS build.
 // Expo's Metro enables package.json `exports` which routes ESM `import 'three'`
 // to three.module.js — that build crashes on Hermes at module-init time.
-const THREE_CJS = path.resolve(
-  __dirname,
-  "node_modules/.pnpm/three@0.169.0/node_modules/three/build/three.cjs"
-);
+// Scan the pnpm virtual store to find the actual folder name (may have a hash suffix).
+const PNPM_STORE = path.resolve(__dirname, "node_modules/.pnpm");
+let THREE_CJS = null;
+try {
+  const entries = fs.readdirSync(PNPM_STORE);
+  const threeFolder = entries.find(e => /^three@0\.169/.test(e));
+  if (threeFolder) {
+    THREE_CJS = path.resolve(PNPM_STORE, threeFolder, "node_modules/three/build/three.cjs");
+  }
+} catch (_) {}
+// Fallback: original hardcoded path
+if (!THREE_CJS) {
+  THREE_CJS = path.resolve(__dirname, "node_modules/.pnpm/three@0.169.0/node_modules/three/build/three.cjs");
+}
 
 // expo-file-system is in the pnpm virtual store (installed as expo SDK dependency)
 // but the symlink in node_modules/ may be missing on Windows (EPERM during pnpm install).
