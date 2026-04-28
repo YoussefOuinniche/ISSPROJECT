@@ -1,0 +1,1377 @@
+-- ============================================================
+-- SKILLPULSE — FULL CORRECTED DATABASE SCHEMA
+-- Supabase / PostgreSQL
+-- Run sections in order to avoid FK violations
+-- ============================================================
+
+
+-- ============================================================
+-- 0. UTILITY FUNCTION
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- ============================================================
+-- 1. PLANS  (was missing — required by subscriptions FK)
+-- ============================================================
+
+CREATE TABLE public.plans (
+    id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    name                text        NOT NULL UNIQUE,
+    price_usd           numeric(8,2) NOT NULL DEFAULT 0,
+    interval            text        NOT NULL DEFAULT 'monthly'
+                            CHECK (interval IN ('monthly', 'yearly', 'lifetime')),
+    features            jsonb       NOT NULL DEFAULT '{}',
+    is_active           boolean     NOT NULL DEFAULT true,
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_plans_active ON public.plans(is_active) WHERE is_active = true;
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.plans
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 2. PROFILES  (linked to Supabase auth.users)
+-- ============================================================
+
+CREATE TABLE public.profiles (
+    id                  uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             uuid        NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+    full_name           text,
+    avatar_url          text,
+    bio                 text,
+    date_of_birth       date,
+    education_level     text
+                            CHECK (education_level IN (
+                                'high_school', 'associate', 'bachelor',
+                                'master', 'doctorate', 'other'
+                            )),
+    years_experience    integer     CHECK (years_experience >= 0),
+    preferred_language  text        NOT NULL DEFAULT 'en',
+    role                text        NOT NULL DEFAULT 'user'
+                            CHECK (role IN ('user', 'admin')),
+    onboarding_complete boolean     NOT NULL DEFAULT false,
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_profiles_user_id ON public.profiles(user_id);
+CREATE INDEX idx_profiles_role    ON public.profiles(role);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.profiles
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 3. CATEGORIES
+-- ============================================================
+
+CREATE TABLE public.categories (
+    id          uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        text    NOT NULL UNIQUE,
+    slug        text    NOT NULL UNIQUE,
+    description text,
+    icon        text,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_categories_slug ON public.categories(slug);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.categories
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 4. SKILLS
+-- ============================================================
+
+CREATE TABLE public.skills (
+    id          uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        text    NOT NULL UNIQUE,
+    slug        text    NOT NULL UNIQUE,
+    description text,
+    category_id uuid    REFERENCES public.categories(id) ON DELETE SET NULL,
+    is_active   boolean NOT NULL DEFAULT true,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_skills_slug     ON public.skills(slug);
+CREATE INDEX idx_skills_category ON public.skills(category_id);
+CREATE INDEX idx_skills_active   ON public.skills(is_active) WHERE is_active = true;
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.skills
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 5. COURSES
+-- ============================================================
+
+CREATE TABLE public.courses (
+    id              uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    title           text    NOT NULL,
+    slug            text    NOT NULL UNIQUE,
+    description     text,
+    provider        text,                          -- e.g. 'Coursera', 'Udemy', 'Internal'
+    url             text,
+    thumbnail_url   text,
+    duration_hours  numeric(6,1) CHECK (duration_hours > 0),
+    difficulty      text
+                        CHECK (difficulty IN ('beginner','intermediate','advanced')),
+    category_id     uuid    REFERENCES public.categories(id) ON DELETE SET NULL,
+    is_active       boolean NOT NULL DEFAULT true,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_courses_slug     ON public.courses(slug);
+CREATE INDEX idx_courses_category ON public.courses(category_id);
+CREATE INDEX idx_courses_active   ON public.courses(is_active) WHERE is_active = true;
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.courses
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 6. JOB ROLES
+-- ============================================================
+
+CREATE TABLE public.job_roles (
+    id              uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    title           text    NOT NULL UNIQUE,
+    slug            text    NOT NULL UNIQUE,
+    description     text,
+    category_id     uuid    NOT NULL REFERENCES public.categories(id) ON DELETE RESTRICT,
+    seniority_level text
+                        CHECK (seniority_level IN ('entry','mid','senior','lead','principal')),
+    avg_salary_usd  integer CHECK (avg_salary_usd > 0),
+    is_active       boolean NOT NULL DEFAULT true,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_job_roles_category ON public.job_roles(category_id);
+CREATE INDEX idx_job_roles_slug     ON public.job_roles(slug);
+CREATE INDEX idx_job_roles_active   ON public.job_roles(is_active) WHERE is_active = true;
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.job_roles
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 7. USER SKILLS
+-- ============================================================
+
+CREATE TABLE public.user_skills (
+    id                uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id        uuid    NOT NULL REFERENCES public.profiles(id)  ON DELETE CASCADE,
+    skill_id          uuid    NOT NULL REFERENCES public.skills(id)    ON DELETE CASCADE,
+    proficiency_level text    NOT NULL
+                        CHECK (proficiency_level IN ('beginner','intermediate','advanced','expert')),
+    self_assessed     boolean NOT NULL DEFAULT true,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT user_skills_profile_id_skill_id_key UNIQUE (profile_id, skill_id)
+);
+
+CREATE INDEX idx_user_skills_profile ON public.user_skills(profile_id);
+CREATE INDEX idx_user_skills_skill   ON public.user_skills(skill_id);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.user_skills
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 8. USER PROGRESS
+-- ============================================================
+
+CREATE TABLE public.user_progress (
+    id           uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id   uuid    NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    course_id    uuid    NOT NULL REFERENCES public.courses(id)  ON DELETE CASCADE,
+    status       text    NOT NULL DEFAULT 'not_started'
+                    CHECK (status IN ('not_started','in_progress','completed','dropped')),
+    progress_pct integer NOT NULL DEFAULT 0 CHECK (progress_pct BETWEEN 0 AND 100),
+    started_at   timestamptz,
+    completed_at timestamptz,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT user_progress_profile_id_course_id_key UNIQUE (profile_id, course_id)
+);
+
+CREATE INDEX idx_user_progress_profile ON public.user_progress(profile_id);
+CREATE INDEX idx_user_progress_course  ON public.user_progress(course_id);
+CREATE INDEX idx_user_progress_status  ON public.user_progress(status);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.user_progress
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 9. SUBSCRIPTIONS
+-- ============================================================
+
+CREATE TABLE public.subscriptions (
+    id                      uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id              uuid    NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    plan_id                 uuid    NOT NULL REFERENCES public.plans(id)    ON DELETE RESTRICT,
+    status                  text    NOT NULL DEFAULT 'active'
+                                CHECK (status IN ('active','cancelled','expired','past_due','trialing')),
+    stripe_subscription_id  text    UNIQUE,
+    current_period_start    timestamptz NOT NULL DEFAULT now(),
+    current_period_end      timestamptz NOT NULL,
+    cancelled_at            timestamptz,
+    created_at              timestamptz NOT NULL DEFAULT now(),
+    updated_at              timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_subscriptions_profile    ON public.subscriptions(profile_id);
+CREATE INDEX idx_subscriptions_status     ON public.subscriptions(status);
+CREATE INDEX idx_subscriptions_period_end ON public.subscriptions(current_period_end);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.subscriptions
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 10. AI ROADMAPS
+-- ============================================================
+
+CREATE TABLE public.ai_roadmaps (
+    id                uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id        uuid    NOT NULL REFERENCES public.profiles(id)  ON DELETE CASCADE,
+    job_role_id       uuid    NOT NULL REFERENCES public.job_roles(id) ON DELETE RESTRICT,
+    title             text    NOT NULL,
+    summary           text,
+    estimated_weeks   integer CHECK (estimated_weeks > 0),
+    status            text    NOT NULL DEFAULT 'generating'
+                        CHECK (status IN ('generating','active','completed','archived','failed')),
+    ai_model          text,
+    generation_params jsonb   NOT NULL DEFAULT '{}',
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_ai_roadmaps_profile        ON public.ai_roadmaps(profile_id);
+CREATE INDEX idx_ai_roadmaps_job            ON public.ai_roadmaps(job_role_id);
+CREATE INDEX idx_ai_roadmaps_status         ON public.ai_roadmaps(status);
+CREATE INDEX idx_ai_roadmaps_profile_active ON public.ai_roadmaps(profile_id, status)
+    WHERE status = 'active';
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.ai_roadmaps
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 11. AI ROADMAP STEPS  (includes profile_id from the start)
+-- ============================================================
+
+CREATE TABLE public.ai_roadmap_steps (
+    id             uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    roadmap_id     uuid    NOT NULL REFERENCES public.ai_roadmaps(id) ON DELETE CASCADE,
+    profile_id     uuid    NOT NULL REFERENCES public.profiles(id)    ON DELETE CASCADE,
+    skill_id       uuid             REFERENCES public.skills(id)      ON DELETE SET NULL,
+    course_id      uuid             REFERENCES public.courses(id)     ON DELETE SET NULL,
+    step_order     integer NOT NULL CHECK (step_order > 0),
+    title          text    NOT NULL,
+    description    text,
+    duration_hours numeric(6,1) CHECK (duration_hours > 0),
+    status         text    NOT NULL DEFAULT 'locked'
+                        CHECK (status IN ('locked','available','in_progress','completed','skipped')),
+    completed_at   timestamptz,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    updated_at     timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT ai_roadmap_steps_roadmap_id_step_order_key UNIQUE (roadmap_id, step_order)
+);
+
+CREATE INDEX idx_ai_roadmap_steps_roadmap   ON public.ai_roadmap_steps(roadmap_id);
+CREATE INDEX idx_ai_roadmap_steps_profile   ON public.ai_roadmap_steps(profile_id);
+CREATE INDEX idx_ai_roadmap_steps_skill     ON public.ai_roadmap_steps(skill_id);
+CREATE INDEX idx_ai_roadmap_steps_course    ON public.ai_roadmap_steps(course_id);
+CREATE INDEX idx_ai_roadmap_steps_order     ON public.ai_roadmap_steps(roadmap_id, step_order);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.ai_roadmap_steps
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 12. AI SKILL INSIGHTS  (one-to-one with skills)
+-- ============================================================
+
+CREATE TABLE public.ai_skill_insights (
+    id            uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id      uuid    NOT NULL UNIQUE REFERENCES public.skills(id) ON DELETE CASCADE,
+    trend_score   numeric(4,2) CHECK (trend_score  BETWEEN 0 AND 10),
+    demand_level  text    CHECK (demand_level IN ('low','moderate','high','very_high','critical')),
+    market_summary text,
+    sources       jsonb   NOT NULL DEFAULT '[]',
+    confidence    numeric(3,2) CHECK (confidence BETWEEN 0 AND 1),
+    last_updated  timestamptz NOT NULL DEFAULT now(),
+    created_at    timestamptz NOT NULL DEFAULT now()
+    -- NOTE: no updated_at needed — use last_updated for AI refresh tracking
+);
+
+CREATE INDEX idx_ai_skill_insights_skill   ON public.ai_skill_insights(skill_id);
+CREATE INDEX idx_ai_skill_insights_demand  ON public.ai_skill_insights(demand_level);
+CREATE INDEX idx_ai_skill_insights_trend   ON public.ai_skill_insights(trend_score DESC);
+
+
+-- ============================================================
+-- 13. COURSE SKILLS  (M2M junction)
+-- ============================================================
+
+CREATE TABLE public.course_skills (
+    course_id uuid NOT NULL REFERENCES public.courses(id) ON DELETE CASCADE,
+    skill_id  uuid NOT NULL REFERENCES public.skills(id)  ON DELETE CASCADE,
+    PRIMARY KEY (course_id, skill_id)
+);
+
+CREATE INDEX idx_course_skills_course ON public.course_skills(course_id);
+CREATE INDEX idx_course_skills_skill  ON public.course_skills(skill_id);
+
+
+-- ============================================================
+-- 14. CHAT SESSIONS & MESSAGES
+-- ============================================================
+
+CREATE TABLE public.chat_sessions (
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    title      text,
+    status     text NOT NULL DEFAULT 'active'
+                   CHECK (status IN ('active','archived')),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_chat_sessions_profile ON public.chat_sessions(profile_id);
+CREATE INDEX idx_chat_sessions_status  ON public.chat_sessions(profile_id, status);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.chat_sessions
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+CREATE TABLE public.chat_messages (
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id uuid NOT NULL REFERENCES public.chat_sessions(id) ON DELETE CASCADE,
+    role       text NOT NULL CHECK (role IN ('user','assistant','system')),
+    content    text NOT NULL,
+    metadata   jsonb NOT NULL DEFAULT '{}',     -- token count, model, tool calls, etc.
+    created_at timestamptz NOT NULL DEFAULT now()
+    -- NOTE: messages are immutable; no updated_at needed
+);
+
+CREATE INDEX idx_chat_messages_session    ON public.chat_messages(session_id);
+CREATE INDEX idx_chat_messages_session_ts ON public.chat_messages(session_id, created_at);
+
+
+-- ============================================================
+-- 15. NOTIFICATIONS
+-- ============================================================
+
+CREATE TABLE public.notifications (
+    id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    type       text NOT NULL
+                   CHECK (type IN ('reminder','achievement','system','roadmap_update')),
+    title      text NOT NULL,
+    body       text NOT NULL,
+    is_read    boolean     NOT NULL DEFAULT false,
+    sent_at    timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+    -- NOTE: notifications are immutable after creation; no updated_at needed
+);
+
+CREATE INDEX idx_notifications_profile ON public.notifications(profile_id);
+CREATE INDEX idx_notifications_unread  ON public.notifications(profile_id, is_read)
+    WHERE is_read = false;
+
+
+-- ============================================================
+-- 16. JOB MARKET TRENDS
+-- ============================================================
+
+CREATE TABLE public.job_market_trends (
+    id                  uuid    PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_role_id         uuid    NOT NULL REFERENCES public.job_roles(id) ON DELETE CASCADE,
+    growth_percentage   numeric(5,2),
+    openings_count      integer,
+    demand_index        text    CHECK (demand_index IN ('surging','stable','declining')),
+    last_analyzed_at    timestamptz NOT NULL DEFAULT now(),
+    created_at          timestamptz NOT NULL DEFAULT now(),
+    updated_at          timestamptz NOT NULL DEFAULT now()   -- FIXED: was missing
+);
+
+CREATE INDEX idx_job_market_trends_role     ON public.job_market_trends(job_role_id);
+CREATE INDEX idx_job_market_trends_demand   ON public.job_market_trends(demand_index);
+CREATE INDEX idx_job_market_trends_analyzed ON public.job_market_trends(last_analyzed_at DESC);
+
+CREATE TRIGGER set_updated_at
+BEFORE UPDATE ON public.job_market_trends
+FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+
+-- ============================================================
+-- 17. TRIGGERS — BUSINESS LOGIC
+-- ============================================================
+
+-- 17a. Sync course completion → roadmap step status
+-- When a user completes a course (or hits 100%), mark the
+-- matching roadmap step as completed automatically.
+
+CREATE OR REPLACE FUNCTION sync_course_to_roadmap_step()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'completed' OR NEW.progress_pct = 100 THEN
+        UPDATE public.ai_roadmap_steps
+        SET
+            status       = 'completed',
+            completed_at = NOW(),
+            updated_at   = NOW()
+        WHERE
+            course_id  = NEW.course_id
+            AND profile_id = NEW.profile_id
+            AND status NOT IN ('completed', 'skipped');   -- don't overwrite already-done steps
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_course_progress
+AFTER UPDATE ON public.user_progress
+FOR EACH ROW
+EXECUTE FUNCTION sync_course_to_roadmap_step();
+
+
+-- 17b. Auto-unlock next roadmap step when current one completes
+
+CREATE OR REPLACE FUNCTION unlock_next_roadmap_step()
+RETURNS TRIGGER AS $$
+DECLARE
+    next_order integer;
+BEGIN
+    IF NEW.status = 'completed' AND OLD.status <> 'completed' THEN
+        -- Find the next step_order in the same roadmap
+        SELECT step_order INTO next_order
+        FROM public.ai_roadmap_steps
+        WHERE roadmap_id = NEW.roadmap_id
+          AND step_order > NEW.step_order
+          AND status = 'locked'
+        ORDER BY step_order ASC
+        LIMIT 1;
+
+        IF next_order IS NOT NULL THEN
+            UPDATE public.ai_roadmap_steps
+            SET status     = 'available',
+                updated_at = NOW()
+            WHERE roadmap_id  = NEW.roadmap_id
+              AND step_order   = next_order;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_unlock_next_step
+AFTER UPDATE ON public.ai_roadmap_steps
+FOR EACH ROW
+EXECUTE FUNCTION unlock_next_roadmap_step();
+
+
+-- 17c. Auto-update ai_roadmaps.status when all steps complete
+
+CREATE OR REPLACE FUNCTION check_roadmap_completion()
+RETURNS TRIGGER AS $$
+DECLARE
+    total_steps     integer;
+    completed_steps integer;
+BEGIN
+    IF NEW.status = 'completed' AND OLD.status <> 'completed' THEN
+        SELECT COUNT(*) INTO total_steps
+        FROM public.ai_roadmap_steps
+        WHERE roadmap_id = NEW.roadmap_id;
+
+        SELECT COUNT(*) INTO completed_steps
+        FROM public.ai_roadmap_steps
+        WHERE roadmap_id = NEW.roadmap_id
+          AND status = 'completed';
+
+        IF total_steps > 0 AND total_steps = completed_steps THEN
+            UPDATE public.ai_roadmaps
+            SET status     = 'completed',
+                updated_at = NOW()
+            WHERE id = NEW.roadmap_id;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_check_roadmap_completion
+AFTER UPDATE ON public.ai_roadmap_steps
+FOR EACH ROW
+EXECUTE FUNCTION check_roadmap_completion();
+
+
+-- ============================================================
+-- DONE — All tables, indexes, and triggers created.
+-- ============================================================
+-- ============================================================
+-- SKILLPULSE — COMPLETE SEED DATA (UUID-FIXED)
+-- Run in order — FK dependencies respected
+-- ============================================================
+
+
+-- 1. PLANS
+INSERT INTO public.plans (id, name, price_usd, interval, features, is_active) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'Free',        0.00,   'monthly',  '{"ai_roadmaps": 1, "courses": 10, "chat_messages": 50}'::jsonb,                         true),
+  ('00000000-0000-0000-0000-000000000002', 'Pro',         19.99,  'monthly',  '{"ai_roadmaps": 10, "courses": -1, "chat_messages": -1}'::jsonb,                        true),
+  ('00000000-0000-0000-0000-000000000003', 'Pro Yearly',  159.99, 'yearly',   '{"ai_roadmaps": 10, "courses": -1, "chat_messages": -1}'::jsonb,                        true),
+  ('00000000-0000-0000-0000-000000000004', 'Enterprise',  99.99,  'monthly',  '{"ai_roadmaps": -1, "courses": -1, "chat_messages": -1, "teams": true}'::jsonb,         true);
+
+
+-- 2. CATEGORIES
+INSERT INTO public.categories (id, name, slug, description, icon) VALUES
+  ('00000000-0000-0000-0001-000000000001', 'Software Engineering',    'software-engineering',    'Backend, frontend, and full-stack development', '💻'),
+  ('00000000-0000-0000-0001-000000000002', 'Data Science',            'data-science',            'Data analysis, ML, and statistics',             '📊'),
+  ('00000000-0000-0000-0001-000000000003', 'DevOps & Cloud',          'devops-cloud',            'CI/CD, infrastructure, and cloud platforms',    '☁️'),
+  ('00000000-0000-0000-0001-000000000004', 'Cybersecurity',           'cybersecurity',           'Application and network security',              '🔒'),
+  ('00000000-0000-0000-0001-000000000005', 'Product & Design',        'product-design',          'UX/UI design and product management',           '🎨'),
+  ('00000000-0000-0000-0001-000000000006', 'Artificial Intelligence', 'artificial-intelligence', 'AI, deep learning, and NLP',                    '🤖');
+
+
+-- 3. SKILLS
+INSERT INTO public.skills (id, name, slug, description, category_id, is_active) VALUES
+  ('00000000-0000-0000-0002-000000000001', 'JavaScript',         'javascript',         'Core web scripting language',                      '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000002', 'TypeScript',         'typescript',         'Typed superset of JavaScript',                     '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000003', 'React',              'react',              'Component-based UI library',                       '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000004', 'Node.js',            'nodejs',             'JavaScript runtime for server-side development',   '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000005', 'PostgreSQL',         'postgresql',         'Advanced open-source relational database',         '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000006', 'REST APIs',          'rest-apis',          'Designing and consuming RESTful services',         '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000007', 'Git',                'git',                'Version control with Git',                         '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000008', 'System Design',      'system-design',      'Designing scalable distributed systems',           '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000009', 'Next.js',            'nextjs',             'React framework for production',                   '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000010', 'GraphQL',            'graphql',            'Query language for APIs',                          '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0002-000000000011', 'Python',             'python',             'General-purpose programming language',             '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0002-000000000012', 'Pandas',             'pandas',             'Data manipulation and analysis library',           '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0002-000000000013', 'SQL',                'sql',                'Structured Query Language for databases',          '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0002-000000000014', 'Machine Learning',   'machine-learning',   'Building predictive models',                       '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0002-000000000015', 'Data Visualization', 'data-visualization', 'Communicating insights through charts and graphs', '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0002-000000000016', 'Docker',             'docker',             'Containerization platform',                        '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0002-000000000017', 'Kubernetes',         'kubernetes',         'Container orchestration system',                   '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0002-000000000018', 'AWS',                'aws',                'Amazon Web Services cloud platform',               '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0002-000000000019', 'CI/CD',              'ci-cd',              'Continuous integration and deployment pipelines',  '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0002-000000000020', 'Linux',              'linux',              'Linux system administration',                      '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0002-000000000021', 'Network Security',   'network-security',   'Protecting network infrastructure',                '00000000-0000-0000-0001-000000000004', true),
+  ('00000000-0000-0000-0002-000000000022', 'Ethical Hacking',    'ethical-hacking',    'Penetration testing and vulnerability assessment', '00000000-0000-0000-0001-000000000004', true),
+  ('00000000-0000-0000-0002-000000000023', 'Cryptography',       'cryptography',       'Encryption and data protection fundamentals',      '00000000-0000-0000-0001-000000000004', true),
+  ('00000000-0000-0000-0002-000000000024', 'Prompt Engineering', 'prompt-engineering', 'Designing effective prompts for LLMs',             '00000000-0000-0000-0001-000000000006', true),
+  ('00000000-0000-0000-0002-000000000025', 'LangChain',          'langchain',          'Framework for building LLM-powered apps',          '00000000-0000-0000-0001-000000000006', true);
+
+
+-- 4. COURSES
+INSERT INTO public.courses (id, title, slug, description, provider, url, duration_hours, difficulty, category_id, is_active) VALUES
+  ('00000000-0000-0000-0003-000000000001', 'JavaScript: The Complete Guide',       'javascript-complete-guide',       'Master JS from basics to advanced',                     'Udemy',           'https://udemy.com/course/javascript-the-complete-guide-2020-beginner-advanced',              52.5, 'beginner',     '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000002', 'TypeScript for Professionals',          'typescript-for-professionals',    'Deep dive into TypeScript features and patterns',        'Udemy',           'https://udemy.com/course/typescript-bootcamp',                                               18.0, 'intermediate', '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000003', 'React: The Complete Guide',             'react-complete-guide',            'React including Hooks, Router, and Redux',               'Udemy',           'https://udemy.com/course/react-the-complete-guide-incl-redux',                               48.0, 'intermediate', '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000004', 'Node.js and Express REST APIs',         'nodejs-express-rest-apis',        'Build scalable REST APIs with Node and Express',         'Udemy',           'https://udemy.com/course/nodejs-express-mongodb-bootcamp',                                   42.0, 'intermediate', '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000005', 'PostgreSQL Bootcamp',                   'postgresql-bootcamp',             'Master PostgreSQL from scratch to advanced',             'Udemy',           'https://udemy.com/course/the-complete-sql-bootcamp',                                         22.5, 'beginner',     '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000006', 'Full-Stack Web Dev Bootcamp',           'full-stack-web-dev-bootcamp',     'HTML, CSS, JS, Node, React end-to-end',                  'Udemy',           'https://udemy.com/course/the-web-developer-bootcamp',                                        63.5, 'beginner',     '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000007', 'System Design for Interviews',          'system-design-interviews',        'Design scalable systems used at top tech companies',     'Educative',       'https://educative.io/courses/grokking-the-system-design-interview',                          20.0, 'advanced',     '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000008', 'Next.js 14 App Router Masterclass',    'nextjs-app-router-masterclass',   'Build production apps with Next.js App Router',          'Udemy',           'https://udemy.com/course/nextjs-react-the-complete-guide',                                   25.0, 'intermediate', '00000000-0000-0000-0001-000000000001', true),
+  ('00000000-0000-0000-0003-000000000009', 'Python for Everybody',                  'python-for-everybody',            'Learn Python programming from scratch',                  'Coursera',        'https://coursera.org/specializations/python',                                                28.0, 'beginner',     '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0003-000000000010', 'Data Science with Python',              'data-science-with-python',        'Pandas, NumPy, Matplotlib, and Scikit-learn',            'Coursera',        'https://coursera.org/professional-certificates/ibm-data-science',                            40.0, 'intermediate', '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0003-000000000011', 'Machine Learning Specialization',       'machine-learning-specialization', 'Andrew Ngs ML course updated for 2024',                  'Coursera',        'https://coursera.org/specializations/machine-learning-introduction',                         36.0, 'intermediate', '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0003-000000000012', 'SQL for Data Analysis',                 'sql-for-data-analysis',           'Write complex SQL queries for analytics',                'Udacity',         'https://udacity.com/course/sql-for-data-analysis--ud198',                                   16.0, 'beginner',     '00000000-0000-0000-0001-000000000002', true),
+  ('00000000-0000-0000-0003-000000000013', 'Docker and Kubernetes Practical Guide', 'docker-kubernetes-practical',     'Containerize and orchestrate real-world applications',   'Udemy',           'https://udemy.com/course/docker-kubernetes-the-practical-guide',                             23.5, 'intermediate', '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0003-000000000014', 'AWS Certified Cloud Practitioner',      'aws-cloud-practitioner',          'Foundational AWS concepts and exam prep',                'Udemy',           'https://udemy.com/course/aws-certified-cloud-practitioner-new',                              27.0, 'beginner',     '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0003-000000000015', 'DevOps CI/CD Pipelines',                'devops-cicd-pipelines',           'GitHub Actions, Jenkins, and automated deployments',     'Udemy',           'https://udemy.com/course/github-actions-the-complete-guide',                                 14.0, 'intermediate', '00000000-0000-0000-0001-000000000003', true),
+  ('00000000-0000-0000-0003-000000000016', 'ChatGPT Prompt Engineering for Devs',  'prompt-engineering-for-devs',     'Best practices for prompting LLMs in production apps',   'DeepLearning.AI', 'https://deeplearning.ai/short-courses/chatgpt-prompt-engineering-for-developers',              8.0, 'beginner',     '00000000-0000-0000-0001-000000000006', true),
+  ('00000000-0000-0000-0003-000000000017', 'LangChain for LLM App Development',    'langchain-llm-app-development',   'Build LLM-powered pipelines and agents with LangChain', 'DeepLearning.AI', 'https://deeplearning.ai/short-courses/langchain-for-llm-application-development',             10.0, 'intermediate', '00000000-0000-0000-0001-000000000006', true);
+
+
+-- 5. COURSE SKILLS
+INSERT INTO public.course_skills (course_id, skill_id) VALUES
+  ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0002-000000000001'),
+  ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0002-000000000006'),
+  ('00000000-0000-0000-0003-000000000002', '00000000-0000-0000-0002-000000000002'),
+  ('00000000-0000-0000-0003-000000000003', '00000000-0000-0000-0002-000000000003'),
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0002-000000000004'),
+  ('00000000-0000-0000-0003-000000000004', '00000000-0000-0000-0002-000000000006'),
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0002-000000000005'),
+  ('00000000-0000-0000-0003-000000000005', '00000000-0000-0000-0002-000000000013'),
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0002-000000000001'),
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0002-000000000003'),
+  ('00000000-0000-0000-0003-000000000006', '00000000-0000-0000-0002-000000000004'),
+  ('00000000-0000-0000-0003-000000000007', '00000000-0000-0000-0002-000000000008'),
+  ('00000000-0000-0000-0003-000000000008', '00000000-0000-0000-0002-000000000009'),
+  ('00000000-0000-0000-0003-000000000009', '00000000-0000-0000-0002-000000000011'),
+  ('00000000-0000-0000-0003-000000000010', '00000000-0000-0000-0002-000000000012'),
+  ('00000000-0000-0000-0003-000000000010', '00000000-0000-0000-0002-000000000015'),
+  ('00000000-0000-0000-0003-000000000011', '00000000-0000-0000-0002-000000000014'),
+  ('00000000-0000-0000-0003-000000000012', '00000000-0000-0000-0002-000000000013'),
+  ('00000000-0000-0000-0003-000000000013', '00000000-0000-0000-0002-000000000016'),
+  ('00000000-0000-0000-0003-000000000013', '00000000-0000-0000-0002-000000000017'),
+  ('00000000-0000-0000-0003-000000000014', '00000000-0000-0000-0002-000000000018'),
+  ('00000000-0000-0000-0003-000000000015', '00000000-0000-0000-0002-000000000019'),
+  ('00000000-0000-0000-0003-000000000016', '00000000-0000-0000-0002-000000000024'),
+  ('00000000-0000-0000-0003-000000000017', '00000000-0000-0000-0002-000000000025');
+
+
+-- 6. JOB ROLES
+INSERT INTO public.job_roles (id, title, slug, description, category_id, seniority_level, avg_salary_usd, is_active) VALUES
+  ('00000000-0000-0000-0004-000000000001', 'Junior Full-Stack Developer', 'junior-full-stack-developer', 'Entry-level full-stack web development',               '00000000-0000-0000-0001-000000000001', 'entry',   65000, true),
+  ('00000000-0000-0000-0004-000000000002', 'Full-Stack Developer',        'full-stack-developer',        'Mid-level full-stack web development',                 '00000000-0000-0000-0001-000000000001', 'mid',     95000, true),
+  ('00000000-0000-0000-0004-000000000003', 'Senior Full-Stack Developer', 'senior-full-stack-developer', 'Senior full-stack architecture and development',       '00000000-0000-0000-0001-000000000001', 'senior', 135000, true),
+  ('00000000-0000-0000-0004-000000000004', 'Frontend Developer',          'frontend-developer',          'Specialist in UI/UX and client-side development',     '00000000-0000-0000-0001-000000000001', 'mid',     85000, true),
+  ('00000000-0000-0000-0004-000000000005', 'Backend Developer',           'backend-developer',           'Specialist in server-side APIs and databases',        '00000000-0000-0000-0001-000000000001', 'mid',     90000, true),
+  ('00000000-0000-0000-0004-000000000006', 'Data Scientist',              'data-scientist',              'Extracts insights from data using ML and statistics', '00000000-0000-0000-0001-000000000002', 'mid',    110000, true),
+  ('00000000-0000-0000-0004-000000000007', 'ML Engineer',                 'ml-engineer',                 'Builds and deploys machine learning systems',         '00000000-0000-0000-0001-000000000006', 'mid',    130000, true),
+  ('00000000-0000-0000-0004-000000000008', 'DevOps Engineer',             'devops-engineer',             'Manages infrastructure, CI/CD, and cloud platforms',  '00000000-0000-0000-0001-000000000003', 'mid',    115000, true),
+  ('00000000-0000-0000-0004-000000000009', 'AI Application Developer',    'ai-application-developer',    'Builds LLM-powered products and AI integrations',     '00000000-0000-0000-0001-000000000006', 'mid',    120000, true);
+
+
+-- 7. AI SKILL INSIGHTS
+INSERT INTO public.ai_skill_insights (id, skill_id, trend_score, demand_level, market_summary, sources, confidence) VALUES
+  ('00000000-0000-0000-0005-000000000001', '00000000-0000-0000-0002-000000000001', 8.5, 'very_high', 'JavaScript remains the most used language on the web. Demand is consistently high across all company sizes.',  '["Stack Overflow Survey 2024", "GitHub Octoverse 2024"]'::jsonb, 0.95),
+  ('00000000-0000-0000-0005-000000000002', '00000000-0000-0000-0002-000000000002', 9.1, 'critical',  'TypeScript adoption is accelerating rapidly. Most new enterprise projects require TypeScript proficiency.',     '["State of JS 2024", "JetBrains Dev Survey 2024"]'::jsonb,     0.93),
+  ('00000000-0000-0000-0005-000000000003', '00000000-0000-0000-0002-000000000003', 8.8, 'very_high', 'React dominates the frontend framework market with 40 percent share. High demand across startups and enterprises.', '["State of JS 2024", "LinkedIn Jobs Data"]'::jsonb,         0.94),
+  ('00000000-0000-0000-0005-000000000004', '00000000-0000-0000-0002-000000000004', 8.2, 'high',      'Node.js is the go-to for JavaScript backend development. Strong demand for REST API and microservices skills.', '["Stack Overflow Survey 2024"]'::jsonb,                        0.90),
+  ('00000000-0000-0000-0005-000000000005', '00000000-0000-0000-0002-000000000005', 8.0, 'high',      'PostgreSQL is the leading open-source relational DB. Preferred over MySQL in modern cloud stacks.',            '["DB-Engines Ranking 2024"]'::jsonb,                           0.91),
+  ('00000000-0000-0000-0005-000000000006', '00000000-0000-0000-0002-000000000014', 9.3, 'critical',  'Machine learning skills are among the fastest-growing in tech. Demand far outpaces supply globally.',          '["World Economic Forum 2024", "LinkedIn Emerging Jobs"]'::jsonb, 0.96),
+  ('00000000-0000-0000-0005-000000000007', '00000000-0000-0000-0002-000000000016', 8.9, 'very_high', 'Docker is now a baseline DevOps skill. Containerization is expected in virtually all backend roles.',          '["Stack Overflow Survey 2024"]'::jsonb,                        0.92),
+  ('00000000-0000-0000-0005-000000000008', '00000000-0000-0000-0002-000000000018', 9.0, 'critical',  'AWS leads cloud with 32 percent market share. AWS certifications significantly boost earning potential.',       '["Synergy Research 2024", "LinkedIn Salary Insights"]'::jsonb, 0.95),
+  ('00000000-0000-0000-0005-000000000009', '00000000-0000-0000-0002-000000000024', 9.5, 'critical',  'Prompt engineering is one of the most in-demand skills of 2024. Critical for AI-first product teams.',        '["LinkedIn Emerging Jobs 2024", "AngelList Trends"]'::jsonb,  0.97),
+  ('00000000-0000-0000-0005-000000000010', '00000000-0000-0000-0002-000000000009', 8.7, 'very_high', 'Next.js is the dominant React meta-framework. Preferred for SEO-sensitive and full-stack React apps.',         '["State of JS 2024", "Vercel Ecosystem Data"]'::jsonb,         0.92);
+
+
+-- 8. JOB MARKET TRENDS
+INSERT INTO public.job_market_trends (id, job_role_id, growth_percentage, openings_count, demand_index) VALUES
+  ('00000000-0000-0000-0006-000000000001', '00000000-0000-0000-0004-000000000001', 12.5,   48000, 'surging'),
+  ('00000000-0000-0000-0006-000000000002', '00000000-0000-0000-0004-000000000002', 18.2,   92000, 'surging'),
+  ('00000000-0000-0000-0006-000000000003', '00000000-0000-0000-0004-000000000003', 15.0,   54000, 'surging'),
+  ('00000000-0000-0000-0006-000000000004', '00000000-0000-0000-0004-000000000004', 10.3,   71000, 'surging'),
+  ('00000000-0000-0000-0006-000000000005', '00000000-0000-0000-0004-000000000005', 14.1,   83000, 'surging'),
+  ('00000000-0000-0000-0006-000000000006', '00000000-0000-0000-0004-000000000006', 27.6,  115000, 'surging'),
+  ('00000000-0000-0000-0006-000000000007', '00000000-0000-0000-0004-000000000007', 35.2,  140000, 'surging'),
+  ('00000000-0000-0000-0006-000000000008', '00000000-0000-0000-0004-000000000008', 22.0,   96000, 'surging'),
+  ('00000000-0000-0000-0006-000000000009', '00000000-0000-0000-0004-000000000009', 41.0,  160000, 'surging');
+-- ============================================================
+-- SKILLPULSE — SIMULATED USER DATA SEED
+-- ============================================================
+
+
+-- ============================================================
+-- 0. PRE-SEED FIXES
+-- ============================================================
+
+-- Drop auth.users FK so we can insert fake profiles
+ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_user_id_fkey;
+
+-- Insert missing course that was skipped in original seed
+INSERT INTO public.courses (id, title, slug, description, provider, url, duration_hours, difficulty, category_id, is_active)
+VALUES (
+  '00000000-0000-0000-0003-000000000001',
+  'JavaScript: The Complete Guide',
+  'javascript-complete-guide',
+  'Master JS from basics to advanced',
+  'Udemy',
+  'https://udemy.com/course/javascript-the-complete-guide-2020-beginner-advanced',
+  52.5,
+  'beginner',
+  '00000000-0000-0000-0001-000000000001',
+  true
+) ON CONFLICT (id) DO NOTHING;
+
+-- Also insert its course_skills mapping if missing
+INSERT INTO public.course_skills (course_id, skill_id) VALUES
+  ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0002-000000000001'),
+  ('00000000-0000-0000-0003-000000000001', '00000000-0000-0000-0002-000000000006')
+ON CONFLICT DO NOTHING;
+
+
+-- ============================================================
+-- 1. PROFILES  (10 users)
+-- ============================================================
+
+INSERT INTO public.profiles (id, user_id, full_name, avatar_url, bio, education_level, years_experience, preferred_language, role, onboarding_complete) VALUES
+  -- User 1: Junior dev, just starting out
+  ('a0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001',
+   'Amira Benali', NULL,
+   'Computer science student looking to break into full-stack development.',
+   'bachelor', 0, 'en', 'user', true),
+
+  -- User 2: Career switcher from marketing
+  ('a0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000002',
+   'Marcus Chen', NULL,
+   'Former marketing manager pivoting to data science. Self-taught Python enthusiast.',
+   'bachelor', 5, 'en', 'user', true),
+
+  -- User 3: Mid-level backend dev leveling up
+  ('a0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000003',
+   'Fatima Al-Rashid', NULL,
+   'Backend developer with 3 years of Node.js experience, aiming for senior roles.',
+   'master', 3, 'en', 'user', true),
+
+  -- User 4: DevOps focused
+  ('a0000000-0000-0000-0000-000000000004', 'b0000000-0000-0000-0000-000000000004',
+   'Liam O''Sullivan', NULL,
+   'Sysadmin transitioning into DevOps and cloud engineering.',
+   'associate', 4, 'en', 'user', true),
+
+  -- User 5: AI/ML enthusiast
+  ('a0000000-0000-0000-0000-000000000005', 'b0000000-0000-0000-0000-000000000005',
+   'Priya Sharma', NULL,
+   'Math graduate exploring machine learning and AI application development.',
+   'master', 1, 'en', 'user', true),
+
+  -- User 6: Frontend specialist
+  ('a0000000-0000-0000-0000-000000000006', 'b0000000-0000-0000-0000-000000000006',
+   'James Wright', NULL,
+   'Self-taught frontend developer, 2 years freelancing. Wants to go full-time.',
+   'high_school', 2, 'en', 'user', true),
+
+  -- User 7: Senior dev, broad skills
+  ('a0000000-0000-0000-0000-000000000007', 'b0000000-0000-0000-0000-000000000007',
+   'Sofia Petrov', NULL,
+   'Senior engineer at a fintech startup. Interested in system design and leadership.',
+   'master', 7, 'en', 'user', true),
+
+  -- User 8: Fresh grad, hasn't started onboarding
+  ('a0000000-0000-0000-0000-000000000008', 'b0000000-0000-0000-0000-000000000008',
+   'Omar Diallo', NULL,
+   'Just graduated with a CS degree. Exploring career options.',
+   'bachelor', 0, 'en', 'user', false),
+
+  -- User 9: Pro subscriber, cybersecurity focus
+  ('a0000000-0000-0000-0000-000000000009', 'b0000000-0000-0000-0000-000000000009',
+   'Elena Kovacs', NULL,
+   'IT security analyst moving toward ethical hacking and penetration testing.',
+   'bachelor', 3, 'en', 'user', true),
+
+  -- User 10: Admin account
+  ('a0000000-0000-0000-0000-000000000010', 'b0000000-0000-0000-0000-000000000010',
+   'Admin SkillPulse', NULL,
+   'Platform administrator.',
+   NULL, NULL, 'en', 'admin', true);
+
+
+-- ============================================================
+-- 2. USER SKILLS
+-- ============================================================
+
+INSERT INTO public.user_skills (id, profile_id, skill_id, proficiency_level, self_assessed) VALUES
+  -- Amira (junior, learning JS/React/Node basics)
+  ('c0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0002-000000000001', 'beginner',     true),
+  ('c0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0002-000000000003', 'beginner',     true),
+  ('c0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000001', '00000000-0000-0000-0002-000000000007', 'beginner',     true),
+
+  -- Marcus (career switcher: Python, SQL, some Pandas)
+  ('c0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0002-000000000011', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0002-000000000013', 'beginner',     true),
+  ('c0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000002', '00000000-0000-0000-0002-000000000012', 'beginner',     true),
+
+  -- Fatima (mid backend: Node, Postgres, REST, TypeScript, some Docker)
+  ('c0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000003', '00000000-0000-0000-0002-000000000004', 'advanced',     true),
+  ('c0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000003', '00000000-0000-0000-0002-000000000005', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000009', 'a0000000-0000-0000-0000-000000000003', '00000000-0000-0000-0002-000000000006', 'advanced',     true),
+  ('c0000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000003', '00000000-0000-0000-0002-000000000002', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000011', 'a0000000-0000-0000-0000-000000000003', '00000000-0000-0000-0002-000000000016', 'beginner',     true),
+
+  -- Liam (DevOps: Linux, Docker, some AWS, CI/CD beginner)
+  ('c0000000-0000-0000-0000-000000000012', 'a0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0002-000000000020', 'advanced',     true),
+  ('c0000000-0000-0000-0000-000000000013', 'a0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0002-000000000016', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000014', 'a0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0002-000000000018', 'beginner',     true),
+  ('c0000000-0000-0000-0000-000000000015', 'a0000000-0000-0000-0000-000000000004', '00000000-0000-0000-0002-000000000019', 'beginner',     true),
+
+  -- Priya (AI/ML: Python advanced, ML intermediate, Prompt Eng beginner)
+  ('c0000000-0000-0000-0000-000000000016', 'a0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0002-000000000011', 'advanced',     true),
+  ('c0000000-0000-0000-0000-000000000017', 'a0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0002-000000000014', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000018', 'a0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0002-000000000024', 'beginner',     true),
+  ('c0000000-0000-0000-0000-000000000019', 'a0000000-0000-0000-0000-000000000005', '00000000-0000-0000-0002-000000000025', 'beginner',     true),
+
+  -- James (frontend: JS intermediate, React intermediate, some CSS)
+  ('c0000000-0000-0000-0000-000000000020', 'a0000000-0000-0000-0000-000000000006', '00000000-0000-0000-0002-000000000001', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000021', 'a0000000-0000-0000-0000-000000000006', '00000000-0000-0000-0002-000000000003', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000022', 'a0000000-0000-0000-0000-000000000006', '00000000-0000-0000-0002-000000000009', 'beginner',     true),
+  ('c0000000-0000-0000-0000-000000000023', 'a0000000-0000-0000-0000-000000000006', '00000000-0000-0000-0002-000000000007', 'intermediate', true),
+
+  -- Sofia (senior: broad stack)
+  ('c0000000-0000-0000-0000-000000000024', 'a0000000-0000-0000-0000-000000000007', '00000000-0000-0000-0002-000000000001', 'expert',       true),
+  ('c0000000-0000-0000-0000-000000000025', 'a0000000-0000-0000-0000-000000000007', '00000000-0000-0000-0002-000000000002', 'advanced',     true),
+  ('c0000000-0000-0000-0000-000000000026', 'a0000000-0000-0000-0000-000000000007', '00000000-0000-0000-0002-000000000003', 'expert',       true),
+  ('c0000000-0000-0000-0000-000000000027', 'a0000000-0000-0000-0000-000000000007', '00000000-0000-0000-0002-000000000004', 'advanced',     true),
+  ('c0000000-0000-0000-0000-000000000028', 'a0000000-0000-0000-0000-000000000007', '00000000-0000-0000-0002-000000000005', 'advanced',     true),
+  ('c0000000-0000-0000-0000-000000000029', 'a0000000-0000-0000-0000-000000000007', '00000000-0000-0000-0002-000000000008', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000030', 'a0000000-0000-0000-0000-000000000007', '00000000-0000-0000-0002-000000000016', 'intermediate', true),
+
+  -- Elena (cybersecurity: network sec, ethical hacking, Linux)
+  ('c0000000-0000-0000-0000-000000000031', 'a0000000-0000-0000-0000-000000000009', '00000000-0000-0000-0002-000000000021', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000032', 'a0000000-0000-0000-0000-000000000009', '00000000-0000-0000-0002-000000000022', 'beginner',     true),
+  ('c0000000-0000-0000-0000-000000000033', 'a0000000-0000-0000-0000-000000000009', '00000000-0000-0000-0002-000000000020', 'intermediate', true),
+  ('c0000000-0000-0000-0000-000000000034', 'a0000000-0000-0000-0000-000000000009', '00000000-0000-0000-0002-000000000023', 'beginner',     true);
+
+
+-- ============================================================
+-- 3. SUBSCRIPTIONS
+-- ============================================================
+
+INSERT INTO public.subscriptions (id, profile_id, plan_id, status, stripe_subscription_id, current_period_start, current_period_end, cancelled_at) VALUES
+  -- Amira: Free plan
+  ('d0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000000001', 'active', NULL,
+   '2025-11-01', '2099-12-31', NULL),
+
+  -- Marcus: Pro monthly
+  ('d0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0000-000000000002', 'active', 'sub_marcus_001',
+   '2026-03-15', '2026-04-15', NULL),
+
+  -- Fatima: Pro Yearly
+  ('d0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0000-000000000003', 'active', 'sub_fatima_001',
+   '2025-09-01', '2026-09-01', NULL),
+
+  -- Liam: Pro monthly
+  ('d0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0000-000000000002', 'active', 'sub_liam_001',
+   '2026-03-01', '2026-04-01', NULL),
+
+  -- Priya: Pro Yearly
+  ('d0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0000-000000000003', 'active', 'sub_priya_001',
+   '2025-12-10', '2026-12-10', NULL),
+
+  -- James: Free plan
+  ('d0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0000-000000000001', 'active', NULL,
+   '2026-01-05', '2099-12-31', NULL),
+
+  -- Sofia: Enterprise
+  ('d0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0000-000000000004', 'active', 'sub_sofia_001',
+   '2025-06-01', '2026-06-01', NULL),
+
+  -- Omar: Free (hasn't even finished onboarding)
+  ('d0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000008',
+   '00000000-0000-0000-0000-000000000001', 'active', NULL,
+   '2026-04-01', '2099-12-31', NULL),
+
+  -- Elena: Pro monthly
+  ('d0000000-0000-0000-0000-000000000009', 'a0000000-0000-0000-0000-000000000009',
+   '00000000-0000-0000-0000-000000000002', 'active', 'sub_elena_001',
+   '2026-02-20', '2026-03-20', NULL),
+
+  -- Cancelled subscription example: Marcus had a previous cancelled sub
+  ('d0000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0000-000000000001', 'cancelled', NULL,
+   '2025-06-01', '2026-03-14', '2026-03-14');
+
+
+-- ============================================================
+-- 4. USER PROGRESS  (course enrollment & completion)
+-- ============================================================
+
+INSERT INTO public.user_progress (id, profile_id, course_id, status, progress_pct, started_at, completed_at) VALUES
+  -- Amira: grinding through the JS bootcamp path
+  ('e0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0003-000000000001', 'in_progress', 42,
+   '2026-01-10', NULL),
+  ('e0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0003-000000000006', 'in_progress', 18,
+   '2026-02-15', NULL),
+
+  -- Marcus: Python done, working on data science & SQL
+  ('e0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0003-000000000009', 'completed', 100,
+   '2025-08-01', '2025-11-20'),
+  ('e0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0003-000000000012', 'completed', 100,
+   '2025-12-01', '2026-01-15'),
+  ('e0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0003-000000000010', 'in_progress', 65,
+   '2026-01-20', NULL),
+  ('e0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0003-000000000011', 'not_started', 0,
+   NULL, NULL),
+
+  -- Fatima: completed Node+Express, doing TypeScript, eyeing system design
+  ('e0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0003-000000000004', 'completed', 100,
+   '2025-04-01', '2025-07-15'),
+  ('e0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0003-000000000002', 'in_progress', 78,
+   '2025-10-01', NULL),
+  ('e0000000-0000-0000-0000-000000000009', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0003-000000000007', 'not_started', 0,
+   NULL, NULL),
+  ('e0000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0003-000000000013', 'in_progress', 30,
+   '2026-02-01', NULL),
+
+  -- Liam: Docker/K8s practical halfway, starting AWS cert
+  ('e0000000-0000-0000-0000-000000000011', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0003-000000000013', 'in_progress', 55,
+   '2026-01-05', NULL),
+  ('e0000000-0000-0000-0000-000000000012', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0003-000000000014', 'in_progress', 20,
+   '2026-03-01', NULL),
+  ('e0000000-0000-0000-0000-000000000013', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0003-000000000015', 'not_started', 0,
+   NULL, NULL),
+
+  -- Priya: ML spec in progress, prompt eng done, LangChain started
+  ('e0000000-0000-0000-0000-000000000014', 'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0003-000000000011', 'in_progress', 70,
+   '2025-10-15', NULL),
+  ('e0000000-0000-0000-0000-000000000015', 'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0003-000000000016', 'completed', 100,
+   '2025-12-01', '2026-01-05'),
+  ('e0000000-0000-0000-0000-000000000016', 'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0003-000000000017', 'in_progress', 35,
+   '2026-01-10', NULL),
+
+  -- James: React course nearly done, starting Next.js
+  ('e0000000-0000-0000-0000-000000000017', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0003-000000000003', 'in_progress', 88,
+   '2025-11-01', NULL),
+  ('e0000000-0000-0000-0000-000000000018', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0003-000000000008', 'not_started', 0,
+   NULL, NULL),
+  ('e0000000-0000-0000-0000-000000000019', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0003-000000000001', 'completed', 100,
+   '2025-06-01', '2025-10-20'),
+
+  -- Sofia: system design in progress, completed multiple courses already
+  ('e0000000-0000-0000-0000-000000000020', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0003-000000000007', 'in_progress', 60,
+   '2026-01-01', NULL),
+  ('e0000000-0000-0000-0000-000000000021', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0003-000000000002', 'completed', 100,
+   '2025-03-01', '2025-05-10'),
+  ('e0000000-0000-0000-0000-000000000022', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0003-000000000004', 'completed', 100,
+   '2024-11-01', '2025-02-28'),
+  ('e0000000-0000-0000-0000-000000000023', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0003-000000000013', 'completed', 100,
+   '2025-06-01', '2025-08-15');
+
+
+-- ============================================================
+-- 5. AI ROADMAPS  (no AI-generated content — just the shell)
+-- ============================================================
+
+INSERT INTO public.ai_roadmaps (id, profile_id, job_role_id, title, summary, estimated_weeks, status, ai_model, generation_params) VALUES
+  -- Amira → Junior Full-Stack Developer
+  ('f0000000-0000-0000-0000-000000000001',
+   'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0004-000000000001',
+   'Junior Full-Stack Developer Roadmap',
+   'A structured path from JavaScript basics to building full-stack web applications.',
+   16, 'active', NULL, '{}'::jsonb),
+
+  -- Marcus → Data Scientist
+  ('f0000000-0000-0000-0000-000000000002',
+   'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0004-000000000006',
+   'Data Scientist Career Path',
+   'From Python fundamentals through statistics, ML, and real-world data projects.',
+   20, 'active', NULL, '{}'::jsonb),
+
+  -- Fatima → Senior Full-Stack Developer
+  ('f0000000-0000-0000-0000-000000000003',
+   'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0004-000000000003',
+   'Path to Senior Full-Stack Developer',
+   'Level up from mid to senior with TypeScript mastery, system design, and DevOps skills.',
+   24, 'active', NULL, '{}'::jsonb),
+
+  -- Liam → DevOps Engineer
+  ('f0000000-0000-0000-0000-000000000004',
+   'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0004-000000000008',
+   'DevOps Engineer Roadmap',
+   'Docker, Kubernetes, AWS, and CI/CD pipelines for production infrastructure.',
+   18, 'active', NULL, '{}'::jsonb),
+
+  -- Priya → AI Application Developer
+  ('f0000000-0000-0000-0000-000000000005',
+   'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0004-000000000009',
+   'AI Application Developer Path',
+   'Build production AI apps with ML foundations, prompt engineering, and LangChain.',
+   14, 'active', NULL, '{}'::jsonb),
+
+  -- James → Frontend Developer
+  ('f0000000-0000-0000-0000-000000000006',
+   'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0004-000000000004',
+   'Frontend Developer Roadmap',
+   'Master React, Next.js, TypeScript and land a full-time frontend role.',
+   12, 'active', NULL, '{}'::jsonb),
+
+  -- Sofia → Senior Full-Stack (second roadmap, completed)
+  ('f0000000-0000-0000-0000-000000000007',
+   'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0004-000000000003',
+   'Senior Engineer: System Design & DevOps',
+   'Fill in gaps in system design and containerization for senior-level interviews.',
+   10, 'active', NULL, '{}'::jsonb),
+
+  -- Elena → (no specific cybersec job role, using Backend as proxy for security-focused backend)
+  ('f0000000-0000-0000-0000-000000000008',
+   'a0000000-0000-0000-0000-000000000009',
+   '00000000-0000-0000-0004-000000000005',
+   'Security-Focused Backend Developer',
+   'Combine backend development skills with security fundamentals.',
+   16, 'active', NULL, '{}'::jsonb);
+
+
+-- ============================================================
+-- 6. AI ROADMAP STEPS
+-- ============================================================
+
+-- Amira: Junior Full-Stack (6 steps)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000001', 'f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0002-000000000001', '00000000-0000-0000-0003-000000000001',
+   1, 'Learn JavaScript Fundamentals', 'Complete the JS guide covering ES6+, async/await, and DOM manipulation.', 52.5, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000002', 'f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0002-000000000007', NULL,
+   2, 'Git & Version Control', 'Learn branching, merging, pull requests, and collaborative workflows.', 10.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000003', 'f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0002-000000000003', '00000000-0000-0000-0003-000000000003',
+   3, 'React Fundamentals', 'Build component-based UIs with hooks, state management, and routing.', 48.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000004', 'f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0002-000000000004', '00000000-0000-0000-0003-000000000004',
+   4, 'Node.js & Express APIs', 'Build RESTful backends with Express, middleware, and error handling.', 42.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000005', 'f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0002-000000000005', '00000000-0000-0000-0003-000000000005',
+   5, 'PostgreSQL & Databases', 'Relational database design, queries, joins, and indexing.', 22.5, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000006', 'f0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   NULL, '00000000-0000-0000-0003-000000000006',
+   6, 'Full-Stack Integration Project', 'Build an end-to-end web application combining all previous skills.', 63.5, 'locked', NULL);
+
+
+-- Marcus: Data Scientist (5 steps)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000007', 'f0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0002-000000000011', '00000000-0000-0000-0003-000000000009',
+   1, 'Python Foundations', 'Core Python programming, data structures, and OOP.', 28.0, 'completed', '2025-11-20'),
+  ('10000000-0000-0000-0000-000000000008', 'f0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0002-000000000013', '00000000-0000-0000-0003-000000000012',
+   2, 'SQL for Analytics', 'Write complex analytical queries, window functions, and CTEs.', 16.0, 'completed', '2026-01-15'),
+  ('10000000-0000-0000-0000-000000000009', 'f0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0002-000000000012', '00000000-0000-0000-0003-000000000010',
+   3, 'Data Science with Pandas & Visualization', 'Data wrangling, EDA, and building dashboards.', 40.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000010', 'f0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0002-000000000014', '00000000-0000-0000-0003-000000000011',
+   4, 'Machine Learning Fundamentals', 'Supervised and unsupervised learning with Scikit-learn.', 36.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000011', 'f0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002',
+   '00000000-0000-0000-0002-000000000015', NULL,
+   5, 'Capstone: End-to-End Data Project', 'Complete a data science project from data collection to model deployment.', 30.0, 'locked', NULL);
+
+
+-- Fatima: Senior Full-Stack (5 steps)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000012', 'f0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0002-000000000002', '00000000-0000-0000-0003-000000000002',
+   1, 'TypeScript Mastery', 'Advanced types, generics, decorators, and project configuration.', 18.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000013', 'f0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0002-000000000016', '00000000-0000-0000-0003-000000000013',
+   2, 'Docker & Kubernetes', 'Containerize applications and manage orchestrated deployments.', 23.5, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000014', 'f0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0002-000000000008', '00000000-0000-0000-0003-000000000007',
+   3, 'System Design Principles', 'Load balancing, caching, database sharding, and distributed systems.', 20.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000015', 'f0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0002-000000000010', NULL,
+   4, 'GraphQL APIs', 'Design and implement GraphQL schemas, resolvers, and subscriptions.', 15.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000016', 'f0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003',
+   '00000000-0000-0000-0002-000000000009', '00000000-0000-0000-0003-000000000008',
+   5, 'Next.js for Production', 'Server components, app router, ISR, and deployment best practices.', 25.0, 'locked', NULL);
+
+
+-- Liam: DevOps Engineer (4 steps)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000017', 'f0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0002-000000000016', '00000000-0000-0000-0003-000000000013',
+   1, 'Docker & Kubernetes Deep Dive', 'Multi-stage builds, networking, K8s manifests, and Helm charts.', 23.5, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000018', 'f0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0002-000000000018', '00000000-0000-0000-0003-000000000014',
+   2, 'AWS Cloud Foundations', 'EC2, S3, VPC, IAM, and core services for the Cloud Practitioner cert.', 27.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000019', 'f0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0002-000000000019', '00000000-0000-0000-0003-000000000015',
+   3, 'CI/CD Pipeline Automation', 'GitHub Actions workflows, automated testing, and deployment strategies.', 14.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000020', 'f0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004',
+   '00000000-0000-0000-0002-000000000017', NULL,
+   4, 'Kubernetes in Production', 'Monitoring, logging, auto-scaling, and security hardening in K8s.', 20.0, 'locked', NULL);
+
+
+-- Priya: AI Application Developer (4 steps)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000021', 'f0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0002-000000000014', '00000000-0000-0000-0003-000000000011',
+   1, 'Machine Learning Foundations', 'Regression, classification, clustering, and model evaluation.', 36.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000022', 'f0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0002-000000000024', '00000000-0000-0000-0003-000000000016',
+   2, 'Prompt Engineering for Developers', 'Craft effective prompts, chain-of-thought, and few-shot techniques.', 8.0, 'completed', '2026-01-05'),
+  ('10000000-0000-0000-0000-000000000023', 'f0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005',
+   '00000000-0000-0000-0002-000000000025', '00000000-0000-0000-0003-000000000017',
+   3, 'LangChain & LLM Pipelines', 'Build agents, RAG pipelines, and tool-using LLM applications.', 10.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000024', 'f0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005',
+   NULL, NULL,
+   4, 'Capstone: AI-Powered Application', 'Design, build, and deploy a production AI application end-to-end.', 40.0, 'locked', NULL);
+
+
+-- James: Frontend Developer (4 steps)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000025', 'f0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0002-000000000001', '00000000-0000-0000-0003-000000000001',
+   1, 'JavaScript Deep Dive', 'Closures, prototypes, event loop, and advanced patterns.', 52.5, 'completed', '2025-10-20'),
+  ('10000000-0000-0000-0000-000000000026', 'f0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0002-000000000003', '00000000-0000-0000-0003-000000000003',
+   2, 'React Complete Guide', 'Hooks, context, performance optimization, and testing.', 48.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000027', 'f0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0002-000000000002', NULL,
+   3, 'TypeScript Essentials', 'Type safety, interfaces, generics, and React+TypeScript patterns.', 18.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000028', 'f0000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006',
+   '00000000-0000-0000-0002-000000000009', '00000000-0000-0000-0003-000000000008',
+   4, 'Next.js for Production Apps', 'Server-side rendering, static generation, and deployment.', 25.0, 'locked', NULL);
+
+
+-- Sofia: Senior Engineer roadmap (3 steps)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000029', 'f0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0002-000000000008', '00000000-0000-0000-0003-000000000007',
+   1, 'System Design Mastery', 'Design distributed systems at scale: CAP theorem, consistency patterns, caching.', 20.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000030', 'f0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0002-000000000017', NULL,
+   2, 'Kubernetes for Senior Engineers', 'Custom controllers, operators, service mesh, and multi-cluster management.', 25.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000031', 'f0000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007',
+   '00000000-0000-0000-0002-000000000010', NULL,
+   3, 'GraphQL at Scale', 'Federation, schema stitching, performance, and DataLoader patterns.', 15.0, 'locked', NULL);
+
+
+-- Elena: Security-Focused Backend (4 steps, using generic skills since no cybersec courses in seed)
+INSERT INTO public.ai_roadmap_steps (id, roadmap_id, profile_id, skill_id, course_id, step_order, title, description, duration_hours, status, completed_at) VALUES
+  ('10000000-0000-0000-0000-000000000032', 'f0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000009',
+   '00000000-0000-0000-0002-000000000004', '00000000-0000-0000-0003-000000000004',
+   1, 'Node.js Backend Foundations', 'Build secure REST APIs with Express, input validation, and auth.', 42.0, 'in_progress', NULL),
+  ('10000000-0000-0000-0000-000000000033', 'f0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000009',
+   '00000000-0000-0000-0002-000000000005', '00000000-0000-0000-0003-000000000005',
+   2, 'PostgreSQL & Secure Data Storage', 'Database design, RLS policies, encryption at rest, and audit logging.', 22.5, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000034', 'f0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000009',
+   '00000000-0000-0000-0002-000000000021', NULL,
+   3, 'Network Security Fundamentals', 'TLS, firewall rules, OWASP Top 10, and secure API design patterns.', 20.0, 'locked', NULL),
+  ('10000000-0000-0000-0000-000000000035', 'f0000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000009',
+   '00000000-0000-0000-0002-000000000023', NULL,
+   4, 'Applied Cryptography', 'Hashing, symmetric/asymmetric encryption, JWTs, and key management.', 15.0, 'locked', NULL);
+
+
+-- ============================================================
+-- 7. CHAT SESSIONS & MESSAGES
+-- ============================================================
+
+INSERT INTO public.chat_sessions (id, profile_id, title, status) VALUES
+  ('20000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Getting started with JavaScript',    'active'),
+  ('20000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'Python to Data Science transition',   'active'),
+  ('20000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'TypeScript generics help',            'active'),
+  ('20000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004', 'Docker networking questions',          'active'),
+  ('20000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000005', 'RAG pipeline architecture',            'active'),
+  ('20000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000006', 'React performance optimization',       'active'),
+  ('20000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000007', 'System design: URL shortener',         'active'),
+  ('20000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000001', 'What career path should I follow?',    'archived'),
+  ('20000000-0000-0000-0000-000000000009', 'a0000000-0000-0000-0000-000000000005', 'Comparing ML frameworks',              'archived');
+
+
+INSERT INTO public.chat_messages (id, session_id, role, content, metadata) VALUES
+  -- Amira: JS session
+  ('30000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', 'user',
+   'I just started learning JavaScript. What should I focus on first — DOM manipulation or understanding closures?',
+   '{"tokens": 22}'::jsonb),
+  ('30000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', 'assistant',
+   'Great question! I''d recommend starting with closures and core language concepts before moving to the DOM. Understanding how scope and closures work will make DOM manipulation and event handling much more intuitive. Your current course covers this in the right order.',
+   '{"tokens": 48, "model": "gpt-4o"}'::jsonb),
+  ('30000000-0000-0000-0000-000000000003', '20000000-0000-0000-0000-000000000001', 'user',
+   'Makes sense. How long should I spend on fundamentals before building projects?',
+   '{"tokens": 16}'::jsonb),
+  ('30000000-0000-0000-0000-000000000004', '20000000-0000-0000-0000-000000000001', 'assistant',
+   'I''d suggest about 3-4 weeks on fundamentals — variables, functions, arrays, objects, and async/await. Then start building small projects immediately. You don''t need to master everything before building; the two reinforce each other.',
+   '{"tokens": 52, "model": "gpt-4o"}'::jsonb),
+
+  -- Marcus: Data Science session
+  ('30000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000002', 'user',
+   'I finished Python for Everybody and the SQL course. My roadmap says Data Science with Python is next — is that the right move, or should I do more SQL practice first?',
+   '{"tokens": 38}'::jsonb),
+  ('30000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000002', 'assistant',
+   'You''re in a good spot. Since you''ve completed the SQL fundamentals course, you have enough SQL to move forward. The Data Science with Python course will actually reinforce your SQL through Pandas, which uses similar concepts. You can always circle back to advanced SQL (window functions, CTEs) once you need them for real analysis.',
+   '{"tokens": 68, "model": "gpt-4o"}'::jsonb),
+
+  -- Fatima: TypeScript session
+  ('30000000-0000-0000-0000-000000000007', '20000000-0000-0000-0000-000000000003', 'user',
+   'I''m stuck on TypeScript generics. I understand basic generic functions but conditional types and mapped types are confusing me.',
+   '{"tokens": 28}'::jsonb),
+  ('30000000-0000-0000-0000-000000000008', '20000000-0000-0000-0000-000000000003', 'assistant',
+   'Conditional types click once you think of them as ternary operators for types. Start with simple examples: `type IsString<T> = T extends string ? "yes" : "no"`. For mapped types, think of them as a for-loop over an object''s keys. Try rewriting some of your existing Node.js interfaces using mapped types — applying them to your own code makes it stick faster.',
+   '{"tokens": 72, "model": "gpt-4o"}'::jsonb),
+
+  -- Liam: Docker session
+  ('30000000-0000-0000-0000-000000000009', '20000000-0000-0000-0000-000000000004', 'user',
+   'What''s the difference between bridge and host networking in Docker? When should I use each?',
+   '{"tokens": 20}'::jsonb),
+  ('30000000-0000-0000-0000-000000000010', '20000000-0000-0000-0000-000000000004', 'assistant',
+   'Bridge networking creates an isolated network — containers communicate via the bridge, and you map ports to the host. Use this for most applications. Host networking removes network isolation — the container shares the host''s network stack directly. Use host networking only when you need maximum network performance and don''t need port mapping, like running monitoring tools.',
+   '{"tokens": 65, "model": "gpt-4o"}'::jsonb),
+
+  -- Priya: RAG session
+  ('30000000-0000-0000-0000-000000000011', '20000000-0000-0000-0000-000000000005', 'user',
+   'I want to build a RAG pipeline for my capstone. Should I use LangChain or build from scratch with the OpenAI API?',
+   '{"tokens": 30}'::jsonb),
+  ('30000000-0000-0000-0000-000000000012', '20000000-0000-0000-0000-000000000005', 'assistant',
+   'For a capstone project, LangChain is a good choice — it handles document loading, chunking, vector stores, and retrieval chains with much less boilerplate. Building from scratch teaches you more but takes significantly longer. Since your roadmap already includes the LangChain course, I''d recommend using LangChain but understanding each component deeply rather than just calling abstractions blindly.',
+   '{"tokens": 75, "model": "gpt-4o"}'::jsonb),
+
+  -- James: React session
+  ('30000000-0000-0000-0000-000000000013', '20000000-0000-0000-0000-000000000006', 'user',
+   'My React app is re-rendering too much. I''m using useState for everything. What am I doing wrong?',
+   '{"tokens": 24}'::jsonb),
+  ('30000000-0000-0000-0000-000000000014', '20000000-0000-0000-0000-000000000006', 'assistant',
+   'Common issue! A few things to check: First, lift state up only as high as needed — if state is in a parent component but only one child uses it, move it down. Second, use React.memo for expensive child components. Third, if you''re passing objects or arrays as props, wrap them in useMemo to avoid creating new references on every render. Your React course covers this in the performance section.',
+   '{"tokens": 80, "model": "gpt-4o"}'::jsonb),
+
+  -- Sofia: System design session
+  ('30000000-0000-0000-0000-000000000015', '20000000-0000-0000-0000-000000000007', 'user',
+   'How would you design a URL shortener that handles 100M requests per day?',
+   '{"tokens": 18}'::jsonb),
+  ('30000000-0000-0000-0000-000000000016', '20000000-0000-0000-0000-000000000007', 'assistant',
+   'Great system design question. At 100M requests/day (~1,150 QPS avg, ~3,500 QPS peak), you need: a base62 encoding scheme for short URLs (7 chars gives 3.5 trillion combinations), a Redis cache layer for hot URLs, a horizontally sharded PostgreSQL or DynamoDB backend, and a CDN for geographic distribution. The write path is simple — generate ID, store mapping. The read path needs aggressive caching since reads heavily dominate writes. Want me to dive deeper into any component?',
+   '{"tokens": 95, "model": "gpt-4o"}'::jsonb);
+
+
+-- ============================================================
+-- 8. NOTIFICATIONS
+-- ============================================================
+
+INSERT INTO public.notifications (id, profile_id, type, title, body, is_read, sent_at) VALUES
+  -- Amira
+  ('40000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001',
+   'roadmap_update', 'Roadmap Created!',
+   'Your Junior Full-Stack Developer roadmap is ready. Start with JavaScript Fundamentals.',
+   true, '2026-01-09 10:00:00+00'),
+  ('40000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001',
+   'reminder', 'Keep the momentum going!',
+   'You''re 42% through JavaScript: The Complete Guide. Try to complete 2 more sections this week.',
+   false, '2026-04-10 09:00:00+00'),
+
+  -- Marcus
+  ('40000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000002',
+   'achievement', 'Course Completed!',
+   'Congratulations! You completed Python for Everybody. Your roadmap has been updated.',
+   true, '2025-11-20 14:30:00+00'),
+  ('40000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000002',
+   'achievement', 'SQL Course Completed!',
+   'You finished SQL for Data Analysis. Step 2 of your roadmap is now complete.',
+   true, '2026-01-15 16:00:00+00'),
+  ('40000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000002',
+   'reminder', 'Data Science progress check',
+   'You''re 65% through Data Science with Python. The ML specialization awaits!',
+   false, '2026-04-08 09:00:00+00'),
+
+  -- Fatima
+  ('40000000-0000-0000-0000-000000000006', 'a0000000-0000-0000-0000-000000000003',
+   'achievement', 'Node.js Course Completed!',
+   'You completed Node.js and Express REST APIs. Great foundation for senior-level work.',
+   true, '2025-07-15 11:00:00+00'),
+  ('40000000-0000-0000-0000-000000000007', 'a0000000-0000-0000-0000-000000000003',
+   'reminder', 'Almost there with TypeScript!',
+   'You''re 78% through TypeScript for Professionals. Push through the generics chapter!',
+   false, '2026-04-12 09:00:00+00'),
+
+  -- Liam
+  ('40000000-0000-0000-0000-000000000008', 'a0000000-0000-0000-0000-000000000004',
+   'system', 'Welcome to SkillPulse Pro!',
+   'Your Pro subscription is active. You now have access to 10 AI roadmaps and unlimited courses.',
+   true, '2026-03-01 08:00:00+00'),
+  ('40000000-0000-0000-0000-000000000009', 'a0000000-0000-0000-0000-000000000004',
+   'reminder', 'Docker & K8s halfway there',
+   'You''re 55% through Docker and Kubernetes. The networking section is next — highly relevant for DevOps interviews.',
+   false, '2026-04-11 09:00:00+00'),
+
+  -- Priya
+  ('40000000-0000-0000-0000-000000000010', 'a0000000-0000-0000-0000-000000000005',
+   'achievement', 'Prompt Engineering Complete!',
+   'You completed ChatGPT Prompt Engineering for Devs. Roadmap step 2 is marked done.',
+   true, '2026-01-05 13:00:00+00'),
+  ('40000000-0000-0000-0000-000000000011', 'a0000000-0000-0000-0000-000000000005',
+   'roadmap_update', 'New step unlocked',
+   'LangChain & LLM Pipelines is now available in your AI Application Developer roadmap.',
+   true, '2026-01-05 13:01:00+00'),
+
+  -- James
+  ('40000000-0000-0000-0000-000000000012', 'a0000000-0000-0000-0000-000000000006',
+   'achievement', 'JavaScript Mastered!',
+   'You completed JavaScript: The Complete Guide. React is next on your roadmap.',
+   true, '2025-10-20 17:00:00+00'),
+  ('40000000-0000-0000-0000-000000000013', 'a0000000-0000-0000-0000-000000000006',
+   'reminder', 'React course almost done!',
+   'You''re 88% through React: The Complete Guide. Finish strong — Next.js is waiting!',
+   false, '2026-04-09 09:00:00+00'),
+
+  -- Sofia
+  ('40000000-0000-0000-0000-000000000014', 'a0000000-0000-0000-0000-000000000007',
+   'system', 'Enterprise plan activated',
+   'Your Enterprise subscription is now active. Unlimited roadmaps, courses, and team features are enabled.',
+   true, '2025-06-01 08:00:00+00'),
+  ('40000000-0000-0000-0000-000000000015', 'a0000000-0000-0000-0000-000000000007',
+   'reminder', 'System Design progress',
+   'You''re 60% through System Design for Interviews. The caching and CDN sections are great for your upcoming tech lead interviews.',
+   false, '2026-04-12 09:00:00+00'),
+
+  -- Omar (hasn't onboarded)
+  ('40000000-0000-0000-0000-000000000016', 'a0000000-0000-0000-0000-000000000008',
+   'system', 'Welcome to SkillPulse!',
+   'Complete your onboarding to get a personalized AI learning roadmap.',
+   false, '2026-04-01 08:00:00+00'),
+
+  -- Elena
+  ('40000000-0000-0000-0000-000000000017', 'a0000000-0000-0000-0000-000000000009',
+   'roadmap_update', 'Your roadmap is ready',
+   'Your Security-Focused Backend Developer roadmap has been created. Start with Node.js Backend Foundations.',
+   true, '2026-02-21 10:00:00+00');
+
+
+-- ============================================================
+-- 9. POST-SEED: Re-add the auth.users FK
+-- ============================================================
+
+ALTER TABLE public.profiles ADD CONSTRAINT profiles_user_id_fkey
+  FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+
+
+-- ============================================================
+-- DONE — Simulated user data seeded.
+-- ============================================================

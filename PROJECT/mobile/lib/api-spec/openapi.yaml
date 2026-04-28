@@ -1,0 +1,926 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: user
+    description: User profile operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: registerAuth
+      tags: [auth]
+      summary: Register new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSuccessResponse"
+        "400":
+          description: Validation or business error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: loginAuth
+      tags: [auth]
+      summary: Login admin user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSuccessResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "403":
+          description: Forbidden for non-admin users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /auth/refresh-token:
+    post:
+      operationId: refreshAuthToken
+      tags: [auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+      responses:
+        "200":
+          description: Tokens refreshed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefreshTokenResponse"
+        "401":
+          description: Invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      tags: [auth]
+      summary: Get current user and profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User context loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCurrentUserResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logoutAuth
+      tags: [auth]
+      summary: Logout current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LogoutResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /auth/change-password:
+    post:
+      operationId: changePasswordAuth
+      tags: [auth]
+      summary: Change authenticated user password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /user/profile:
+    get:
+      operationId: getUserProfile
+      tags: [user]
+      summary: Get authenticated user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Profile loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "404":
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+    put:
+      operationId: upsertUserProfilePut
+      tags: [user]
+      summary: Upsert authenticated user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpsertRequest"
+      responses:
+        "200":
+          description: Profile upserted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+    post:
+      operationId: upsertUserProfilePost
+      tags: [user]
+      summary: Upsert authenticated user profile (legacy POST variant)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpsertRequest"
+      responses:
+        "200":
+          description: Profile upserted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+
+  /user/profile/recompute:
+    post:
+      operationId: recomputeUserProfileAnalysis
+      tags: [user]
+      summary: Recompute AI profile analysis and persist outputs
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileRecomputeRequest"
+      responses:
+        "200":
+          description: Analysis recomputed and persisted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileRecomputeResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          description: Recompute failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+
+  /user/dashboard:
+    get:
+      operationId: getUserDashboard
+      tags: [user]
+      summary: Get authenticated user dashboard aggregate
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Dashboard loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserDashboardResponse"
+
+  /user/recommendations:
+    get:
+      operationId: getUserRecommendations
+      tags: [user]
+      summary: Get authenticated user recommendations
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: type
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recommendations loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecommendationsResponse"
+
+  /user/skill-gaps:
+    get:
+      operationId: getUserSkillGaps
+      tags: [user]
+      summary: Get authenticated user skill gaps
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: domain
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Skill gaps loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillGapsResponse"
+
+  /public/admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [user]
+      summary: Get admin users list
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: role
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: page
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: pageSize
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Admin users loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsersListResponse"
+
+  /public/admin/users/{id}:
+    patch:
+      operationId: updateAdminUser
+      tags: [user]
+      summary: Update admin-managed user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+    delete:
+      operationId: deleteAdminUser
+      tags: [user]
+      summary: Delete admin-managed user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  /public/admin/settings:
+    get:
+      operationId: getAdminSettings
+      tags: [user]
+      summary: Get admin settings aggregate
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Admin settings loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettingsResponse"
+    patch:
+      operationId: updateAdminSettings
+      tags: [user]
+      summary: Update admin profile settings
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Admin settings updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSettingsResponse"
+
+  /public/admin/account:
+    get:
+      operationId: getAdminAccount
+      tags: [user]
+      summary: Get authenticated admin account
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Admin account loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+    patch:
+      operationId: updateAdminAccount
+      tags: [user]
+      summary: Update authenticated admin account
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Admin account updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+
+  /public/admin/notifications:
+    get:
+      operationId: getAdminNotifications
+      tags: [user]
+      summary: Get admin notifications
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notifications loaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminNotificationsResponse"
+
+  /public/admin/notifications/read-all:
+    post:
+      operationId: markAdminNotificationsReadAll
+      tags: [user]
+      summary: Mark all admin notifications as read
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notifications marked read
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminNotificationsResponse"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Uuid:
+      type: string
+      format: uuid
+
+    UserRole:
+      type: string
+      enum: [user, admin]
+
+    ProficiencyLevel:
+      type: string
+      enum: [beginner, intermediate, advanced, expert]
+
+    ExperienceLevel:
+      type: string
+      enum: [student, junior, mid, senior]
+
+    ApiErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+        error:
+          type: string
+          nullable: true
+      required: [success, message]
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/Uuid"
+        email:
+          type: string
+          format: email
+        fullName:
+          type: string
+        role:
+          $ref: "#/components/schemas/UserRole"
+      required: [id, email, role]
+
+    AuthTokens:
+      type: object
+      properties:
+        token:
+          type: string
+        refreshToken:
+          type: string
+      required: [token, refreshToken]
+
+    AuthSuccessData:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        token:
+          type: string
+        refreshToken:
+          type: string
+      required: [user, token, refreshToken]
+
+    AuthSuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/AuthSuccessData"
+      required: [success, data]
+
+    RefreshTokenRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+      required: [refreshToken]
+
+    RefreshTokenResponseData:
+      type: object
+      properties:
+        token:
+          type: string
+        refreshToken:
+          type: string
+      required: [token, refreshToken]
+
+    RefreshTokenResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/RefreshTokenResponseData"
+      required: [success, data]
+
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        fullName:
+          type: string
+      required: [email, password]
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required: [currentPassword, newPassword]
+
+    MessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+      required: [success]
+
+    UserProfile:
+      type: object
+      additionalProperties: true
+
+    CurrentUserEnvelope:
+      type: object
+      properties:
+        user:
+          type: object
+          additionalProperties: true
+        profile:
+          type: object
+          nullable: true
+          additionalProperties: true
+      required: [user]
+
+    GetCurrentUserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/CurrentUserEnvelope"
+      required: [success, data]
+
+    LogoutResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+      required: [success, message]
+
+    ProfileUpsertRequest:
+      type: object
+      properties:
+        domain:
+          type: string
+        title:
+          type: string
+        experienceLevel:
+          $ref: "#/components/schemas/ExperienceLevel"
+        bio:
+          type: string
+
+    ProfileRecomputeRequest:
+      type: object
+      properties:
+        targetRole:
+          type: string
+
+    AnalysisStageResult:
+      type: object
+      properties:
+        status:
+          type: string
+        detail:
+          type: string
+        targetRole:
+          type: string
+
+    AnalysisRunResult:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        targetRole:
+          type: string
+          nullable: true
+        ai:
+          type: object
+          properties:
+            skillGapRefresh:
+              $ref: "#/components/schemas/AnalysisStageResult"
+            recommendationsRefresh:
+              $ref: "#/components/schemas/AnalysisStageResult"
+
+    ProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
+      required: [success, data]
+
+    UserDashboardData:
+      type: object
+      properties:
+        profile:
+          type: object
+          nullable: true
+          additionalProperties: true
+        skills:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        skillGaps:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        recentRecommendations:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        gapStatistics:
+          type: object
+          nullable: true
+          additionalProperties: true
+
+    UserDashboardResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/UserDashboardData"
+      required: [success, data]
+
+    ProfileRecomputeData:
+      type: object
+      properties:
+        dashboard:
+          $ref: "#/components/schemas/UserDashboardData"
+        analysis:
+          $ref: "#/components/schemas/AnalysisRunResult"
+
+    ProfileRecomputeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        message:
+          type: string
+        data:
+          $ref: "#/components/schemas/ProfileRecomputeData"
+      required: [success, data]
+
+    RecommendationItem:
+      type: object
+      additionalProperties: true
+
+    RecommendationsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecommendationItem"
+      required: [success, data]
+
+    SkillGapItem:
+      type: object
+      additionalProperties: true
+
+    SkillGapsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillGapItem"
+      required: [success, data]
+
+    AdminUserItem:
+      type: object
+      additionalProperties: true
+
+    AdminUsersListData:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUserItem"
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+        totalPages:
+          type: integer
+      required: [items, page, pageSize, total, totalPages]
+
+    AdminUsersListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          $ref: "#/components/schemas/AdminUsersListData"
+      required: [success, data]
+
+    AdminSettingsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: object
+          additionalProperties: true
+      required: [success, data]
+
+    AdminNotificationItem:
+      type: object
+      additionalProperties: true
+
+    AdminNotificationsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminNotificationItem"
+      required: [success, data]
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+

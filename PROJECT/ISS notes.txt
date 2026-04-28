@@ -1,0 +1,5 @@
+PS C:\Users\rayen\OneDrive\Bureau\Parcours\MedTech\1st year\S2\ISS\SKILLPULSE\backend> npm start 
+
+PS C:\Users\rayen\OneDrive\Bureau\Parcours\MedTech\1st year\S2\ISS\SKILLPULSE\backend\ai> python backend.py
+
+PS C:\Users\rayen\OneDrive\Bureau\Parcours\MedTech\1st year\S2\ISS\SKILLPULSE\mobile\artifacts\mobile> pnpm run start

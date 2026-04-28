@@ -1,0 +1,63 @@
+Design a bold, modern mobile app concept for “SkillPulse” (UI only, no backend integration) in React Native style screens. This is for prototype/design exploration in Replit, not production logic.
+
+Goal:
+Create a high-fidelity mobile UI concept that showcases the SkillPulse product vision: skill-gap analysis, learning pathways, trend tracking, and admin-style insights.
+
+Constraints:
+
+UI/UX concept only
+Use mock data only
+No real API calls
+No auth implementation logic, just visual flows
+Keep components reusable and design-system driven
+Visual direction:
+
+Clean, premium, futuristic but readable
+Avoid generic template look
+Strong typography hierarchy
+Distinctive color system with semantic tokens
+Soft gradients, subtle glass/panel effects, and meaningful motion
+Accessible contrast and mobile-first spacing
+Deliver:
+
+Design system
+Color tokens (primary, accent, success, warning, danger, neutrals)
+Typography scale
+Spacing/radius/shadow tokens
+Button/input/card/badge variants
+Light mode as default (optional dark mode toggle mock)
+Screens (fully designed with mock data)
+Splash / Onboarding
+Login concept
+Home dashboard (skill score, progress, quick actions)
+Skill Gap Analysis
+Learning Pathway details
+Market Trends
+Recommendations feed
+Profile
+Settings
+Optional Admin overview concept
+Interactions
+Micro animations for card reveal and button press
+Tab transitions
+Pull-to-refresh visual state
+Empty, loading, and error visual states
+Prototype structure
+Reusable components
+Screen-based folder organization
+Mock JSON data source
+Theme file for tokens
+Navigation map of all screens
+Output quality
+Provide complete runnable UI code in Replit
+Keep code clean and modular
+Add brief notes explaining design choices per screen
+Brand context:
+SkillPulse helps users identify career skill gaps and follow personalized upskilling paths based on market trends.
+
+Final instruction:
+Prioritize visual storytelling and concept clarity over engineering depth. This should look like a polished product demo suitable for a portfolio or stakeholder presentation.
+
+If you want, I can also give you a second version of this prompt focused on a “minimal elegant” style instead of “bold futuristic.”
+
+GPT-5.3-Codex • 1x

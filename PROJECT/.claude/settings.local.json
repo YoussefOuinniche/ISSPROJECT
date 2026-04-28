@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('./src/app.js'\\); console.log\\('app.js loaded OK'\\);\")",
+      "Bash(node -e ':*)",
+      "Bash(cd \"c:\\\\\\\\Users\\\\\\\\ELITE\\\\\\\\OneDrive - South Mediterranean University\\\\\\\\Desktop\\\\\\\\ISSPROJECT\")",
+      "Bash(npx vite:*)",
+      "Bash(npm install:*)",
+      "Bash(node app.js)",
+      "Bash(curl -s http://localhost:5000/health)",
+      "Bash(node src/server.js)",
+      "Bash(curl -s http://localhost:5001/health)",
+      "Bash(npx kill-port:*)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(cmd.exe /c \"taskkill /PID 6980 /F\")",
+      "Bash(netstat -ano)",
+      "Bash(pnpm run:*)"
+    ]
+  }
+}
