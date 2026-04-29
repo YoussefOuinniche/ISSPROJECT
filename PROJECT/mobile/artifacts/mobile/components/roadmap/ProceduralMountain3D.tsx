@@ -566,6 +566,7 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
     shader.uniforms.uSnowLine   = { value: cfg.snowLine };
     shader.uniforms.uHeightScale= { value: cfg.heightScale };
     shader.uniforms.uCamDist    = { value: 180.0 };
+    shader.uniforms.uStrataAmp  = { value: cfg.strataAmp };
     mat.userData.shader = shader;
 
     shader.vertexShader = shader.vertexShader
@@ -592,6 +593,7 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         uniform float uSnowLine;
         uniform float uHeightScale;
         uniform float uCamDist;
+        uniform float uStrataAmp;
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;
         varying float vHeightN;
@@ -614,8 +616,18 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         }
         float _fbm(vec2 p) {
           float v = 0.0; float a = 0.5;
-          for (int i = 0; i < 5; i++) { v += a * _vn(p); p *= 2.03; a *= 0.5; }
+          for (int i = 0; i < 7; i++) { v += a * _vn(p); p *= 2.03; a *= 0.5; }
           return v;
+        }
+        // Ridged FBM for crack/fissure patterns — inverts noise to create peaks (dark lines)
+        float _rfbm(vec2 p) {
+          float v = 0.0; float a = 0.55;
+          for (int i = 0; i < 5; i++) {
+            float n = _vn(p);
+            v += a * (1.0 - abs(n * 2.0 - 1.0));
+            p *= 2.11; a *= 0.48;
+          }
+          return v * 0.5;
         }
         // Anisotropic noise — stretched vertically: produces water-runoff streaks
         float _streak(vec3 p) {
@@ -672,6 +684,13 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         vec3 rockCol = diffuseColor.rgb;
         rockCol *= mix(0.42, 1.05, 1.0 - streakMask);  // streaks → near-black grooves
         rockCol *= 0.78 + rockDetail * 0.42;
+
+        // Sedimentary strata: horizontal banding on steep faces, scaled by biome
+        float bandNoise = _fbm(vWorldPos.xz * 0.12 + 5.5);
+        float bandWave = sin(vWorldPos.y * 1.65 + bandNoise * 3.5) * 0.5 + 0.5;
+        float bandStr = uStrataAmp * slope * (1.0 - snowMask);
+        rockCol *= mix(1.0, mix(0.78, 1.20, bandWave), clamp(bandStr, 0.0, 1.0));
+
         // Subtle warm/cool variation across the face
         float tempShift = _fbm(vWorldPos.xz * 0.18) - 0.5;
         rockCol.r *= 1.0 + tempShift * 0.10;
