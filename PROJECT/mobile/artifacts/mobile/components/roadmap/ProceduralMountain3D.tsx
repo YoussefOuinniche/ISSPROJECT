@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { Dimensions, PanResponder, StyleSheet, View } from 'react-native';
 import { GLView } from 'expo-gl';
+import * as THREE from 'three';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -538,10 +539,8 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
     metalness: 0.02,
     flatShading: false,
     dithering: true,
+    side: THREE.DoubleSide,
   });
-  // fwidth/dFdx are used in the injected shader for AA; required on WebGL1.
-  // Harmless on WebGL2 where they're core.
-  (mat as any).extensions = { ...(mat as any).extensions, derivatives: true };
 
   // ── Custom shader injection — per-fragment rock detail, vertical erosion
   //    streaks, and physically-motivated snow accumulation. The standard PBR
@@ -608,12 +607,12 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
           float s2 = _fbm(vec2(ang * 3.2, yf * 1.2));
           return s1 * 0.65 + s2 * 0.35;
         }
-        // Derivative-based anti-alias: fade frequency contributions to 0 when
-        // each screen pixel covers more than ~half a cycle of the noise.
-        // Kills the high-freq shimmer the user sees as "pixelation" while panning.
+        // Distance-based anti-aliasing keeps the shader compatible with WebGL1.
+        // Three r169 no longer enables OES_standard_derivatives via material.extensions,
+        // so fwidth() here can make the terrain material fail to compile.
         float _aaFade(vec2 uv, float freq) {
-          float fw = fwidth(uv.x + uv.y) * freq;
-          return 1.0 - smoothstep(0.6, 1.4, fw);
+          float scale = length(uv) * freq;
+          return 1.0 - smoothstep(120.0, 260.0, scale);
         }`,
       )
       .replace(
@@ -688,11 +687,12 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
       );
   };
   // Ensure shadows include the custom material correctly
-  mat.customProgramCacheKey = () => 'mountain-onbc-v3-noshadernew';
+  mat.customProgramCacheKey = () => 'mountain-onbc-v4-webgl1-safe';
 
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
   return mesh;
 }
 
@@ -765,6 +765,10 @@ function applyOrbit(camera: any, o: OrbitState): void {
     o.tz + o.radius * sinPhi * Math.cos(o.theta),
   );
   camera.lookAt(o.tx, o.ty, o.tz);
+}
+
+function getCheckpointFocusRadius(modelRadius: number): number {
+  return Math.max(68, modelRadius * 0.75 + 28);
 }
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -892,7 +896,6 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
   // ── WebGL init ─────────────────────────────────────────────────────────────
   const onContextCreate = useCallback(async (gl: any) => {
     try {
-    const THREE = await import('three');
     THREERef.current = THREE;
 
     const cfg = cfgRef.current;
@@ -1137,7 +1140,7 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
       if (cp) {
         orbitTgt.current = {
           theta: orbitTgt.current.theta, phi: 1.10,
-          radius: modelRadius * 0.40 + 12,
+          radius: getCheckpointFocusRadius(modelRadius),
           tx: cp.x, ty: cp.y, tz: cp.z,
         };
       }
@@ -1164,7 +1167,7 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     if (cps[i]) {
       orbitTgt.current = {
         theta: orbitTgt.current.theta, phi: 1.10,
-        radius: modelRadiusRef.current * 0.40 + 12,
+        radius: getCheckpointFocusRadius(modelRadiusRef.current),
         tx: cps[i].x, ty: cps[i].y, tz: cps[i].z,
       };
     }

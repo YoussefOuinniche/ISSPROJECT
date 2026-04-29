@@ -27,7 +27,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(BASE_DIR, "..", ".env"))
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-logging.basicConfig(level=os.getenv("AI_LOG_LEVEL", "INFO").upper())
+logging.basicConfig(
+    level=os.getenv("AI_LOG_LEVEL", "WARNING").upper(),
+    format="%(message)s",
+)
 
 
 def _env_int(name, default):

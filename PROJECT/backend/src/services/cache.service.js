@@ -4,8 +4,12 @@ const logger = require('../utils/logger');
 let client = null;
 
 function getClient() {
-  if (!client) {
-    client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+    if (!client) {
+      if (process.env.USE_REDIS !== 'true') {
+    return null;
+  }
+
+  client = new Redis(process.env.REDIS_URL, {
       lazyConnect: true,
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
@@ -63,8 +67,12 @@ async function flush(pattern) {
 }
 
 async function connect() {
+  const redis = getClient();
+
+  if (!redis) return;
+
   try {
-    await getClient().connect();
+    await redis.connect();
   } catch (err) {
     logger.warn('[cache] initial connect failed — continuing without Redis', { error: err.message });
   }

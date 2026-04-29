@@ -136,20 +136,36 @@ ollama pull qwen2.5:7b
 
 ## Running the Project
 
-Open **4 terminal tabs**:
+Open **3 terminal tabs**:
 
 ```bash
 # Tab 1 — Ollama LLM
 ollama serve
 
-# Tab 2 — Backend API
+# Tab 2 — Backend API + AI Service
 cd backend && npm run dev
 
-# Tab 3 — AI Service
-cd ai && uvicorn backend:app --reload --port 8000
-
-# Tab 4 — Frontend
+# Tab 3 — Frontend
 cd frontend && npm run dev
+```
+
+`backend/npm run dev` starts both services in the same terminal:
+
+```bash
+npm run dev:backend  # Express API on port 5000
+npm run dev:ai       # FastAPI AI service on port 8000
+```
+
+The AI script runs `python -m uvicorn backend:app --reload --port 8000` from `../ai`.
+If you use a Python virtual environment on Windows, activate it before starting the backend:
+
+```powershell
+cd ai
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cd ..\backend
+npm run dev
 ```
 
 Then open: **http://localhost:5173**

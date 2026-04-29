@@ -22,7 +22,8 @@ export default ({ config }) => ({
       'expo-web-browser',
     ],
     extra: {
-      apiUrl: process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000',
+      apiUrl: process.env.EXPO_PUBLIC_API_URL,
+      apiBaseUrl: process.env.EXPO_PUBLIC_API_URL,
     },
     experiments: {
       typedRoutes: true,

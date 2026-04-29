@@ -8,13 +8,27 @@ const config = getDefaultConfig(__dirname);
 config.resolver.assetExts.push('glb', 'gltf', 'bin');
 
 // Stable cache key — prevents "unknown module" errors after file changes
-config.cacheVersion = "8";
+config.cacheVersion = "9";
+
+function findWorkspaceRoot(startDir) {
+  let dir = startDir;
+  while (dir !== path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+  return startDir;
+}
+
+const workspaceRoot = findWorkspaceRoot(__dirname);
+config.watchFolders = Array.from(new Set([...(config.watchFolders || []), workspaceRoot]));
 
 // Force Three.js to always resolve to the CJS build.
 // Expo's Metro enables package.json `exports` which routes ESM `import 'three'`
 // to three.module.js — that build crashes on Hermes at module-init time.
 const THREE_CJS = path.resolve(
-  __dirname,
+  workspaceRoot,
   "node_modules/.pnpm/three@0.169.0/node_modules/three/build/three.cjs"
 );
 
@@ -39,7 +53,10 @@ if (!fs.existsSync(path.resolve(__dirname, "node_modules/expo-file-system"))) {
 
 const originalResolveRequest = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === "three") {
+  if (
+    moduleName === "three" ||
+    /three[\\/]build[\\/]three(?:\.(?:cjs|js|mjs))?$/.test(moduleName)
+  ) {
     return { filePath: THREE_CJS, type: "sourceFile" };
   }
   if (originalResolveRequest) {

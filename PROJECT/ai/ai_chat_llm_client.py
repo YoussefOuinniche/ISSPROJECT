@@ -56,18 +56,14 @@ async def create_chat_completion(
         headers["Authorization"] = f"Bearer {settings['ollama_api_key']}"
 
     try:
-        print(f"DEBUG: Calling LLM at {http_client.base_url}/chat/completions")
         response = await http_client.post(
             "/chat/completions",
             json=payload,
             headers=headers,
         )
-        print(f"DEBUG: LLM response status: {response.status_code}")
     except httpx.TimeoutException as exc:
-        print(f"DEBUG: LLM timeout: {str(exc)}")
         raise LLMTimeoutError("Timed out while waiting for the LLM response.") from exc
     except httpx.HTTPError as exc:
-        print(f"DEBUG: LLM HTTP error: {str(exc)}")
         raise LLMRequestError("Failed to reach the LLM service.") from exc
 
     if response.status_code >= 400:

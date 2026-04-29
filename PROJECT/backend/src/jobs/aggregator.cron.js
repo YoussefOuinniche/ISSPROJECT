@@ -98,4 +98,3 @@ cron.schedule('0 */6 * * *', async () => {
   }
 });
 
-logger.info('[cron] all schedules registered (aggregator=3h, trending=1h, ai=6h)');

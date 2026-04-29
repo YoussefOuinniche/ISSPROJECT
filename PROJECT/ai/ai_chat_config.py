@@ -60,10 +60,7 @@ def load_ai_chat_settings() -> AIChatSettings:
     db_pool_max_size = max(db_pool_min_size, _env_int("AI_DB_POOL_MAX_SIZE", 10))
 
     return {
-        "database_url": os.getenv(
-            "DATABASE_URL",
-            "postgresql://postgres:postgres@127.0.0.1:54322/postgres",
-        ),
+        "database_url": (os.getenv("AI_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip(),
         "ollama_url": normalize_ollama_url(os.getenv("OLLAMA_URL", "http://localhost:11434/v1")),
         "ollama_model": (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2:7b"),
         "ollama_api_key": os.getenv("OLLAMA_API_KEY", "ollama"),
