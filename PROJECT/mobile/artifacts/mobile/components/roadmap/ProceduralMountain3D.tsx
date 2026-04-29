@@ -938,13 +938,11 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
         clientWidth: glW, clientHeight: glH,
       } as unknown as HTMLCanvasElement,
       context: gl as unknown as WebGLRenderingContext,
-      antialias: true, alpha: false, powerPreference: 'high-performance',
+      antialias: false, alpha: false, powerPreference: 'high-performance',
     });
     renderer.setSize(glW, glH, false);
     renderer.setPixelRatio(1);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.enabled = false;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     rendererRef.current = renderer;
@@ -968,21 +966,10 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     skyMesh.renderOrder = -1;
     scene.add(skyMesh);
 
-    // Lighting — sun casts shadows; harsh contrast between lit and shadow
+    // Lighting — directional sun with fill and bounce, no shadow maps on mobile
     scene.add(new THREE.HemisphereLight(0xb8d0e4, 0x12181e, 0.42));
     const sun = new THREE.DirectionalLight(0xfff0d0, 3.20);
     sun.position.set(180, 260, 120);
-    sun.castShadow = true;
-    sun.shadow.mapSize.width = 1536;
-    sun.shadow.mapSize.height = 1536;
-    sun.shadow.camera.near = 50;
-    sun.shadow.camera.far  = 700;
-    sun.shadow.camera.left   = -75;
-    sun.shadow.camera.right  =  75;
-    sun.shadow.camera.top    =  75;
-    sun.shadow.camera.bottom = -75;
-    sun.shadow.bias = -0.0006;
-    sun.shadow.normalBias = 0.5;
     scene.add(sun);
     sun.target.position.set(0, 0, 0);
     scene.add(sun.target);
@@ -1183,7 +1170,7 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
       <GLView
         style={StyleSheet.absoluteFill}
-        msaaSamples={8}
+        msaaSamples={0}
         enableExperimentalWorkletSupport={false}
         onContextCreate={onContextCreate}
       />
