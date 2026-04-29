@@ -1210,32 +1210,32 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
       // 3-tier LOD swap based on zoom distance (with hysteresis to avoid flicker)
       // lo (120 segs) → hi (220 segs) → ultra (300 segs) as camera gets closer
       const curRadius = orbitCur.current.radius;
-      const loFromHi   = modelRadius * 0.85;  // hi → lo when zooming out past 0.85
-      const hiFromLo   = modelRadius * 0.60;  // lo → hi when zooming in past 0.60
-      const hiFromUltra = modelRadius * 0.32; // ultra → hi when zooming out past 0.32
-      const ultraFromHi = modelRadius * 0.22; // hi → ultra when zooming in past 0.22
-      const cur = activeMeshRef.current;
-      const lo  = mountainLoRef.current;
-      const hi  = mountainHiRef.current;
-      const ul  = mountainUltraRef.current;
+      const loFromHi    = modelRadius * 0.85;
+      const hiFromLo    = modelRadius * 0.60;
+      const hiFromUltra = modelRadius * 0.32;
+      const ultraFromHi = modelRadius * 0.22;
+      const lodActive = activeMeshRef.current;
+      const lodLo     = mountainLoRef.current;
+      const lodHi     = mountainHiRef.current;
+      const lodUltra  = mountainUltraRef.current;
 
-      const swapTo = (next: any) => {
-        if (!next || cur === next) return;
-        if (cur) scene.remove(cur);
+      const swapLod = (next: any) => {
+        if (!next || lodActive === next) return;
+        if (lodActive) scene.remove(lodActive);
         scene.add(next);
         activeMeshRef.current = next;
       };
 
-      if (ul && curRadius < ultraFromHi) {
-        swapTo(ul);
-      } else if (hi && curRadius < hiFromLo && curRadius > hiFromUltra) {
-        swapTo(hi);
+      if (lodUltra && curRadius < ultraFromHi) {
+        swapLod(lodUltra);
+      } else if (lodHi && curRadius < hiFromLo && curRadius >= hiFromUltra) {
+        swapLod(lodHi);
       } else if (curRadius > loFromHi) {
-        swapTo(lo);
-      } else if (cur === ul && curRadius > hiFromUltra && hi) {
-        swapTo(hi);
-      } else if (cur === hi && curRadius < ultraFromHi && ul) {
-        swapTo(ul);
+        swapLod(lodLo);
+      } else if (lodActive === lodUltra && curRadius > hiFromUltra && lodHi) {
+        swapLod(lodHi);
+      } else if (lodActive === lodHi && curRadius < ultraFromHi && lodUltra) {
+        swapLod(lodUltra);
       }
 
       renderer.render(scene, camera);
