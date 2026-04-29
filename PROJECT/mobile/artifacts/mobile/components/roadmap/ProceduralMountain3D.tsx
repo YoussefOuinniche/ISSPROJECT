@@ -438,8 +438,8 @@ function sampleNormalGrid(hm: Float32Array, wx: number, wz: number, out: [number
 
 // ─── Mesh build ──────────────────────────────────────────────────────────────
 
-function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: TerrainCfg) {
-  const SEGS = 120;
+function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: TerrainCfg, segs = 120) {
+  const SEGS = segs;
   const geom = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEGS, SEGS);
   const pos = geom.attributes.position;
   const vCount = pos.count;
@@ -565,6 +565,8 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
     shader.uniforms.uPeakHeight = { value: peakHeight };
     shader.uniforms.uSnowLine   = { value: cfg.snowLine };
     shader.uniforms.uHeightScale= { value: cfg.heightScale };
+    shader.uniforms.uCamDist    = { value: 180.0 };
+    mat.userData.shader = shader;
 
     shader.vertexShader = shader.vertexShader
       .replace(
@@ -589,6 +591,7 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         `#include <common>
         uniform float uSnowLine;
         uniform float uHeightScale;
+        uniform float uCamDist;
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;
         varying float vHeightN;
@@ -622,12 +625,11 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
           float s2 = _fbm(vec2(ang * 3.2, yf * 1.2));
           return s1 * 0.65 + s2 * 0.35;
         }
-        // Distance-based anti-aliasing keeps the shader compatible with WebGL1.
-        // Three r169 no longer enables OES_standard_derivatives via material.extensions,
-        // so fwidth() here can make the terrain material fail to compile.
+        // Camera-distance LOD: detail fades as camera moves away; high-freq bands fade first.
         float _aaFade(vec2 uv, float freq) {
-          float scale = length(uv) * freq;
-          return 1.0 - smoothstep(120.0, 260.0, scale);
+          float near = 50.0 / freq;    // camera distance at which band shows full detail
+          float far = 220.0 / freq;    // camera distance at which band is fully suppressed
+          return 1.0 - smoothstep(near, far, uCamDist);
         }`,
       )
       .replace(
@@ -810,6 +812,10 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
   const modelRadiusRef = useRef(HALF);
   const tRef           = useRef(0);
 
+  const activeMeshRef  = useRef<any>(null);
+  const mountainLoRef  = useRef<any>(null);
+  const mountainHiRef  = useRef<any>(null);
+
   const orbitTgt = useRef<OrbitState>({ theta: 0.40, phi: 0.85, radius: 140, tx: 0, ty: 14, tz: 0 });
   const orbitCur = useRef<OrbitState>({ theta: 0.40, phi: 0.85, radius: 140, tx: 0, ty: 14, tz: 0 });
   // Drag inertia: theta/phi velocities; decay each frame, applied to target
@@ -976,8 +982,10 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     scene.add(bounce);
     scene.add(new THREE.AmbientLight(0xc8d0d8, 0.06));
 
-    // Mountain
-    const mountain = buildMountainMesh(THREE, hm, perm, cfg);
+    // Mountain — low-LOD (SEGS=120) for initial render
+    const mountain = buildMountainMesh(THREE, hm, perm, cfg, 120);
+    mountainLoRef.current = mountain;
+    activeMeshRef.current = mountain;
     scene.add(mountain);
 
     const mBox = new THREE.Box3().setFromObject(mountain);
@@ -1102,10 +1110,41 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
       const f = 1 - Math.exp(-STIFFNESS * dt);
       lerpOrbit(orbitCur.current, orbitTgt.current, f);
       applyOrbit(camera, orbitCur.current);
+
+      // Update shader camera distance uniform for LOD-driven detail
+      const activeShader = (activeMeshRef.current?.material as any)?.userData?.shader;
+      if (activeShader) activeShader.uniforms.uCamDist.value = orbitCur.current.radius;
+
+      // Swap LOD meshes based on zoom distance (with hysteresis to avoid flicker)
+      const curRadius = orbitCur.current.radius;
+      const loThresh = modelRadius * 0.85;
+      const hiThresh = modelRadius * 0.60;
+      if (mountainHiRef.current) {
+        const wantHi = curRadius < hiThresh;
+        const wantLo = curRadius > loThresh;
+        const isHi = activeMeshRef.current === mountainHiRef.current;
+        if (wantHi && !isHi) {
+          scene.remove(mountainLoRef.current);
+          scene.add(mountainHiRef.current);
+          activeMeshRef.current = mountainHiRef.current;
+        } else if (wantLo && isHi) {
+          scene.remove(mountainHiRef.current);
+          scene.add(mountainLoRef.current);
+          activeMeshRef.current = mountainLoRef.current;
+        }
+      }
+
       renderer.render(scene, camera);
       gl.endFrameEXP();
     };
     loop();
+
+    // Build high-LOD mesh (SEGS=160) asynchronously after initial render settles
+    setTimeout(() => {
+      const hiMesh = buildMountainMesh(THREE, hm, perm, cfg, 160);
+      mountainHiRef.current = hiMesh;
+      // Don't add to scene yet — render loop will swap when zoom warrants it
+    }, 700);
 
     zoomTimerRef.current = setTimeout(() => {
       const i2 = Math.max(0, Math.min(completedRef.current, cps.length - 1));
@@ -1150,6 +1189,8 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     cancelAnimationFrame(rafRef.current);
     if (zoomTimerRef.current !== null) clearTimeout(zoomTimerRef.current);
     rendererRef.current?.dispose?.();
+    mountainHiRef.current?.geometry?.dispose();
+    mountainHiRef.current?.material?.dispose();
   }, []);
 
   return (
