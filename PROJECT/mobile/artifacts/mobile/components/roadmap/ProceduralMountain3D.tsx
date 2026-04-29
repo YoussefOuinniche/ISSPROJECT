@@ -659,14 +659,18 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
 
         // Multi-octave per-fragment rock detail (XZ + Y mix for triplanar feel).
         // Each octave has its own AA fade — high-freq band drops to 0 at distance.
+        // Extra ultra-close band (aa4) only fires when camera is very close.
         float aa1 = _aaFade(vWorldPos.xz, 1.4);
         float aa2 = _aaFade(vWorldPos.xz, 4.5);
         float aa3 = _aaFade(vec2(vWorldPos.x, vWorldPos.y), 3.0);
+        float aa4 = _aaFade(vWorldPos.xz, 9.5);
         float rockA = _fbm(vWorldPos.xz * 1.4) * aa1;
         float rockB = _fbm(vWorldPos.xz * 4.5 + 17.0) * aa2;
         float rockC = _fbm(vec2(vWorldPos.x * 3.0, vWorldPos.y * 3.0) + 41.0) * aa3;
-        float rockDetail = rockA * 0.55 + rockB * 0.30 + rockC * 0.15
-                         + (1.0 - aa1) * 0.275 + (1.0 - aa2) * 0.15 + (1.0 - aa3) * 0.075;
+        float rockD = _fbm(vWorldPos.xz * 9.5 + 73.0) * aa4;
+        float rockDetail = rockA * 0.45 + rockB * 0.28 + rockC * 0.13 + rockD * 0.14
+                         + (1.0 - aa1) * 0.225 + (1.0 - aa2) * 0.14
+                         + (1.0 - aa3) * 0.065 + (1.0 - aa4) * 0.07;
 
         // Snow accumulation: physically motivated — snow sticks where
         // gravity allows, even on lower-altitude shelves. Sheer faces shed it.
@@ -682,31 +686,49 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         // Rock albedo — vertex color is the band base, streak darkens it,
         // micro-detail jitters luminance.
         vec3 rockCol = diffuseColor.rgb;
-        rockCol *= mix(0.42, 1.05, 1.0 - streakMask);  // streaks → near-black grooves
-        rockCol *= 0.78 + rockDetail * 0.42;
+        rockCol *= mix(0.38, 1.08, 1.0 - streakMask);  // streaks → near-black grooves
+        rockCol *= 0.62 + rockDetail * 0.78;            // wider detail amplitude → richer relief
 
-        // Gradient bump: 3-sample FBM finite difference → fake micro-surface lighting
-        float bumpFade = _aaFade(vWorldPos.xz, 2.2) * (1.0 - snowMask * 0.85);
+        // Gradient bump: dual-frequency 3-sample FBM finite difference → strong fake micro-surface lighting
+        float bumpFade = _aaFade(vWorldPos.xz, 2.2) * (1.0 - snowMask * 0.80);
         float bH  = _fbm(vWorldPos.xz * 2.8);
         float bHx = _fbm(vWorldPos.xz * 2.8 + vec2(0.7, 0.0));
         float bHz = _fbm(vWorldPos.xz * 2.8 + vec2(0.0, 0.7));
         float bumpX = bHx - bH;
         float bumpZ = bHz - bH;
-        float bumpLit = dot(vec2(bumpX, bumpZ), vec2(0.54, 0.35)) * 1.6;
-        float fakeAO = bH * 0.28 + 0.72;
-        rockCol *= (1.0 + bumpLit * bumpFade * 0.38) * mix(1.0, fakeAO, bumpFade);
+        float bumpLit = dot(vec2(bumpX, bumpZ), vec2(0.54, 0.35)) * 2.6;
+        float fakeAO = bH * 0.42 + 0.58;
+        rockCol *= (1.0 + bumpLit * bumpFade * 0.85) * mix(1.0, fakeAO, bumpFade * 0.95);
+
+        // Ultra-close micro-bump: high-frequency surface roughness only visible when very close
+        float microFade = _aaFade(vWorldPos.xz, 9.0) * (1.0 - snowMask * 0.6);
+        float mH  = _fbm(vWorldPos.xz * 9.0 + 53.0);
+        float mHx = _fbm(vWorldPos.xz * 9.0 + 53.0 + vec2(0.25, 0.0));
+        float mHz = _fbm(vWorldPos.xz * 9.0 + 53.0 + vec2(0.0, 0.25));
+        float microLit = dot(vec2(mHx - mH, mHz - mH), vec2(0.54, 0.35)) * 4.0;
+        rockCol *= (1.0 + microLit * microFade * 0.55);
 
         // Crack network: ridged high-freq noise → dark fissure lines on steep faces
+        // Two layers: coarse fissures + fine hairline cracks at extreme close-up
         float crackFade = _aaFade(vWorldPos.xz, 5.5);
         float crack = _rfbm(vWorldPos.xz * 5.5 + 23.7);
-        float crackMask = smoothstep(0.60, 0.80, crack) * slope * crackFade;
-        rockCol = mix(rockCol, rockCol * 0.16, crackMask * 0.78);
+        float crackMask = smoothstep(0.52, 0.78, crack) * (slope * 0.65 + 0.35) * crackFade;
+        rockCol = mix(rockCol, rockCol * 0.06, crackMask * 0.95);
+
+        // Hairline crack network: fine secondary fissures, only visible at extreme zoom
+        float hairFade = _aaFade(vWorldPos.xz, 12.0);
+        float hairCrack = _rfbm(vWorldPos.xz * 12.0 - 41.3);
+        float hairMask = smoothstep(0.62, 0.82, hairCrack) * slope * hairFade;
+        rockCol = mix(rockCol, rockCol * 0.18, hairMask * 0.85);
 
         // Sedimentary strata: horizontal banding on steep faces, scaled by biome
+        // Two-layer: broad bands + fine sub-bands for richer geological character
         float bandNoise = _fbm(vWorldPos.xz * 0.12 + 5.5);
         float bandWave = sin(vWorldPos.y * 1.65 + bandNoise * 3.5) * 0.5 + 0.5;
-        float bandStr = uStrataAmp * slope * (1.0 - snowMask);
-        rockCol *= mix(1.0, mix(0.78, 1.20, bandWave), clamp(bandStr, 0.0, 1.0));
+        float subBand  = sin(vWorldPos.y * 5.4 + bandNoise * 1.8) * 0.5 + 0.5;
+        float combinedBand = bandWave * 0.75 + subBand * 0.25;
+        float bandStr = uStrataAmp * slope * (1.0 - snowMask) * 1.6;
+        rockCol *= mix(1.0, mix(0.62, 1.32, combinedBand), clamp(bandStr, 0.0, 1.0));
 
         // Subtle warm/cool variation across the face
         float tempShift = _fbm(vWorldPos.xz * 0.18) - 0.5;
@@ -722,18 +744,28 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         snowCol *= mix(vec3(0.62, 0.70, 0.85), vec3(1.0), aoFromColor);
 
         // Snow sparkle: crystalline ice particles visible at close range
-        float sparkFade = _aaFade(vWorldPos.xz, 14.0);
-        float spark1 = pow(max(0.0, _vn(vWorldPos.xz * 18.0 + 7.3)), 6.0) * sparkFade;
-        float spark2 = pow(max(0.0, _vn(vWorldPos.xz * 23.0 - 14.0)), 8.0) * sparkFade;
-        snowCol += vec3(0.90, 0.95, 1.00) * (spark1 * 0.55 + spark2 * 0.35) * snowMask;
+        // Three frequencies → varied star-field of glints
+        float sparkFade = _aaFade(vWorldPos.xz, 10.0);
+        float spark1 = pow(max(0.0, _vn(vWorldPos.xz * 18.0 + 7.3)), 5.0) * sparkFade;
+        float spark2 = pow(max(0.0, _vn(vWorldPos.xz * 28.0 - 14.0)), 7.0) * sparkFade;
+        float spark3 = pow(max(0.0, _vn(vWorldPos.xz * 42.0 + 91.0)), 9.0) * sparkFade;
+        snowCol += vec3(1.00, 1.00, 1.05) * (spark1 * 1.40 + spark2 * 1.00 + spark3 * 0.80) * snowMask;
 
-        // Wind-sculpted snow surface micro-bump
+        // Wind-sculpted snow surface micro-bump (dual frequency)
         float snowBumpFade = _aaFade(vWorldPos.xz, 3.8) * snowMask;
-        float sH = _fbm(vWorldPos.xz * 3.8 + 99.0);
+        float sH  = _fbm(vWorldPos.xz * 3.8 + 99.0);
         float sHx = _fbm(vWorldPos.xz * 3.8 + 99.0 + vec2(0.5, 0.0));
         float sHz = _fbm(vWorldPos.xz * 3.8 + 99.0 + vec2(0.0, 0.5));
-        float snowBumpLit = dot(vec2(sHx - sH, sHz - sH), vec2(0.54, 0.35));
-        snowCol *= 0.90 + snowBumpLit * 0.22 * snowBumpFade;
+        float snowBumpLit = dot(vec2(sHx - sH, sHz - sH), vec2(0.54, 0.35)) * 1.8;
+        snowCol *= 0.86 + snowBumpLit * 0.50 * snowBumpFade;
+
+        // Fine snow grain: high-freq second pass for crystalline crunch up close
+        float snowFineFade = _aaFade(vWorldPos.xz, 11.0) * snowMask;
+        float fH  = _fbm(vWorldPos.xz * 11.0 + 31.0);
+        float fHx = _fbm(vWorldPos.xz * 11.0 + 31.0 + vec2(0.18, 0.0));
+        float fHz = _fbm(vWorldPos.xz * 11.0 + 31.0 + vec2(0.0, 0.18));
+        float snowFineLit = dot(vec2(fHx - fH, fHz - fH), vec2(0.54, 0.35)) * 3.5;
+        snowCol *= 1.0 + snowFineLit * 0.32 * snowFineFade;
 
         diffuseColor.rgb = mix(rockCol, snowCol, snowMask);
 
@@ -763,7 +795,7 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
       );
   };
   // Ensure shadows include the custom material correctly
-  mat.customProgramCacheKey = () => 'mountain-onbc-v5-enhanced';
+  mat.customProgramCacheKey = () => 'mountain-onbc-v6-ultra';
 
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
@@ -874,6 +906,7 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
   const activeMeshRef  = useRef<any>(null);
   const mountainLoRef  = useRef<any>(null);
   const mountainHiRef  = useRef<any>(null);
+  const mountainUltraRef = useRef<any>(null);
 
   const orbitTgt = useRef<OrbitState>({ theta: 0.40, phi: 0.85, radius: 140, tx: 0, ty: 14, tz: 0 });
   const orbitCur = useRef<OrbitState>({ theta: 0.40, phi: 0.85, radius: 140, tx: 0, ty: 14, tz: 0 });
@@ -1174,23 +1207,35 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
       const activeShader = (activeMeshRef.current?.material as any)?.userData?.shader;
       if (activeShader) activeShader.uniforms.uCamDist.value = orbitCur.current.radius;
 
-      // Swap LOD meshes based on zoom distance (with hysteresis to avoid flicker)
+      // 3-tier LOD swap based on zoom distance (with hysteresis to avoid flicker)
+      // lo (120 segs) → hi (220 segs) → ultra (300 segs) as camera gets closer
       const curRadius = orbitCur.current.radius;
-      const loThresh = modelRadius * 0.85;
-      const hiThresh = modelRadius * 0.60;
-      if (mountainHiRef.current) {
-        const wantHi = curRadius < hiThresh;
-        const wantLo = curRadius > loThresh;
-        const isHi = activeMeshRef.current === mountainHiRef.current;
-        if (wantHi && !isHi) {
-          scene.remove(mountainLoRef.current);
-          scene.add(mountainHiRef.current);
-          activeMeshRef.current = mountainHiRef.current;
-        } else if (wantLo && isHi) {
-          scene.remove(mountainHiRef.current);
-          scene.add(mountainLoRef.current);
-          activeMeshRef.current = mountainLoRef.current;
-        }
+      const loFromHi   = modelRadius * 0.85;  // hi → lo when zooming out past 0.85
+      const hiFromLo   = modelRadius * 0.60;  // lo → hi when zooming in past 0.60
+      const hiFromUltra = modelRadius * 0.32; // ultra → hi when zooming out past 0.32
+      const ultraFromHi = modelRadius * 0.22; // hi → ultra when zooming in past 0.22
+      const cur = activeMeshRef.current;
+      const lo  = mountainLoRef.current;
+      const hi  = mountainHiRef.current;
+      const ul  = mountainUltraRef.current;
+
+      const swapTo = (next: any) => {
+        if (!next || cur === next) return;
+        if (cur) scene.remove(cur);
+        scene.add(next);
+        activeMeshRef.current = next;
+      };
+
+      if (ul && curRadius < ultraFromHi) {
+        swapTo(ul);
+      } else if (hi && curRadius < hiFromLo && curRadius > hiFromUltra) {
+        swapTo(hi);
+      } else if (curRadius > loFromHi) {
+        swapTo(lo);
+      } else if (cur === ul && curRadius > hiFromUltra && hi) {
+        swapTo(hi);
+      } else if (cur === hi && curRadius < ultraFromHi && ul) {
+        swapTo(ul);
       }
 
       renderer.render(scene, camera);
@@ -1198,12 +1243,19 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     };
     loop();
 
-    // Build high-LOD mesh (SEGS=160) asynchronously after initial render settles
+    // Build high-LOD mesh (SEGS=220) asynchronously after initial render settles
     setTimeout(() => {
-      const hiMesh = buildMountainMesh(THREE, hm, perm, cfg, 160);
+      const hiMesh = buildMountainMesh(THREE, hm, perm, cfg, 220);
       mountainHiRef.current = hiMesh;
       // Don't add to scene yet — render loop will swap when zoom warrants it
     }, 700);
+
+    // Build ultra-LOD mesh (SEGS=300) — only used when camera is extremely close.
+    // Built later so it doesn't block the initial scene render.
+    setTimeout(() => {
+      const ultraMesh = buildMountainMesh(THREE, hm, perm, cfg, 300);
+      mountainUltraRef.current = ultraMesh;
+    }, 2000);
 
     zoomTimerRef.current = setTimeout(() => {
       const i2 = Math.max(0, Math.min(completedRef.current, cps.length - 1));
@@ -1250,6 +1302,8 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     rendererRef.current?.dispose?.();
     mountainHiRef.current?.geometry?.dispose();
     mountainHiRef.current?.material?.dispose();
+    mountainUltraRef.current?.geometry?.dispose();
+    mountainUltraRef.current?.material?.dispose();
   }, []);
 
   return (
