@@ -25,11 +25,17 @@ interface TerrainCfg {
   lacunarity: number;
   falloff: number;
   ridgeMix: number;
+  billowMix: number;
   warpAmp: number;
   warpFreq: number;
+  warpFeedback: number;
+  edgeFalloff: number;
+  peakCount: number;
+  ridgeAxis: number;
   erodeDroplets: number;
   thermalIters: number;
   snowLine: number;
+  strataAmp: number;
   skyZenith: number;
   skyMid: number;
   skyHorizon: number;
@@ -37,28 +43,56 @@ interface TerrainCfg {
   fogFar: number;
 }
 
+// Five-tier biome system driven by the roadmap's step count.
+// Each tier escalates: more peaks, sharper ridges, lower snow line, richer sky.
+//   1–2  steps → rolling hill            (single rounded summit, lush green)
+//   3–4         → foothill ridge          (twin peaks, mixed forest/rock)
+//   5–6         → alpine mountain         (three peaks, summit snowcap)
+//   7–9         → high alpine massif      (four peaks, deep snow, dramatic shadows)
+//   10+         → nival summit            (five-peak ridge, glacial blue, towering)
 export function getTerrainCfg(stepCount: number): TerrainCfg {
-  if (stepCount <= 3) return {
-    biome: 'hill', heightScale: 14, noiseScale: 0.022, octaves: 5,
-    persistence: 0.50, lacunarity: 2.05, falloff: 1.7, ridgeMix: 0.25,
-    warpAmp: 14, warpFreq: 0.020, erodeDroplets: 5000, thermalIters: 2,
-    snowLine: 0.82,
-    skyZenith: 0x0e3caa, skyMid: 0x3a88d4, skyHorizon: 0xb8dcf5,
-    fogNear: 70, fogFar: 200,
+  if (stepCount <= 2) return {
+    biome: 'hill', heightScale: 12, noiseScale: 0.020, octaves: 5,
+    persistence: 0.48, lacunarity: 2.00, falloff: 1.85, ridgeMix: 0.18,
+    billowMix: 0.45, warpAmp: 11, warpFreq: 0.018, warpFeedback: 0.55,
+    edgeFalloff: 1.45, peakCount: 1, ridgeAxis: 0.35, strataAmp: 0.0,
+    erodeDroplets: 4500, thermalIters: 2, snowLine: 0.88,
+    skyZenith: 0x123aa6, skyMid: 0x4a96dc, skyHorizon: 0xc6e2f4,
+    fogNear: 65, fogFar: 195,
+  };
+  if (stepCount <= 4) return {
+    biome: 'hill', heightScale: 22, noiseScale: 0.024, octaves: 5,
+    persistence: 0.51, lacunarity: 2.08, falloff: 1.55, ridgeMix: 0.32,
+    billowMix: 0.32, warpAmp: 16, warpFreq: 0.021, warpFeedback: 0.60,
+    edgeFalloff: 1.55, peakCount: 2, ridgeAxis: 0.55, strataAmp: 0.04,
+    erodeDroplets: 6000, thermalIters: 2, snowLine: 0.74,
+    skyZenith: 0x0a2f8a, skyMid: 0x3a82c8, skyHorizon: 0xa8cae8,
+    fogNear: 75, fogFar: 215,
   };
   if (stepCount <= 6) return {
-    biome: 'mountain', heightScale: 36, noiseScale: 0.030, octaves: 6,
-    persistence: 0.54, lacunarity: 2.15, falloff: 1.35, ridgeMix: 0.50,
-    warpAmp: 22, warpFreq: 0.024, erodeDroplets: 8000, thermalIters: 3,
-    snowLine: 0.58,
+    biome: 'mountain', heightScale: 38, noiseScale: 0.030, octaves: 6,
+    persistence: 0.54, lacunarity: 2.15, falloff: 1.30, ridgeMix: 0.52,
+    billowMix: 0.18, warpAmp: 22, warpFreq: 0.024, warpFeedback: 0.65,
+    edgeFalloff: 1.65, peakCount: 3, ridgeAxis: 0.70, strataAmp: 0.10,
+    erodeDroplets: 8000, thermalIters: 3, snowLine: 0.56,
     skyZenith: 0x081c58, skyMid: 0x2260a8, skyHorizon: 0x6898c4,
     fogNear: 95, fogFar: 240,
   };
+  if (stepCount <= 9) return {
+    biome: 'mountain', heightScale: 52, noiseScale: 0.034, octaves: 6,
+    persistence: 0.56, lacunarity: 2.22, falloff: 1.15, ridgeMix: 0.60,
+    billowMix: 0.10, warpAmp: 27, warpFreq: 0.026, warpFeedback: 0.72,
+    edgeFalloff: 1.70, peakCount: 4, ridgeAxis: 0.85, strataAmp: 0.16,
+    erodeDroplets: 10000, thermalIters: 3, snowLine: 0.50,
+    skyZenith: 0x06163e, skyMid: 0x16407c, skyHorizon: 0x4d7ba0,
+    fogNear: 110, fogFar: 280,
+  };
   return {
-    biome: 'peak', heightScale: 62, noiseScale: 0.038, octaves: 7,
-    persistence: 0.58, lacunarity: 2.30, falloff: 1.10, ridgeMix: 0.65,
-    warpAmp: 30, warpFreq: 0.028, erodeDroplets: 12000, thermalIters: 4,
-    snowLine: 0.46,
+    biome: 'peak', heightScale: 68, noiseScale: 0.038, octaves: 7,
+    persistence: 0.58, lacunarity: 2.30, falloff: 1.05, ridgeMix: 0.68,
+    billowMix: 0.06, warpAmp: 32, warpFreq: 0.028, warpFeedback: 0.78,
+    edgeFalloff: 1.80, peakCount: 5, ridgeAxis: 1.00, strataAmp: 0.22,
+    erodeDroplets: 12000, thermalIters: 4, snowLine: 0.42,
     skyZenith: 0x04101e, skyMid: 0x10264a, skyHorizon: 0x305878,
     fogNear: 130, fogFar: 320,
   };
@@ -117,6 +151,38 @@ function fbmRidged(
     const n = perlin2(p, x * freq, y * freq);
     const ridged = 1 - Math.abs(n) * 2;
     const blended = lerp(n, ridged, ridgeMix);
+    sum  += amp * blended;
+    norm += amp;
+    amp  *= persistence;
+    freq *= lacunarity;
+  }
+  return sum / norm;
+}
+
+// Hybrid FBM that blends three noise modes per octave:
+//   • plain perlin  — rolling, hills-and-valleys character
+//   • ridged        — |n| inverted → sharp ridges (peaks emerge along zero-crossings)
+//   • billow        — |n| upright → soft puffy domes (foothill character)
+// Ridged contribution ramps UP with octave (high-freq detail = sharp);
+// billow contribution ramps DOWN with octave (low-freq base = rolling).
+// This gives mountains with smooth flanks and crisp summit ridges in one pass.
+function fbmHybrid(
+  p: Uint8Array, x: number, y: number,
+  octaves: number, persistence: number, lacunarity: number,
+  ridgeMix: number, billowMix: number,
+): number {
+  let amp = 1, freq = 1, sum = 0, norm = 0;
+  const oN = Math.max(1, octaves - 1);
+  for (let o = 0; o < octaves; o++) {
+    const n = perlin2(p, x * freq, y * freq);
+    const t = o / oN;
+    const ridged = 1 - Math.abs(n) * 2;
+    const billow = Math.abs(n) * 2 - 1;
+    const wRidge  = ridgeMix  * (0.35 + t * 0.65);
+    const wBillow = billowMix * (1.0 - t * 0.75);
+    let blended = n;
+    blended = lerp(blended, ridged, wRidge);
+    blended = lerp(blended, billow, wBillow);
     sum  += amp * blended;
     norm += amp;
     amp  *= persistence;
@@ -622,7 +688,7 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
       );
   };
   // Ensure shadows include the custom material correctly
-  mat.customProgramCacheKey = () => 'mountain-onbc-v1';
+  mat.customProgramCacheKey = () => 'mountain-onbc-v3-noshadernew';
 
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
@@ -842,6 +908,18 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     hydraulicErode(hm, seed, cfg.erodeDroplets);
     console.log('[Mountain3D] hydraulic erosion', Date.now() - t1, 'ms');
 
+    // Sanity: verify heightmap is producing sane values (catches NaN, all-zero, etc.)
+    let hMin = Infinity, hMax = -Infinity, hNan = 0;
+    for (let i = 0; i < hm.length; i++) {
+      const v = hm[i];
+      if (Number.isNaN(v)) hNan++;
+      else { if (v < hMin) hMin = v; if (v > hMax) hMax = v; }
+    }
+    console.log('[Mountain3D] heightmap stats', {
+      biome: cfg.biome, steps: steps.length, peaks: cfg.peakCount,
+      hScale: cfg.heightScale, min: hMin.toFixed(2), max: hMax.toFixed(2), nan: hNan,
+    });
+
     const t2 = Date.now();
     thermalErode(hm, cfg.thermalIters);
     console.log('[Mountain3D] thermal erosion', Date.now() - t2, 'ms');
@@ -1012,8 +1090,13 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     const VEL_DECAY    = 2.4;  // higher = inertia stops sooner
     const VEL_THRESH   = 0.04;
 
+    // Diagnostic: log the first frame and frame 60 to confirm render loop runs
+    let _frameCount = 0;
     const loop = () => {
       rafRef.current = requestAnimationFrame(loop);
+      if (_frameCount === 0) console.log('[Mountain3D] render loop started, scene children:', scene.children.length);
+      if (_frameCount === 60) console.log('[Mountain3D] frame 60 reached — rendering is alive');
+      _frameCount++;
       const now = Date.now();
       const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameRef.current) / 1000));
       lastFrameRef.current = now;

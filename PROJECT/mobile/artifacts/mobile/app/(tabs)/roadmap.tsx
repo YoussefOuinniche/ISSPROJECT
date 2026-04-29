@@ -114,6 +114,14 @@ function parseDesc(desc: string | null): { body: string; why: string | null } {
   return { body: parts[0]?.trim() ?? '', why: parts[1]?.trim() ?? null };
 }
 
+// djb2 hash — gives each roadmap UUID a unique, well-distributed seed so
+// users with different roadmaps get visibly different mountains.
+function hashSeed(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h) || 42;
+}
+
 // ─── Animated progress bar ────────────────────────────────────────────────────
 function ProgressBar({ pct, color }: { pct: number; color: string }) {
   const w = useSharedValue(0);
@@ -501,7 +509,7 @@ export default function RoadmapScreen() {
       <ProceduralMountain3D
         steps={checkpoints}
         completedSteps={completedSteps}
-        seed={roadmap.id ? roadmap.id.charCodeAt(0) : 42}
+        seed={roadmap.id ? hashSeed(roadmap.id) : 42}
       />
 
       {/* ── Top overlay (transparent gradient + title) ── */}
