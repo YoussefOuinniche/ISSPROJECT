@@ -209,22 +209,34 @@ function worldToGrid(wx: number, wz: number): { gx: number; gy: number } {
 function genHeightmapBase(perm: Uint8Array, cfg: TerrainCfg): Float32Array {
   const hm = new Float32Array(HM_RES * HM_RES);
 
-  // Three offset peaks form an asymmetric ridge cluster (warped further below)
-  const peaks: Array<{ x: number; z: number; w: number; falloff: number }> = [
-    { x:  0,  z:  0,  w: 1.00, falloff: cfg.falloff },
-    { x:  18, z: -10, w: 0.55, falloff: cfg.falloff * 1.20 },
-    { x: -14, z: 12,  w: 0.48, falloff: cfg.falloff * 1.30 },
-  ];
+  // Parametric peaks driven by step count: ridge axis controls lateral extent
+  const peaks: Array<{ x: number; z: number; w: number; falloff: number }> =
+    Array.from({ length: cfg.peakCount }, (_, k) => {
+      const t = cfg.peakCount > 1 ? k / (cfg.peakCount - 1) : 0.5;
+      const axisOffset = (t - 0.5) * HALF * cfg.ridgeAxis * 1.4;
+      const sideOffset = (k % 2 === 0 ? 1 : -1) * HALF * (1 - cfg.ridgeAxis) * 0.18;
+      const weight = k === 0 ? 1.0 : 0.55 - k * 0.06;
+      return {
+        x: sideOffset,
+        z: axisOffset,
+        w: Math.max(0.28, weight),
+        falloff: cfg.falloff * (1 + k * 0.12),
+      };
+    });
 
   for (let yi = 0; yi < HM_RES; yi++) {
     const wz = HALF - yi * HM_CELL;
     for (let xi = 0; xi < HM_RES; xi++) {
       const wx = -HALF + xi * HM_CELL;
 
-      // Domain warp — two perlin offsets push the input around, killing radial symmetry
-      const warpX = perlin2(perm, wx * cfg.warpFreq + 13.7, wz * cfg.warpFreq - 27.3) * cfg.warpAmp;
-      const warpZ = perlin2(perm, wx * cfg.warpFreq + 81.1, wz * cfg.warpFreq + 53.9) * cfg.warpAmp;
-      const fx = wx + warpX, fz = wz + warpZ;
+      // Domain warp — first pass
+      const warpX1 = perlin2(perm, wx * cfg.warpFreq + 13.7, wz * cfg.warpFreq - 27.3) * cfg.warpAmp;
+      const warpZ1 = perlin2(perm, wx * cfg.warpFreq + 81.1, wz * cfg.warpFreq + 53.9) * cfg.warpAmp;
+      // Domain warp feedback — second pass seeded off the first
+      const warpX2 = perlin2(perm, (wx + warpX1) * cfg.warpFreq * 1.7 - 44.0, (wz + warpZ1) * cfg.warpFreq * 1.7 + 19.0) * cfg.warpAmp * cfg.warpFeedback;
+      const warpZ2 = perlin2(perm, (wx + warpX1) * cfg.warpFreq * 1.7 + 67.0, (wz + warpZ1) * cfg.warpFreq * 1.7 - 33.0) * cfg.warpAmp * cfg.warpFeedback;
+      const fx = wx + warpX1 + warpX2;
+      const fz = wz + warpZ1 + warpZ2;
 
       // Multi-peak field — soft-max combines into a ridged spine
       let peakField = 0;
@@ -237,15 +249,18 @@ function genHeightmapBase(perm: Uint8Array, cfg: TerrainCfg): Float32Array {
         peakField = peakField + dome - peakField * dome;
       }
 
-      // Ridged FBM detail, sampled in warped space
-      const n = (fbmRidged(perm,
+      // Hybrid FBM — smooth flanks at low freq, crisp ridges at high freq
+      const n = (fbmHybrid(perm,
         fx * cfg.noiseScale, fz * cfg.noiseScale,
-        cfg.octaves, cfg.persistence, cfg.lacunarity, cfg.ridgeMix) + 1) * 0.5;
+        cfg.octaves, cfg.persistence, cfg.lacunarity,
+        cfg.ridgeMix, cfg.billowMix) + 1) * 0.5;
 
       const macro = (peakField * 0.55 + n * peakField * 0.62) * cfg.heightScale;
 
-      // Base soil floor — keeps the foothills flat-ish near the edges
-      hm[yi * HM_RES + xi] = macro;
+      // Quadratic edge falloff — clean mountain silhouette at terrain boundary
+      const edgeR = Math.min(1, Math.sqrt(wx * wx + wz * wz) / HALF);
+      const edgeFade = Math.max(0, 1 - Math.pow(edgeR, cfg.edgeFalloff));
+      hm[yi * HM_RES + xi] = macro * edgeFade;
     }
   }
   return hm;
@@ -902,30 +917,9 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     const perm = makePerm(seed);
 
     // ── Generate, erode, finalize the heightmap ──
-    console.log('[Mountain3D] generating heightmap...');
-    const t0 = Date.now();
     const hm = genHeightmapBase(perm, cfg);
-    console.log('[Mountain3D] base heightmap', Date.now() - t0, 'ms');
-
-    const t1 = Date.now();
     hydraulicErode(hm, seed, cfg.erodeDroplets);
-    console.log('[Mountain3D] hydraulic erosion', Date.now() - t1, 'ms');
-
-    // Sanity: verify heightmap is producing sane values (catches NaN, all-zero, etc.)
-    let hMin = Infinity, hMax = -Infinity, hNan = 0;
-    for (let i = 0; i < hm.length; i++) {
-      const v = hm[i];
-      if (Number.isNaN(v)) hNan++;
-      else { if (v < hMin) hMin = v; if (v > hMax) hMax = v; }
-    }
-    console.log('[Mountain3D] heightmap stats', {
-      biome: cfg.biome, steps: steps.length, peaks: cfg.peakCount,
-      hScale: cfg.heightScale, min: hMin.toFixed(2), max: hMax.toFixed(2), nan: hNan,
-    });
-
-    const t2 = Date.now();
     thermalErode(hm, cfg.thermalIters);
-    console.log('[Mountain3D] thermal erosion', Date.now() - t2, 'ms');
 
     const glW = gl.drawingBufferWidth;
     const glH = gl.drawingBufferHeight;
@@ -983,10 +977,7 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     scene.add(new THREE.AmbientLight(0xc8d0d8, 0.06));
 
     // Mountain
-    console.log('[Mountain3D] building mesh...');
-    const t3 = Date.now();
     const mountain = buildMountainMesh(THREE, hm, perm, cfg);
-    console.log('[Mountain3D] mesh built', Date.now() - t3, 'ms');
     scene.add(mountain);
 
     const mBox = new THREE.Box3().setFromObject(mountain);
@@ -1080,13 +1071,8 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     const VEL_DECAY    = 2.4;  // higher = inertia stops sooner
     const VEL_THRESH   = 0.04;
 
-    // Diagnostic: log the first frame and frame 60 to confirm render loop runs
-    let _frameCount = 0;
     const loop = () => {
       rafRef.current = requestAnimationFrame(loop);
-      if (_frameCount === 0) console.log('[Mountain3D] render loop started, scene children:', scene.children.length);
-      if (_frameCount === 60) console.log('[Mountain3D] frame 60 reached — rendering is alive');
-      _frameCount++;
       const now = Date.now();
       const dt = Math.min(0.05, Math.max(0.001, (now - lastFrameRef.current) / 1000));
       lastFrameRef.current = now;
