@@ -685,6 +685,23 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         rockCol *= mix(0.42, 1.05, 1.0 - streakMask);  // streaks → near-black grooves
         rockCol *= 0.78 + rockDetail * 0.42;
 
+        // Gradient bump: 3-sample FBM finite difference → fake micro-surface lighting
+        float bumpFade = _aaFade(vWorldPos.xz, 2.2) * (1.0 - snowMask * 0.85);
+        float bH  = _fbm(vWorldPos.xz * 2.8);
+        float bHx = _fbm(vWorldPos.xz * 2.8 + vec2(0.7, 0.0));
+        float bHz = _fbm(vWorldPos.xz * 2.8 + vec2(0.0, 0.7));
+        float bumpX = bHx - bH;
+        float bumpZ = bHz - bH;
+        float bumpLit = dot(vec2(bumpX, bumpZ), vec2(0.54, 0.35)) * 1.6;
+        float fakeAO = bH * 0.28 + 0.72;
+        rockCol *= (1.0 + bumpLit * bumpFade * 0.38) * mix(1.0, fakeAO, bumpFade);
+
+        // Crack network: ridged high-freq noise → dark fissure lines on steep faces
+        float crackFade = _aaFade(vWorldPos.xz, 5.5);
+        float crack = _rfbm(vWorldPos.xz * 5.5 + 23.7);
+        float crackMask = smoothstep(0.60, 0.80, crack) * slope * crackFade;
+        rockCol = mix(rockCol, rockCol * 0.16, crackMask * 0.78);
+
         // Sedimentary strata: horizontal banding on steep faces, scaled by biome
         float bandNoise = _fbm(vWorldPos.xz * 0.12 + 5.5);
         float bandWave = sin(vWorldPos.y * 1.65 + bandNoise * 3.5) * 0.5 + 0.5;
@@ -704,6 +721,20 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         float aoFromColor = clamp(dot(diffuseColor.rgb, vec3(0.30)), 0.05, 1.0);
         snowCol *= mix(vec3(0.62, 0.70, 0.85), vec3(1.0), aoFromColor);
 
+        // Snow sparkle: crystalline ice particles visible at close range
+        float sparkFade = _aaFade(vWorldPos.xz, 14.0);
+        float spark1 = pow(max(0.0, _vn(vWorldPos.xz * 18.0 + 7.3)), 6.0) * sparkFade;
+        float spark2 = pow(max(0.0, _vn(vWorldPos.xz * 23.0 - 14.0)), 8.0) * sparkFade;
+        snowCol += vec3(0.90, 0.95, 1.00) * (spark1 * 0.55 + spark2 * 0.35) * snowMask;
+
+        // Wind-sculpted snow surface micro-bump
+        float snowBumpFade = _aaFade(vWorldPos.xz, 3.8) * snowMask;
+        float sH = _fbm(vWorldPos.xz * 3.8 + 99.0);
+        float sHx = _fbm(vWorldPos.xz * 3.8 + 99.0 + vec2(0.5, 0.0));
+        float sHz = _fbm(vWorldPos.xz * 3.8 + 99.0 + vec2(0.0, 0.5));
+        float snowBumpLit = dot(vec2(sHx - sH, sHz - sH), vec2(0.54, 0.35));
+        snowCol *= 0.90 + snowBumpLit * 0.22 * snowBumpFade;
+
         diffuseColor.rgb = mix(rockCol, snowCol, snowMask);
 
         // Subtle altitude-driven cool tint (atmospheric perspective on shaded faces)
@@ -720,10 +751,19 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         r2 = mix(r2, 0.55, snowMask);                  // snow ~0.55
         r2 = mix(r2, r2 + 0.10, streakMask * (1.0 - snowMask)); // streaks rougher
         roughnessFactor = clamp(r2, 0.20, 1.0);`,
+      )
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        // Wet streaks and ice slightly more metallic/specular for visual depth
+        float m2 = metalnessFactor;
+        m2 = mix(m2, 0.10, streakMask * (1.0 - snowMask) * 0.65);
+        m2 = mix(m2, 0.14, snowMask * 0.35);
+        metalnessFactor = clamp(m2, 0.0, 0.25);`,
       );
   };
   // Ensure shadows include the custom material correctly
-  mat.customProgramCacheKey = () => 'mountain-onbc-v4-webgl1-safe';
+  mat.customProgramCacheKey = () => 'mountain-onbc-v5-enhanced';
 
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
