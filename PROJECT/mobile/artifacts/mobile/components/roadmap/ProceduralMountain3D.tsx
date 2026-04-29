@@ -41,7 +41,7 @@ export function getTerrainCfg(stepCount: number): TerrainCfg {
   if (stepCount <= 3) return {
     biome: 'hill', heightScale: 14, noiseScale: 0.022, octaves: 5,
     persistence: 0.50, lacunarity: 2.05, falloff: 1.7, ridgeMix: 0.25,
-    warpAmp: 14, warpFreq: 0.020, erodeDroplets: 8000, thermalIters: 2,
+    warpAmp: 14, warpFreq: 0.020, erodeDroplets: 5000, thermalIters: 2,
     snowLine: 0.82,
     skyZenith: 0x0e3caa, skyMid: 0x3a88d4, skyHorizon: 0xb8dcf5,
     fogNear: 70, fogFar: 200,
@@ -49,7 +49,7 @@ export function getTerrainCfg(stepCount: number): TerrainCfg {
   if (stepCount <= 6) return {
     biome: 'mountain', heightScale: 36, noiseScale: 0.030, octaves: 6,
     persistence: 0.54, lacunarity: 2.15, falloff: 1.35, ridgeMix: 0.50,
-    warpAmp: 22, warpFreq: 0.024, erodeDroplets: 16000, thermalIters: 3,
+    warpAmp: 22, warpFreq: 0.024, erodeDroplets: 8000, thermalIters: 3,
     snowLine: 0.58,
     skyZenith: 0x081c58, skyMid: 0x2260a8, skyHorizon: 0x6898c4,
     fogNear: 95, fogFar: 240,
@@ -57,7 +57,7 @@ export function getTerrainCfg(stepCount: number): TerrainCfg {
   return {
     biome: 'peak', heightScale: 62, noiseScale: 0.038, octaves: 7,
     persistence: 0.58, lacunarity: 2.30, falloff: 1.10, ridgeMix: 0.65,
-    warpAmp: 30, warpFreq: 0.028, erodeDroplets: 22000, thermalIters: 4,
+    warpAmp: 30, warpFreq: 0.028, erodeDroplets: 12000, thermalIters: 4,
     snowLine: 0.46,
     skyZenith: 0x04101e, skyMid: 0x10264a, skyHorizon: 0x305878,
     fogNear: 130, fogFar: 320,
@@ -129,7 +129,7 @@ function fbmRidged(
 
 const TERRAIN_SIZE = 110;
 const HALF = TERRAIN_SIZE / 2;
-const HM_RES = 320;
+const HM_RES = 160;
 const HM_CELL = TERRAIN_SIZE / (HM_RES - 1);
 
 // World ↔ grid index helpers (consistent across generation, erosion, sampling)
@@ -354,34 +354,10 @@ function sampleNormalGrid(hm: Float32Array, wx: number, wz: number, out: [number
   out[0] = nx / len; out[1] = ny / len; out[2] = nz / len;
 }
 
-// Vertex AO: cast 8 horizon rays in screen-X/Z directions, compare height
-// rise vs distance. More rises blocking sky → more occluded.
-function bakeAO(hm: Float32Array, wx: number, wz: number, wy: number): number {
-  const dirs = 8;
-  const samples = 4;
-  const maxDist = 6;
-  let occlusion = 0;
-  for (let d = 0; d < dirs; d++) {
-    const a = (d / dirs) * Math.PI * 2;
-    const cx = Math.cos(a), cz = Math.sin(a);
-    let blocked = 0;
-    for (let s = 1; s <= samples; s++) {
-      const t = (s / samples) * maxDist;
-      const sh = sampleHeightGrid(hm, wx + cx * t, wz + cz * t);
-      // angular elevation of sample over horizontal from this vertex
-      const angle = (sh - wy) / t; // tan(theta)
-      if (angle > 0.18) blocked += 1 - (s - 1) / samples;
-    }
-    occlusion += blocked / samples;
-  }
-  // 0 (open sky) .. 1 (fully occluded)
-  return Math.min(1, occlusion / dirs);
-}
-
 // ─── Mesh build ──────────────────────────────────────────────────────────────
 
 function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: TerrainCfg) {
-  const SEGS = 220;
+  const SEGS = 120;
   const geom = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEGS, SEGS);
   const pos = geom.attributes.position;
   const vCount = pos.count;
@@ -481,15 +457,11 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
       }
     }
 
-    // AO darkens crevices
-    const ao = bakeAO(hm, wx, wz, wy);
-    const aoFactor = 1 - ao * 0.45;
-
     // Per-vertex luminance jitter
     const lj = (speck - 0.5) * 0.05;
-    colors[i * 3]     = Math.max(0, Math.min(1, (tmp[0] + lj) * aoFactor));
-    colors[i * 3 + 1] = Math.max(0, Math.min(1, (tmp[1] + lj) * aoFactor));
-    colors[i * 3 + 2] = Math.max(0, Math.min(1, (tmp[2] + lj) * aoFactor));
+    colors[i * 3]     = Math.max(0, Math.min(1, tmp[0] + lj));
+    colors[i * 3 + 1] = Math.max(0, Math.min(1, tmp[1] + lj));
+    colors[i * 3 + 2] = Math.max(0, Math.min(1, tmp[2] + lj));
   }
   geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geom.computeBoundingBox();
@@ -853,6 +825,7 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
 
   // ── WebGL init ─────────────────────────────────────────────────────────────
   const onContextCreate = useCallback(async (gl: any) => {
+    try {
     const THREE = await import('three');
     THREERef.current = THREE;
 
@@ -1086,6 +1059,9 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
         };
       }
     }, 2400);
+    } catch (err) {
+      console.error('[Mountain3D] fatal error in onContextCreate:', err);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
