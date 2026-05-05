@@ -1,23 +1,39 @@
 'use no memo';
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import { Dimensions, PanResponder, StyleSheet, View } from 'react-native';
+import { Dimensions, PanResponder, Platform, StyleSheet, View } from 'react-native';
 import { GLView } from 'expo-gl';
+import * as THREE from 'three';
 
 const { width: W, height: H } = Dimensions.get('window');
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
 export type Biome = 'hill' | 'mountain' | 'peak';
+// Topology archetype. Picked deterministically from the seed so two roadmaps
+// with the same step count still get visibly different mountains.
+export type Archetype = 'single' | 'twin' | 'volcano' | 'spire' | 'plateau';
+// Path the ridge takes from step 0 → step N-1. Adds silhouette variety.
+export type RidgeCurve = 'straight' | 's_curve' | 'branching' | 'spiral';
+// View mode — overview lets the user freely orbit; focused snaps to a step.
+export type ViewMode = 'overview' | 'focused';
 
 export interface CheckpointDef {
   id: string;
   title: string;
   status: 'locked' | 'available' | 'in_progress' | 'completed' | 'skipped';
+  /**
+   * Optional difficulty in [0, 1]. The step with the highest difficulty
+   * becomes the mountain's summit; the rest scale to sub-peaks. If omitted,
+   * a smooth ramp by step order is used as fallback.
+   */
+  difficulty?: number;
 }
 
 interface TerrainCfg {
   biome: Biome;
+  archetype: Archetype;
+  ridgeCurve: RidgeCurve;
   heightScale: number;
   noiseScale: number;
   octaves: number;
@@ -25,11 +41,17 @@ interface TerrainCfg {
   lacunarity: number;
   falloff: number;
   ridgeMix: number;
+  billowMix: number;
   warpAmp: number;
   warpFreq: number;
+  warpFeedback: number;
+  edgeFalloff: number;
+  peakCount: number;
+  ridgeAxis: number;
   erodeDroplets: number;
   thermalIters: number;
   snowLine: number;
+  strataAmp: number;
   skyZenith: number;
   skyMid: number;
   skyHorizon: number;
@@ -37,31 +59,92 @@ interface TerrainCfg {
   fogFar: number;
 }
 
-export function getTerrainCfg(stepCount: number): TerrainCfg {
-  if (stepCount <= 3) return {
-    biome: 'hill', heightScale: 14, noiseScale: 0.022, octaves: 5,
-    persistence: 0.50, lacunarity: 2.05, falloff: 1.7, ridgeMix: 0.25,
-    warpAmp: 14, warpFreq: 0.020, erodeDroplets: 8000, thermalIters: 2,
-    snowLine: 0.82,
-    skyZenith: 0x0e3caa, skyMid: 0x3a88d4, skyHorizon: 0xb8dcf5,
-    fogNear: 70, fogFar: 200,
-  };
-  if (stepCount <= 6) return {
-    biome: 'mountain', heightScale: 36, noiseScale: 0.030, octaves: 6,
-    persistence: 0.54, lacunarity: 2.15, falloff: 1.35, ridgeMix: 0.50,
-    warpAmp: 22, warpFreq: 0.024, erodeDroplets: 16000, thermalIters: 3,
-    snowLine: 0.58,
+// 'spire' removed — produces unrealistically narrow ice-pick shapes on mobile
+const ARCHETYPES: Archetype[] = ['twin', 'single', 'volcano', 'twin', 'plateau'];
+const RIDGE_CURVES: RidgeCurve[] = ['straight', 's_curve', 'branching', 'spiral'];
+
+function pickArchetype(seed: number): Archetype {
+  return ARCHETYPES[Math.abs(seed | 0) % ARCHETYPES.length];
+}
+function pickRidgeCurve(seed: number): RidgeCurve {
+  return RIDGE_CURVES[Math.abs((seed >> 5) | 0) % RIDGE_CURVES.length];
+}
+
+// Five-tier biome system driven by the roadmap's step count.
+// Each tier escalates: more peaks, sharper ridges, lower snow line, richer sky.
+//   1–2  steps → rolling hill            (single rounded summit, lush green)
+//   3–4         → foothill ridge          (twin peaks, mixed forest/rock)
+//   5–6         → alpine mountain         (three peaks, summit snowcap)
+//   7–9         → high alpine massif      (four peaks, deep snow, dramatic shadows)
+//   10+         → nival summit            (five-peak ridge, glacial blue, towering)
+export function getTerrainCfg(stepCount: number, seed: number = 1337): TerrainCfg {
+  // Base biome by step count — controls overall scale, colors, and palette.
+  let base: Omit<TerrainCfg, 'archetype' | 'ridgeCurve'>;
+  // Wide massReach + pow(0.70) mass profile keep the base broad even at tall heights.
+  // edgeFalloff 0.92-1.15 → gentle terrain boundary, no hard edge cutoff.
+  if (stepCount <= 2) base = {
+    biome: 'hill', heightScale: 20, noiseScale: 0.020, octaves: 5,
+    persistence: 0.48, lacunarity: 2.00, falloff: 1.85, ridgeMix: 0.14,
+    billowMix: 0.50, warpAmp: 10, warpFreq: 0.016, warpFeedback: 0.50,
+    edgeFalloff: 0.92, peakCount: 1, ridgeAxis: 0.30, strataAmp: 0.0,
+    erodeDroplets: 3000, thermalIters: 2, snowLine: 0.90,
+    skyZenith: 0x123aa6, skyMid: 0x4a96dc, skyHorizon: 0xc6e2f4,
+    fogNear: 70, fogFar: 210,
+  }; else if (stepCount <= 4) base = {
+    biome: 'hill', heightScale: 30, noiseScale: 0.022, octaves: 5,
+    persistence: 0.50, lacunarity: 2.05, falloff: 1.55, ridgeMix: 0.22,
+    billowMix: 0.36, warpAmp: 14, warpFreq: 0.019, warpFeedback: 0.55,
+    edgeFalloff: 0.98, peakCount: 2, ridgeAxis: 0.50, strataAmp: 0.03,
+    erodeDroplets: 4000, thermalIters: 2, snowLine: 0.78,
+    skyZenith: 0x0a2f8a, skyMid: 0x3a82c8, skyHorizon: 0xa8cae8,
+    fogNear: 80, fogFar: 230,
+  }; else if (stepCount <= 6) base = {
+    biome: 'mountain', heightScale: 42, noiseScale: 0.028, octaves: 6,
+    persistence: 0.53, lacunarity: 2.12, falloff: 1.30, ridgeMix: 0.42,
+    billowMix: 0.20, warpAmp: 18, warpFreq: 0.022, warpFeedback: 0.60,
+    edgeFalloff: 1.05, peakCount: 3, ridgeAxis: 0.65, strataAmp: 0.08,
+    erodeDroplets: 5500, thermalIters: 3, snowLine: 0.60,
     skyZenith: 0x081c58, skyMid: 0x2260a8, skyHorizon: 0x6898c4,
-    fogNear: 95, fogFar: 240,
-  };
-  return {
-    biome: 'peak', heightScale: 62, noiseScale: 0.038, octaves: 7,
-    persistence: 0.58, lacunarity: 2.30, falloff: 1.10, ridgeMix: 0.65,
-    warpAmp: 30, warpFreq: 0.028, erodeDroplets: 22000, thermalIters: 4,
-    snowLine: 0.46,
+    fogNear: 100, fogFar: 260,
+  }; else if (stepCount <= 9) base = {
+    biome: 'mountain', heightScale: 52, noiseScale: 0.032, octaves: 6,
+    persistence: 0.55, lacunarity: 2.18, falloff: 1.15, ridgeMix: 0.52,
+    billowMix: 0.12, warpAmp: 22, warpFreq: 0.024, warpFeedback: 0.65,
+    edgeFalloff: 1.10, peakCount: 4, ridgeAxis: 0.80, strataAmp: 0.14,
+    erodeDroplets: 7000, thermalIters: 3, snowLine: 0.52,
+    skyZenith: 0x06163e, skyMid: 0x16407c, skyHorizon: 0x4d7ba0,
+    fogNear: 115, fogFar: 300,
+  }; else base = {
+    biome: 'peak', heightScale: 62, noiseScale: 0.036, octaves: 7,
+    persistence: 0.57, lacunarity: 2.24, falloff: 1.05, ridgeMix: 0.60,
+    billowMix: 0.08, warpAmp: 26, warpFreq: 0.026, warpFeedback: 0.70,
+    edgeFalloff: 1.15, peakCount: 5, ridgeAxis: 0.95, strataAmp: 0.20,
+    erodeDroplets: 8500, thermalIters: 4, snowLine: 0.44,
     skyZenith: 0x04101e, skyMid: 0x10264a, skyHorizon: 0x305878,
-    fogNear: 130, fogFar: 320,
+    fogNear: 135, fogFar: 340,
   };
+
+  // Archetype + ridge curve picked from the seed → topology variety per user.
+  const archetype  = pickArchetype(seed);
+  const ridgeCurve = pickRidgeCurve(seed);
+
+  // Archetype overrides: shape adjustments that survive across biomes.
+  let heightScale  = base.heightScale;
+  let edgeFalloff  = base.edgeFalloff;
+  let thermalIters = base.thermalIters;
+  let snowLine     = base.snowLine;
+  if (archetype === 'plateau') {
+    heightScale  *= 0.85;
+    edgeFalloff  *= 0.88;
+    snowLine     += 0.04;
+  } else if (archetype === 'volcano') {
+    heightScale  *= 1.04;
+    edgeFalloff  *= 0.94;
+  } else if (archetype === 'twin') {
+    heightScale  *= 0.97;
+  }
+
+  return { ...base, heightScale, edgeFalloff, thermalIters, snowLine, archetype, ridgeCurve };
 }
 
 // ─── Seeded Perlin (improved) + ridged FBM ───────────────────────────────────
@@ -125,11 +208,46 @@ function fbmRidged(
   return sum / norm;
 }
 
+// Hybrid FBM that blends three noise modes per octave:
+//   • plain perlin  — rolling, hills-and-valleys character
+//   • ridged        — |n| inverted → sharp ridges (peaks emerge along zero-crossings)
+//   • billow        — |n| upright → soft puffy domes (foothill character)
+// Ridged contribution ramps UP with octave (high-freq detail = sharp);
+// billow contribution ramps DOWN with octave (low-freq base = rolling).
+// This gives mountains with smooth flanks and crisp summit ridges in one pass.
+function fbmHybrid(
+  p: Uint8Array, x: number, y: number,
+  octaves: number, persistence: number, lacunarity: number,
+  ridgeMix: number, billowMix: number,
+): number {
+  let amp = 1, freq = 1, sum = 0, norm = 0;
+  const oN = Math.max(1, octaves - 1);
+  for (let o = 0; o < octaves; o++) {
+    const n = perlin2(p, x * freq, y * freq);
+    const t = o / oN;
+    const ridged = 1 - Math.abs(n) * 2;
+    const billow = Math.abs(n) * 2 - 1;
+    const wRidge  = ridgeMix  * (0.35 + t * 0.65);
+    const wBillow = billowMix * (1.0 - t * 0.75);
+    let blended = n;
+    blended = lerp(blended, ridged, wRidge);
+    blended = lerp(blended, billow, wBillow);
+    sum  += amp * blended;
+    norm += amp;
+    amp  *= persistence;
+    freq *= lacunarity;
+  }
+  return sum / norm;
+}
+
 // ─── World / grid constants ──────────────────────────────────────────────────
 
 const TERRAIN_SIZE = 110;
 const HALF = TERRAIN_SIZE / 2;
-const HM_RES = 320;
+// 256 (up from 160) — at Ultra-LOD the mesh has ~256 segs per side, so this
+// keeps roughly 1:1 between heightmap cells and mesh quads, which removes the
+// faceted silhouette at close range. One-time CPU cost at gen.
+const HM_RES = 256;
 const HM_CELL = TERRAIN_SIZE / (HM_RES - 1);
 
 // World ↔ grid index helpers (consistent across generation, erosion, sampling)
@@ -137,51 +255,361 @@ function worldToGrid(wx: number, wz: number): { gx: number; gy: number } {
   return { gx: (wx + HALF) / HM_CELL, gy: (HALF - wz) / HM_CELL };
 }
 
-// ─── Heightmap generation (with domain warping + multi-peak base) ────────────
+// ─── Peak slot planning ──────────────────────────────────────────────────────
+// Layout: ONE central summit + a single ridge line passing through it.
+// Pre-summit steps line up on one side of the ridge, post-summit steps on
+// the other, with small perpendicular jitter so the line doesn't look ruled.
+// This makes the peaks read as "stairs climbing the same mountain" rather
+// than a field of independent mounds.
+//
+// The step with the highest `difficulty` becomes the summit (full
+// heightScale); remaining steps scale to [0.50, 0.85] × heightScale by
+// relative difficulty.
 
-function genHeightmapBase(perm: Uint8Array, cfg: TerrainCfg): Float32Array {
+interface PeakSlot {
+  x: number;        // world X
+  z: number;        // world Z
+  height: number;   // raw target height (heightmap units)
+  isSummit: boolean;
+  stepIdx: number;  // index of the originating step in the input array
+}
+
+function planPeakSlots(steps: CheckpointDef[], seed: number, cfg: TerrainCfg): PeakSlot[] {
+  const N = Math.max(1, steps.length);
+
+  const diffs: number[] = steps.length > 0
+    ? steps.map((s, i) => (typeof s.difficulty === 'number' ? s.difficulty : (i + 0.5) / steps.length))
+    : [1.0];
+
+  let summitIdx = 0;
+  let maxDiff = -Infinity;
+  for (let i = 0; i < diffs.length; i++) {
+    if (diffs[i] > maxDiff) { maxDiff = diffs[i]; summitIdx = i; }
+  }
+  // Twin archetype: promote the second-highest-difficulty step to a near-summit.
+  let twinIdx = -1;
+  if (cfg.archetype === 'twin' && diffs.length >= 2) {
+    let m2 = -Infinity;
+    for (let i = 0; i < diffs.length; i++) {
+      if (i !== summitIdx && diffs[i] > m2) { m2 = diffs[i]; twinIdx = i; }
+    }
+  }
+
+  let rs = ((seed * 2654435761) | 0) || 1;
+  const rng = () => { rs = (rs * 1664525 + 1013904223) | 0; return ((rs >>> 0) & 0xffffffff) / 0xffffffff; };
+
+  // Summit at the center of the terrain (small jitter for variety, deterministic)
+  const summitX = (rng() - 0.5) * HALF * 0.08;
+  const summitZ = (rng() - 0.5) * HALF * 0.08;
+
+  // Ridge climb direction (deterministic per seed). All sub-peaks line up
+  // along this axis with pre-/post-summit steps on opposite sides.
+  const climbAng = rng() * Math.PI * 2;
+  const climbX = Math.cos(climbAng);
+  const climbZ = Math.sin(climbAng);
+  const sideX = -climbZ;                        // perpendicular for jitter
+  const sideZ = climbX;
+
+  const maxStepDist = Math.max(1, summitIdx, (N - 1) - summitIdx);
+  const ridgeHalfLen = HALF * 0.50;             // each side of ridge max length
+
+  const slots: PeakSlot[] = [];
+
+  for (let i = 0; i < N; i++) {
+    if (i === summitIdx) {
+      slots.push({
+        x: summitX,
+        z: summitZ,
+        height: cfg.heightScale * 1.00,
+        isSummit: true,
+        stepIdx: i,
+      });
+      continue;
+    }
+
+    const dirSign = i < summitIdx ? -1 : 1;
+    const stepDist = Math.abs(i - summitIdx);
+    const tDist = stepDist / maxStepDist;       // 0 = next-to-summit, 1 = farthest
+
+    // Volcano takes precedence over ridge curves: orbit sub-peaks around the
+    // caldera rim instead of laying them along a spine.
+    if (cfg.archetype === 'volcano') {
+      const rimAng = (i / Math.max(1, N - 1)) * Math.PI * 1.6 + climbAng;
+      const rimR = HALF * 0.36 + tDist * HALF * 0.14;
+      const x = summitX + Math.cos(rimAng) * rimR;
+      const z = summitZ + Math.sin(rimAng) * rimR;
+      const norm = maxDiff > 0 ? diffs[i] / maxDiff : 1;
+      const heightFactor = Math.min(0.78, 0.48 + norm * 0.30);
+      slots.push({ x, z, height: cfg.heightScale * heightFactor, isSummit: false, stepIdx: i });
+      continue;
+    }
+
+    // Distance from summit along the ridge: 0.20..1.00 of ridgeHalfLen.
+    // The 0.20 floor keeps the closest sub-peak visibly off the summit.
+    let dist = ridgeHalfLen * (0.20 + tDist * 0.80);
+
+    // Plateau spreads sub-peaks farther out across a wide table.
+    if (cfg.archetype === 'plateau') dist *= 1.18;
+    // Spire pulls them in tight beneath the central tower.
+    else if (cfg.archetype === 'spire') dist *= 0.78;
+
+    // Base perpendicular jitter — alternates by step index plus a small seeded
+    // perturbation so the ridge reads as a natural arête, not a ruler line.
+    let sideOffset = HALF * 0.06 * (i % 2 === 0 ? 1 : -1) + (rng() - 0.5) * HALF * 0.04;
+
+    // Ridge-curve flavour: bend the path so different roadmaps don't read as
+    // the same straight spine. tDist runs 0→1 from summit outward.
+    const tCurve = tDist * dirSign;             // signed t in [-1, 1]
+    if (cfg.ridgeCurve === 's_curve') {
+      sideOffset += Math.sin(tCurve * Math.PI) * HALF * 0.18;
+    } else if (cfg.ridgeCurve === 'branching') {
+      // Y-shape: each side's far-out steps swing away from centre.
+      sideOffset += dirSign * tDist * tDist * HALF * 0.22 * (i % 2 === 0 ? 1 : -1);
+    } else if (cfg.ridgeCurve === 'spiral') {
+      const ang = tCurve * Math.PI * 0.45;
+      const cs = Math.cos(ang), sn = Math.sin(ang);
+      const ox = climbX * dirSign * dist + sideX * sideOffset;
+      const oz = climbZ * dirSign * dist + sideZ * sideOffset;
+      const x = summitX + cs * ox - sn * oz;
+      const z = summitZ + sn * ox + cs * oz;
+      const norm = maxDiff > 0 ? diffs[i] / maxDiff : 1;
+      const heightFactor = Math.min(0.85, 0.50 + norm * 0.35);
+      slots.push({ x, z, height: cfg.heightScale * heightFactor, isSummit: false, stepIdx: i });
+      continue;
+    }
+
+    const x = summitX + climbX * dirSign * dist + sideX * sideOffset;
+    const z = summitZ + climbZ * dirSign * dist + sideZ * sideOffset;
+
+    // Sub-peak height: floor at 0.50 so each bump clearly pokes above the
+    // base mountain; cap at 0.85 so the summit always dominates.
+    const norm = maxDiff > 0 ? diffs[i] / maxDiff : 1;
+    let heightFactor = Math.min(0.85, 0.50 + norm * 0.35);
+    // Twin archetype: second-highest-difficulty step rises near to summit height.
+    if (i === twinIdx) heightFactor = 0.92;
+
+    slots.push({
+      x, z,
+      height: cfg.heightScale * heightFactor,
+      isSummit: false,
+      stepIdx: i,
+    });
+  }
+
+  slots.sort((a, b) => a.stepIdx - b.stepIdx);
+  return slots;
+}
+
+// ─── Heightmap generation (real-mountain construction) ──────────────────────
+// Three layers stacked, designed to look like an actual mountain instead of
+// "bumps on a dome":
+//
+//   1. TWO-LAYER BASE: a wide gentle apron + a tall narrower main mass. Real
+//      mountains have a wide foothill region narrowing to a steeper body
+//      narrowing to a peak. A single cosine dome reads as a smooth hill — too
+//      soft. Stacking two profiles gives a proper "wide foot, tall body"
+//      silhouette without the body looking pinched.
+//
+//   2. RIDGE SPINE along the climb axis. Sub-peak slots all lie close to the
+//      line from step 0 to step N-1 (planPeakSlots layout). Adding a small
+//      height boost along this line gives the mountain a continuous spine,
+//      so sub-peaks read as bumps on the same ridge rather than isolated
+//      mounds. This is what turns "marbles on a hill" into "stairs up an arête".
+//
+//   3. PER-STEP BUMPS (max-blended cosine bells). Because base + ridge already
+//      provide most of the height at sub-peak positions, bumps just nudge the
+//      local maximum up to slot.height. They're WIDER and GENTLER than before,
+//      so peaks have a visible body and shoulders instead of looking like ice
+//      picks. Max-blend creates natural "saddles" between adjacent bumps.
+//
+// FBM detail still modulates by total height so it doesn't decorate flatlands.
+
+function genHeightmapPeakAnchored(
+  perm: Uint8Array,
+  cfg: TerrainCfg,
+  slots: PeakSlot[],
+): Float32Array {
   const hm = new Float32Array(HM_RES * HM_RES);
 
-  // Three offset peaks form an asymmetric ridge cluster (warped further below)
-  const peaks: Array<{ x: number; z: number; w: number; falloff: number }> = [
-    { x:  0,  z:  0,  w: 1.00, falloff: cfg.falloff },
-    { x:  18, z: -10, w: 0.55, falloff: cfg.falloff * 1.20 },
-    { x: -14, z: 12,  w: 0.48, falloff: cfg.falloff * 1.30 },
-  ];
+  const summit = slots.find(s => s.isSummit) ?? slots[0];
+  if (!summit) return hm;
+  const summitH = summit.height;
+
+  // ── Two-layer base ──
+  // Apron: very wide, low amplitude — covers most of the map gently, gives
+  //        the foothill skirt that makes the mountain look planted.
+  // Mass:  narrower, taller — provides the dominant mountain body. Together
+  //        their sum at the summit reaches ~85% of summitH; the rest comes
+  //        from the ridge spine and a small summit bump.
+  // Very wide base + steeper body profile → broad realistic massif, not a cone.
+  const apronReach = HALF * 0.99;
+  const apronAmp   = summitH * 0.40;
+  const massReach  = HALF * 0.86;
+  const massAmp    = summitH * 0.48;
+
+  // ── Ridge spine: line from step-0 slot to step-(N-1) slot ──
+  // Slots are sorted by stepIdx by planPeakSlots, so this is the natural
+  // climb direction. The line passes through the summit (which sits between
+  // them in step order). For N==1 the line is degenerate → ridge boost is 0.
+  const ridgeA = slots[0];
+  const ridgeB = slots[slots.length - 1];
+  const ridgeDx = ridgeB.x - ridgeA.x;
+  const ridgeDz = ridgeB.z - ridgeA.z;
+  const ridgeLen2 = ridgeDx * ridgeDx + ridgeDz * ridgeDz;
+  const ridgeWidth = HALF * 0.18;
+  const ridgeAmp   = summitH * 0.10;
+
+  // Bump reach — wider than before (was HALF*0.13). Real peaks have visible
+  // shoulders, not needle tips. Adapts to slot density to avoid heavy overlap.
+  let minSlotDist = Infinity;
+  for (let i = 0; i < slots.length; i++) {
+    for (let j = i + 1; j < slots.length; j++) {
+      const dx = slots[i].x - slots[j].x;
+      const dz = slots[i].z - slots[j].z;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < minSlotDist) minSlotDist = d;
+    }
+  }
+  // Summit: narrow needle on top of the wide body.
+  // Sub-peaks: broad cosine-bell shoulders that feel part of the massif.
+  const summitBumpReach = HALF * 0.07;
+  const subBumpReach    = Math.min(HALF * 0.26, Math.max(HALF * 0.14, minSlotDist * 0.88));
+
+  const baseAt = (wx: number, wz: number): number => {
+    const dxs = wx - summit.x, dzs = wz - summit.z;
+    const d = Math.sqrt(dxs * dxs + dzs * dzs);
+    const apronT = Math.max(0, 1 - d / apronReach);
+    const massT  = Math.max(0, 1 - d / massReach);
+    const apronH = apronAmp * (0.5 - 0.5 * Math.cos(apronT * Math.PI));
+    // pow(0.70) profile: upper slopes are steeper, base stays wide and gentle
+    const massH  = massAmp  * Math.pow(massT, 0.70);
+    return apronH + massH;
+  };
+
+  const ridgeAt = (wx: number, wz: number): number => {
+    if (ridgeLen2 < 1) return 0;
+    const px = wx - ridgeA.x, pz = wz - ridgeA.z;
+    const t = Math.max(0, Math.min(1, (px * ridgeDx + pz * ridgeDz) / ridgeLen2));
+    const cx = ridgeA.x + ridgeDx * t;
+    const cz = ridgeA.z + ridgeDz * t;
+    const dx = wx - cx, dz = wz - cz;
+    const dPerp = Math.sqrt(dx * dx + dz * dz);
+    if (dPerp >= ridgeWidth) return 0;
+    const rt = 1 - dPerp / ridgeWidth;
+    return ridgeAmp * (0.5 - 0.5 * Math.cos(rt * Math.PI));
+  };
+
+  // Bump amplitudes top up base+ridge to the slot's target height. For the
+  // summit, base+ridge already cover ~95%, so the summit bump is small; for
+  // farther sub-peaks, more of the height comes from the bump but base+ridge
+  // still carry a substantial floor.
+  const bumpAmps: number[] = slots.map(sl => {
+    const here = baseAt(sl.x, sl.z) + ridgeAt(sl.x, sl.z);
+    return Math.max(0, sl.height - here);
+  });
+
+  const warpScale = 0.55;
 
   for (let yi = 0; yi < HM_RES; yi++) {
     const wz = HALF - yi * HM_CELL;
     for (let xi = 0; xi < HM_RES; xi++) {
       const wx = -HALF + xi * HM_CELL;
 
-      // Domain warp — two perlin offsets push the input around, killing radial symmetry
-      const warpX = perlin2(perm, wx * cfg.warpFreq + 13.7, wz * cfg.warpFreq - 27.3) * cfg.warpAmp;
-      const warpZ = perlin2(perm, wx * cfg.warpFreq + 81.1, wz * cfg.warpFreq + 53.9) * cfg.warpAmp;
-      const fx = wx + warpX, fz = wz + warpZ;
+      // Domain warp — pulls the silhouette and ridges into natural curves.
+      const warpX = perlin2(perm, wx * cfg.warpFreq + 13.7, wz * cfg.warpFreq - 27.3) * cfg.warpAmp * warpScale;
+      const warpZ = perlin2(perm, wx * cfg.warpFreq + 81.1, wz * cfg.warpFreq + 53.9) * cfg.warpAmp * warpScale;
+      const fx = wx + warpX;
+      const fz = wz + warpZ;
 
-      // Multi-peak field — soft-max combines into a ridged spine
-      let peakField = 0;
-      for (const p of peaks) {
-        const dx = fx - p.x, dz = fz - p.z;
-        const r = Math.min(1, Math.sqrt(dx * dx + dz * dz) / HALF);
-        const cone = Math.max(0, 1 - r);
-        const dome = Math.pow(cone, p.falloff) * p.w;
-        // soft union — keeps peaks blending rather than clipping
-        peakField = peakField + dome - peakField * dome;
+      const baseHeight = baseAt(fx, fz);
+      const ridgeBoost = ridgeAt(fx, fz);
+
+      // Per-step bumps — summit gets a narrow sharp t² needle; sub-peaks get
+      // wide cosine-bell shoulders that look like part of the same massif.
+      let bumpHeight = 0;
+      for (let s = 0; s < slots.length; s++) {
+        const sl = slots[s];
+        const dx = fx - sl.x, dz = fz - sl.z;
+        const d2 = dx * dx + dz * dz;
+
+        const useReach = sl.isSummit ? summitBumpReach
+                       : cfg.archetype === 'plateau' ? subBumpReach * 1.22
+                       : subBumpReach;
+        if (d2 > useReach * useReach) continue;
+        const d = Math.sqrt(d2);
+        const t = 1 - d / useReach;
+
+        let profile: number;
+        if (sl.isSummit) {
+          // t² drops quickly from center → sharp pointed peak, not a dome
+          profile = t * t;
+        } else if (cfg.archetype === 'plateau') {
+          // flat-top: cosine bell clipped at 0.78 → table edge
+          profile = Math.min(1, (0.5 - 0.5 * Math.cos(t * Math.PI)) / 0.78);
+        } else {
+          // Wide cosine bell → broad rounded shoulder
+          profile = 0.5 - 0.5 * Math.cos(t * Math.PI);
+        }
+        const contribution = profile * bumpAmps[s];
+        if (contribution > bumpHeight) bumpHeight = contribution;
       }
 
-      // Ridged FBM detail, sampled in warped space
-      const n = (fbmRidged(perm,
+      let totalH = baseHeight + ridgeBoost + bumpHeight;
+
+      // Volcano: subtract a small bowl from the summit → caldera silhouette.
+      if (cfg.archetype === 'volcano') {
+        const dxs = fx - summit.x, dzs = fz - summit.z;
+        const dCald = Math.sqrt(dxs * dxs + dzs * dzs);
+        const calderaR = HALF * 0.10;
+        if (dCald < calderaR) {
+          const tt = 1 - dCald / calderaR;
+          totalH -= summitH * 0.18 * (0.5 - 0.5 * Math.cos(tt * Math.PI));
+        }
+      }
+
+      // FBM detail — slightly stronger than before so flanks read as rocky
+      // rather than smooth (also gives erosion something to work with).
+      const n01 = (fbmHybrid(perm,
         fx * cfg.noiseScale, fz * cfg.noiseScale,
-        cfg.octaves, cfg.persistence, cfg.lacunarity, cfg.ridgeMix) + 1) * 0.5;
+        cfg.octaves, cfg.persistence, cfg.lacunarity,
+        cfg.ridgeMix, cfg.billowMix) + 1) * 0.5;
+      const detailAmp = totalH * 0.13;
+      const detail = (n01 - 0.5) * 2 * detailAmp;
 
-      const macro = (peakField * 0.55 + n * peakField * 0.62) * cfg.heightScale;
+      const edgeR = Math.min(1, Math.sqrt(wx * wx + wz * wz) / HALF);
+      const edgeFade = Math.max(0, 1 - Math.pow(edgeR, cfg.edgeFalloff));
 
-      // Base soil floor — keeps the foothills flat-ish near the edges
-      hm[yi * HM_RES + xi] = macro;
+      hm[yi * HM_RES + xi] = (totalH + detail) * edgeFade;
     }
   }
   return hm;
+}
+
+// Post-erosion summit guarantee: clamp any cell outside a small guard radius
+// to the actual (eroded) summit cell height. Uses the eroded summit height
+// rather than the raw target so erosion variation isn't fought by the cap.
+function clampToSummit(hm: Float32Array, slots: PeakSlot[]): void {
+  const summit = slots.find(s => s.isSummit);
+  if (!summit) return;
+
+  const sg = worldToGrid(summit.x, summit.z);
+  const sgX = Math.max(0, Math.min(HM_RES - 1, Math.round(sg.gx)));
+  const sgY = Math.max(0, Math.min(HM_RES - 1, Math.round(sg.gy)));
+  const summitH = hm[sgY * HM_RES + sgX];
+
+  const guardR  = HALF * 0.07;
+  const guardR2 = guardR * guardR;
+
+  for (let yi = 0; yi < HM_RES; yi++) {
+    const wz = HALF - yi * HM_CELL;
+    for (let xi = 0; xi < HM_RES; xi++) {
+      const wx = -HALF + xi * HM_CELL;
+      const idx = yi * HM_RES + xi;
+      if (hm[idx] <= summitH) continue;
+      const sdx = wx - summit.x, sdz = wz - summit.z;
+      if (sdx * sdx + sdz * sdz > guardR2) hm[idx] = summitH;
+    }
+  }
 }
 
 // ─── Hydraulic erosion (droplet simulation) ──────────────────────────────────
@@ -354,34 +782,10 @@ function sampleNormalGrid(hm: Float32Array, wx: number, wz: number, out: [number
   out[0] = nx / len; out[1] = ny / len; out[2] = nz / len;
 }
 
-// Vertex AO: cast 8 horizon rays in screen-X/Z directions, compare height
-// rise vs distance. More rises blocking sky → more occluded.
-function bakeAO(hm: Float32Array, wx: number, wz: number, wy: number): number {
-  const dirs = 8;
-  const samples = 4;
-  const maxDist = 6;
-  let occlusion = 0;
-  for (let d = 0; d < dirs; d++) {
-    const a = (d / dirs) * Math.PI * 2;
-    const cx = Math.cos(a), cz = Math.sin(a);
-    let blocked = 0;
-    for (let s = 1; s <= samples; s++) {
-      const t = (s / samples) * maxDist;
-      const sh = sampleHeightGrid(hm, wx + cx * t, wz + cz * t);
-      // angular elevation of sample over horizontal from this vertex
-      const angle = (sh - wy) / t; // tan(theta)
-      if (angle > 0.18) blocked += 1 - (s - 1) / samples;
-    }
-    occlusion += blocked / samples;
-  }
-  // 0 (open sky) .. 1 (fully occluded)
-  return Math.min(1, occlusion / dirs);
-}
-
 // ─── Mesh build ──────────────────────────────────────────────────────────────
 
-function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: TerrainCfg) {
-  const SEGS = 220;
+function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: TerrainCfg, segs = 120, isWeb = false) {
+  const SEGS = segs;
   const geom = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEGS, SEGS);
   const pos = geom.attributes.position;
   const vCount = pos.count;
@@ -406,6 +810,30 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
     normals[i * 3 + 2] = ntmp[2];
   }
   geom.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+
+  // ── Pre-baked low-freq band noise (Phase B item) ──────────────────────────
+  // The strata band pattern uses a 7-octave FBM at freq 0.12 — slow-varying
+  // enough that interpolating across triangles is visually identical to a
+  // per-fragment evaluation. Saves one full FBM call per pixel. We use the
+  // Perlin we already have (vs. the shader's value-noise FBM); the difference
+  // at this frequency is invisible since the term is just used as a
+  // randomization phase for the strata sin().
+  const bandNoise = new Float32Array(vCount);
+  for (let i = 0; i < vCount; i++) {
+    const wx = pos.getX(i);
+    const wz = pos.getZ(i);
+    let v = 0, a = 0.5;
+    let px = wx * 0.12 + 5.5;
+    let pz = wz * 0.12 + 5.5;
+    for (let o = 0; o < 7; o++) {
+      v += a * (perlin2(perm, px, pz) * 0.5 + 0.5);
+      px *= 2.03; pz *= 2.03; a *= 0.5;
+    }
+    bandNoise[i] = v;
+  }
+  if (!isWeb) {
+    geom.setAttribute('aBandNoise', new THREE.Float32BufferAttribute(bandNoise, 1));
+  }
 
   // ── Per-vertex colors with AO ──────────────────────────────────────────────
   const colors = new Float32Array(vCount * 3);
@@ -481,15 +909,11 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
       }
     }
 
-    // AO darkens crevices
-    const ao = bakeAO(hm, wx, wz, wy);
-    const aoFactor = 1 - ao * 0.45;
-
     // Per-vertex luminance jitter
     const lj = (speck - 0.5) * 0.05;
-    colors[i * 3]     = Math.max(0, Math.min(1, (tmp[0] + lj) * aoFactor));
-    colors[i * 3 + 1] = Math.max(0, Math.min(1, (tmp[1] + lj) * aoFactor));
-    colors[i * 3 + 2] = Math.max(0, Math.min(1, (tmp[2] + lj) * aoFactor));
+    colors[i * 3]     = Math.max(0, Math.min(1, tmp[0] + lj));
+    colors[i * 3 + 1] = Math.max(0, Math.min(1, tmp[1] + lj));
+    colors[i * 3 + 2] = Math.max(0, Math.min(1, tmp[2] + lj));
   }
   geom.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geom.computeBoundingBox();
@@ -500,9 +924,12 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
     metalness: 0.02,
     flatShading: false,
     dithering: true,
+    side: THREE.DoubleSide,
   });
-  // fwidth/dFdx are used in the injected shader for AA; required on WebGL1.
-  // Harmless on WebGL2 where they're core.
+  if (!isWeb) {
+  // _aaFade uses fwidth() — required on WebGL1 contexts via OES_standard_derivatives.
+  // WebGL2 has it built-in, but Three's MeshStandardMaterial doesn't toggle this
+  // flag unless a normal map is present, so we set it explicitly.
   (mat as any).extensions = { ...(mat as any).extensions, derivatives: true };
 
   // ── Custom shader injection — per-fragment rock detail, vertical erosion
@@ -513,14 +940,20 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
     shader.uniforms.uPeakHeight = { value: peakHeight };
     shader.uniforms.uSnowLine   = { value: cfg.snowLine };
     shader.uniforms.uHeightScale= { value: cfg.heightScale };
+    shader.uniforms.uCamDist    = { value: 180.0 };
+    shader.uniforms.uStrataAmp  = { value: cfg.strataAmp };
+    shader.uniforms.uTime       = { value: 0.0 };
+    mat.userData.shader = shader;
 
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
+        attribute float aBandNoise;
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;
-        varying float vHeightN;`,
+        varying float vHeightN;
+        varying float vBandNoise;`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -528,7 +961,8 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         vec4 _wp = modelMatrix * vec4(transformed, 1.0);
         vWorldPos = _wp.xyz;
         vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);
-        vHeightN = clamp(_wp.y / ${peakHeight.toFixed(3)}, 0.0, 1.0);`,
+        vHeightN = clamp(_wp.y / ${peakHeight.toFixed(3)}, 0.0, 1.0);
+        vBandNoise = aBandNoise;`,
       );
 
     shader.fragmentShader = shader.fragmentShader
@@ -537,9 +971,13 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         `#include <common>
         uniform float uSnowLine;
         uniform float uHeightScale;
+        uniform float uCamDist;
+        uniform float uStrataAmp;
+        uniform float uTime;
         varying vec3 vWorldPos;
         varying vec3 vWorldNormal;
         varying float vHeightN;
+        varying float vBandNoise;
 
         // Cheap value-noise hash
         float _h21(vec2 p) {
@@ -554,13 +992,31 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
           float b = _h21(i + vec2(1.0, 0.0));
           float c = _h21(i + vec2(0.0, 1.0));
           float d = _h21(i + vec2(1.0, 1.0));
-          vec2 u = f * f * (3.0 - 2.0 * f);
+          // Quintic / smootherstep — C2 continuous, removes the diamond grid
+          // artifacts that show under axis-aligned views with cubic Hermite.
+          vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
           return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
         }
         float _fbm(vec2 p) {
           float v = 0.0; float a = 0.5;
-          for (int i = 0; i < 5; i++) { v += a * _vn(p); p *= 2.03; a *= 0.5; }
+          for (int i = 0; i < 7; i++) { v += a * _vn(p); p *= 2.03; a *= 0.5; }
           return v;
+        }
+        // Large-scale spatial biome patches (3-octave) — declared after _vn/_fbm
+        float _biomePatch(vec2 p) {
+          float v = 0.0; float a = 0.60;
+          for (int i = 0; i < 3; i++) { v += a * _vn(p); p *= 2.18; a *= 0.48; }
+          return v;
+        }
+        // Ridged FBM for crack/fissure patterns — inverts noise to create peaks (dark lines)
+        float _rfbm(vec2 p) {
+          float v = 0.0; float a = 0.55;
+          for (int i = 0; i < 5; i++) {
+            float n = _vn(p);
+            v += a * (1.0 - abs(n * 2.0 - 1.0));
+            p *= 2.11; a *= 0.48;
+          }
+          return v * 0.5;
         }
         // Anisotropic noise — stretched vertically: produces water-runoff streaks
         float _streak(vec3 p) {
@@ -570,12 +1026,23 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
           float s2 = _fbm(vec2(ang * 3.2, yf * 1.2));
           return s1 * 0.65 + s2 * 0.35;
         }
-        // Derivative-based anti-alias: fade frequency contributions to 0 when
-        // each screen pixel covers more than ~half a cycle of the noise.
-        // Kills the high-freq shimmer the user sees as "pixelation" while panning.
+        // Hybrid AA fade: screen-space derivatives catch oblique surfaces and
+        // glancing angles where a band shrinks below pixel size; camera-distance
+        // floor handles the global LOD case. The min() of the two means we
+        // suppress detail as soon as either heuristic says it would shimmer.
         float _aaFade(vec2 uv, float freq) {
-          float fw = fwidth(uv.x + uv.y) * freq;
-          return 1.0 - smoothstep(0.6, 1.4, fw);
+          // Screen-space: fwidth gives total |dFdx|+|dFdy| per pixel of uv*freq.
+          // Pre-band-amplitude detail starts moiré-ing when one cycle covers
+          // less than ~1 pixel — fade that band before it shimmers.
+          vec2 fw = fwidth(uv * freq);
+          float pxFreq = max(fw.x, fw.y);
+          float ssFade = 1.0 - smoothstep(0.5, 1.5, pxFreq);
+          // Distance floor — same shape as before, kept as a clean fallback
+          // for views where derivatives are unreliable (e.g. silhouettes).
+          float near = 50.0 / freq;
+          float far  = 220.0 / freq;
+          float distFade = 1.0 - smoothstep(near, far, uCamDist);
+          return min(ssFade, distFade);
         }`,
       )
       .replace(
@@ -593,14 +1060,18 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
 
         // Multi-octave per-fragment rock detail (XZ + Y mix for triplanar feel).
         // Each octave has its own AA fade — high-freq band drops to 0 at distance.
+        // Extra ultra-close band (aa4) only fires when camera is very close.
         float aa1 = _aaFade(vWorldPos.xz, 1.4);
         float aa2 = _aaFade(vWorldPos.xz, 4.5);
         float aa3 = _aaFade(vec2(vWorldPos.x, vWorldPos.y), 3.0);
+        float aa4 = _aaFade(vWorldPos.xz, 9.5);
         float rockA = _fbm(vWorldPos.xz * 1.4) * aa1;
         float rockB = _fbm(vWorldPos.xz * 4.5 + 17.0) * aa2;
         float rockC = _fbm(vec2(vWorldPos.x * 3.0, vWorldPos.y * 3.0) + 41.0) * aa3;
-        float rockDetail = rockA * 0.55 + rockB * 0.30 + rockC * 0.15
-                         + (1.0 - aa1) * 0.275 + (1.0 - aa2) * 0.15 + (1.0 - aa3) * 0.075;
+        float rockD = _fbm(vWorldPos.xz * 9.5 + 73.0) * aa4;
+        float rockDetail = rockA * 0.45 + rockB * 0.28 + rockC * 0.13 + rockD * 0.14
+                         + (1.0 - aa1) * 0.225 + (1.0 - aa2) * 0.14
+                         + (1.0 - aa3) * 0.065 + (1.0 - aa4) * 0.07;
 
         // Snow accumulation: physically motivated — snow sticks where
         // gravity allows, even on lower-altitude shelves. Sheer faces shed it.
@@ -616,12 +1087,86 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         // Rock albedo — vertex color is the band base, streak darkens it,
         // micro-detail jitters luminance.
         vec3 rockCol = diffuseColor.rgb;
-        rockCol *= mix(0.42, 1.05, 1.0 - streakMask);  // streaks → near-black grooves
-        rockCol *= 0.78 + rockDetail * 0.42;
+        rockCol *= mix(0.38, 1.08, 1.0 - streakMask);  // streaks → near-black grooves
+        rockCol *= 0.62 + rockDetail * 0.78;            // wider detail amplitude → richer relief
+
+        // Gradient bump: dual-frequency 3-sample FBM finite difference → strong fake micro-surface lighting
+        float bumpFade = _aaFade(vWorldPos.xz, 2.2) * (1.0 - snowMask * 0.80);
+        float bH  = _fbm(vWorldPos.xz * 2.8);
+        float bHx = _fbm(vWorldPos.xz * 2.8 + vec2(0.7, 0.0));
+        float bHz = _fbm(vWorldPos.xz * 2.8 + vec2(0.0, 0.7));
+        float bumpX = bHx - bH;
+        float bumpZ = bHz - bH;
+        float bumpLit = dot(vec2(bumpX, bumpZ), vec2(0.54, 0.35)) * 2.6;
+        float fakeAO = bH * 0.42 + 0.58;
+        rockCol *= (1.0 + bumpLit * bumpFade * 0.85) * mix(1.0, fakeAO, bumpFade * 0.95);
+
+        // Ultra-close micro-bump: high-frequency surface roughness only visible when very close
+        float microFade = _aaFade(vWorldPos.xz, 9.0) * (1.0 - snowMask * 0.6);
+        float mH  = _fbm(vWorldPos.xz * 9.0 + 53.0);
+        float mHx = _fbm(vWorldPos.xz * 9.0 + 53.0 + vec2(0.25, 0.0));
+        float mHz = _fbm(vWorldPos.xz * 9.0 + 53.0 + vec2(0.0, 0.25));
+        float microLit = dot(vec2(mHx - mH, mHz - mH), vec2(0.54, 0.35)) * 4.0;
+        rockCol *= (1.0 + microLit * microFade * 0.55);
+
+        // Crack network: ridged high-freq noise → dark fissure lines on steep faces
+        // Two layers: coarse fissures + fine hairline cracks at extreme close-up
+        float crackFade = _aaFade(vWorldPos.xz, 5.5);
+        float crack = _rfbm(vWorldPos.xz * 5.5 + 23.7);
+        float crackMask = smoothstep(0.52, 0.78, crack) * (slope * 0.65 + 0.35) * crackFade;
+        rockCol = mix(rockCol, rockCol * 0.06, crackMask * 0.95);
+
+        // Hairline crack network: fine secondary fissures, only visible at extreme zoom
+        float hairFade = _aaFade(vWorldPos.xz, 12.0);
+        float hairCrack = _rfbm(vWorldPos.xz * 12.0 - 41.3);
+        float hairMask = smoothstep(0.62, 0.82, hairCrack) * slope * hairFade;
+        rockCol = mix(rockCol, rockCol * 0.18, hairMask * 0.85);
+
+        // Sedimentary strata: horizontal banding on steep faces, scaled by biome
+        // Two-layer: broad bands + fine sub-bands for richer geological character
+        // bandNoise comes from the aBandNoise vertex attribute (CPU-baked Perlin
+        // FBM); interpolating it across the triangle is identical-looking to a
+        // per-fragment FBM at this frequency, but saves a full 7-octave call.
+        float bandNoise = vBandNoise;
+        float bandWave = sin(vWorldPos.y * 1.65 + bandNoise * 3.5) * 0.5 + 0.5;
+        float subBand  = sin(vWorldPos.y * 5.4 + bandNoise * 1.8) * 0.5 + 0.5;
+        float combinedBand = bandWave * 0.75 + subBand * 0.25;
+        float bandStr = uStrataAmp * slope * (1.0 - snowMask) * 1.6;
+        rockCol *= mix(1.0, mix(0.62, 1.32, combinedBand), clamp(bandStr, 0.0, 1.0));
+
         // Subtle warm/cool variation across the face
         float tempShift = _fbm(vWorldPos.xz * 0.18) - 0.5;
         rockCol.r *= 1.0 + tempShift * 0.10;
         rockCol.b *= 1.0 - tempShift * 0.08;
+
+        // ── B1: Macro biome patches ───────────────────────────────────────────
+        // Two independent large-scale FBMs create organic zones (forest, meadow)
+        // that break the strict altitude banding with spatial variety.
+        float bPatch  = _biomePatch(vWorldPos.xz * 0.028);
+        float bPatch2 = _biomePatch(vWorldPos.xz * 0.065 + vec2(17.3, -8.1));
+
+        // Forest canopy: clustered dark-green zones at low altitude + low slope
+        float forestZone = smoothstep(0.28, 0.62, bPatch) * smoothstep(0.38, 0.65, bPatch2);
+        forestZone *= (1.0 - smoothstep(0.18, 0.40, vHeightN)) * (1.0 - smoothstep(0.22, 0.52, slope));
+        float canopyDetail = _fbm(vWorldPos.xz * 7.8 + 3.1);
+        vec3 forestTint = vec3(0.12 + canopyDetail * 0.05, 0.26 + canopyDetail * 0.11, 0.08);
+        rockCol = mix(rockCol, forestTint, clamp(forestZone * 0.90, 0.0, 1.0) * (1.0 - snowMask));
+
+        // Alpine meadow: warm-green patches at mid-elevation transitions
+        float meadowZone = smoothstep(0.22, 0.50, bPatch) * (1.0 - smoothstep(0.35, 0.58, bPatch2));
+        meadowZone *= smoothstep(0.06, 0.18, vHeightN) * (1.0 - smoothstep(0.16, 0.36, vHeightN));
+        meadowZone *= max(0.0, 1.0 - slope * 2.0);
+        vec3 meadowTint = vec3(0.34 + bPatch * 0.10, 0.46 + bPatch * 0.09, 0.14);
+        rockCol = mix(rockCol, meadowTint, clamp(meadowZone * 0.72, 0.0, 1.0) * (1.0 - snowMask));
+
+        // ── B4: Animated cloud shadows ────────────────────────────────────────
+        // Two-octave FBM drifting slowly across the terrain surface
+        vec2 cloudOffset = vec2(uTime * 0.55, uTime * 0.18);
+        float cloud1 = _fbm(vWorldPos.xz * 0.018 + cloudOffset);
+        float cloud2 = _fbm(vWorldPos.xz * 0.038 + cloudOffset * 0.55 + vec2(5.3, -3.1));
+        float cloudNoise = cloud1 * 0.70 + cloud2 * 0.30;
+        float cloudShadow = 1.0 - 0.30 * smoothstep(0.42, 0.72, cloudNoise);
+        rockCol *= cloudShadow;
 
         // Snow albedo — bright, with granular detail (AA-faded)
         float snowAA = _aaFade(vWorldPos.xz, 6.0);
@@ -630,6 +1175,30 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         // Snow in shadow → cool tint
         float aoFromColor = clamp(dot(diffuseColor.rgb, vec3(0.30)), 0.05, 1.0);
         snowCol *= mix(vec3(0.62, 0.70, 0.85), vec3(1.0), aoFromColor);
+
+        // Snow sparkle: crystalline ice particles visible at close range
+        // Three frequencies → varied star-field of glints
+        float sparkFade = _aaFade(vWorldPos.xz, 10.0);
+        float spark1 = pow(max(0.0, _vn(vWorldPos.xz * 18.0 + 7.3)), 5.0) * sparkFade;
+        float spark2 = pow(max(0.0, _vn(vWorldPos.xz * 28.0 - 14.0)), 7.0) * sparkFade;
+        float spark3 = pow(max(0.0, _vn(vWorldPos.xz * 42.0 + 91.0)), 9.0) * sparkFade;
+        snowCol += vec3(1.00, 1.00, 1.05) * (spark1 * 1.40 + spark2 * 1.00 + spark3 * 0.80) * snowMask;
+
+        // Wind-sculpted snow surface micro-bump (dual frequency)
+        float snowBumpFade = _aaFade(vWorldPos.xz, 3.8) * snowMask;
+        float sH  = _fbm(vWorldPos.xz * 3.8 + 99.0);
+        float sHx = _fbm(vWorldPos.xz * 3.8 + 99.0 + vec2(0.5, 0.0));
+        float sHz = _fbm(vWorldPos.xz * 3.8 + 99.0 + vec2(0.0, 0.5));
+        float snowBumpLit = dot(vec2(sHx - sH, sHz - sH), vec2(0.54, 0.35)) * 1.8;
+        snowCol *= 0.86 + snowBumpLit * 0.50 * snowBumpFade;
+
+        // Fine snow grain: high-freq second pass for crystalline crunch up close
+        float snowFineFade = _aaFade(vWorldPos.xz, 11.0) * snowMask;
+        float fH  = _fbm(vWorldPos.xz * 11.0 + 31.0);
+        float fHx = _fbm(vWorldPos.xz * 11.0 + 31.0 + vec2(0.18, 0.0));
+        float fHz = _fbm(vWorldPos.xz * 11.0 + 31.0 + vec2(0.0, 0.18));
+        float snowFineLit = dot(vec2(fHx - fH, fHz - fH), vec2(0.54, 0.35)) * 3.5;
+        snowCol *= 1.0 + snowFineLit * 0.32 * snowFineFade;
 
         diffuseColor.rgb = mix(rockCol, snowCol, snowMask);
 
@@ -647,14 +1216,39 @@ function buildMountainMesh(THREE: any, hm: Float32Array, perm: Uint8Array, cfg: 
         r2 = mix(r2, 0.55, snowMask);                  // snow ~0.55
         r2 = mix(r2, r2 + 0.10, streakMask * (1.0 - snowMask)); // streaks rougher
         roughnessFactor = clamp(r2, 0.20, 1.0);`,
+      )
+      .replace(
+        '#include <metalnessmap_fragment>',
+        `#include <metalnessmap_fragment>
+        // Wet streaks and ice slightly more metallic/specular for visual depth
+        float m2 = metalnessFactor;
+        m2 = mix(m2, 0.10, streakMask * (1.0 - snowMask) * 0.65);
+        m2 = mix(m2, 0.14, snowMask * 0.35);
+        metalnessFactor = clamp(m2, 0.0, 0.25);`,
+      )
+      .replace(
+        '#include <fog_fragment>',
+        `#ifdef USE_FOG
+        // Height-based atmospheric perspective: low terrain stays hazier than peaks,
+        // and the fog tints cool-blue like real Rayleigh scattering at distance.
+        float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
+        float altClear  = clamp(vWorldPos.y / max(1.0, uHeightScale), 0.0, 1.0);
+        fogFactor *= (1.0 - altClear * 0.60);  // high peaks pierce through haze
+        fogFactor  = clamp(fogFactor, 0.0, 1.0);
+        // Cool-blue tint at distance (Rayleigh shift)
+        vec3 atmFog = fogColor + vec3(-0.02, 0.005, 0.06);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, atmFog, fogFactor);
+        #endif`,
       );
   };
   // Ensure shadows include the custom material correctly
-  mat.customProgramCacheKey = () => 'mountain-onbc-v1';
+  mat.customProgramCacheKey = () => 'mountain-onbc-v8-phaseC';
+  } // end if (!isWeb)
 
   const mesh = new THREE.Mesh(geom, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
   return mesh;
 }
 
@@ -729,18 +1323,50 @@ function applyOrbit(camera: any, o: OrbitState): void {
   camera.lookAt(o.tx, o.ty, o.tz);
 }
 
+function getCheckpointFocusRadius(modelRadius: number): number {
+  return Math.max(68, modelRadius * 0.75 + 28);
+}
+
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface Props {
   steps: CheckpointDef[];
   completedSteps: number;
   seed?: number;
+  /** Multiplier on top of biome+archetype heightScale (e.g. for total-hours bump). */
+  scaleBoost?: number;
+  /** 'overview' = free orbit, no auto-fly. 'focused' = locked on a step. */
+  viewMode?: ViewMode;
+  /** Index of the step the camera should snap to in 'focused' mode. */
+  focusedStepIndex?: number;
+  /** Fired when the user taps a checkpoint marker on the mountain. */
+  onStepFocus?: (stepIndex: number) => void;
+  /** Fired when the user pinches well out — signals "back to overview" intent. */
+  onExitFocus?: () => void;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Props) {
-  const cfgRef         = useRef(getTerrainCfg(steps.length));
+export function ProceduralMountain3D({
+  steps,
+  completedSteps,
+  seed = 1337,
+  scaleBoost = 1,
+  viewMode = 'overview',
+  focusedStepIndex = -1,
+  onStepFocus,
+  onExitFocus,
+}: Props) {
+  const cfgRef         = useRef<TerrainCfg>((() => {
+    const c = getTerrainCfg(steps.length, seed);
+    return { ...c, heightScale: c.heightScale * scaleBoost };
+  })());
+  const viewModeRef    = useRef<ViewMode>(viewMode);
+  const focusedIdxRef  = useRef<number>(focusedStepIndex);
+  const onStepFocusRef = useRef(onStepFocus);
+  const onExitFocusRef = useRef(onExitFocus);
+  useEffect(() => { onStepFocusRef.current = onStepFocus; }, [onStepFocus]);
+  useEffect(() => { onExitFocusRef.current = onExitFocus; }, [onExitFocus]);
   const rendererRef    = useRef<any>(null);
   const cameraRef      = useRef<any>(null);
   const THREERef       = useRef<any>(null);
@@ -753,17 +1379,42 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
   const modelRadiusRef = useRef(HALF);
   const tRef           = useRef(0);
 
+  const activeMeshRef    = useRef<any>(null);
+  const mountainLoRef    = useRef<any>(null);
+  const mountainHiRef    = useRef<any>(null);
+  const mountainUltraRef = useRef<any>(null);
+  const webCanvasRef     = useRef<any>(null);
+
   const orbitTgt = useRef<OrbitState>({ theta: 0.40, phi: 0.85, radius: 140, tx: 0, ty: 14, tz: 0 });
   const orbitCur = useRef<OrbitState>({ theta: 0.40, phi: 0.85, radius: 140, tx: 0, ty: 14, tz: 0 });
   // Drag inertia: theta/phi velocities; decay each frame, applied to target
   const orbitVel = useRef({ theta: 0, phi: 0 });
   const lastFrameRef = useRef<number>(0);
+  // View-mode transition: when active, the loop blends extra-fast toward the
+  // mode-derived target with cubic ease so mode switches feel cinematic.
+  const transitionRef = useRef<{ active: boolean; t: number; dur: number }>({
+    active: false, t: 0, dur: 1.0,
+  });
+  // Cached mountain center (set after mesh build) for overview targeting.
+  const overviewTgtRef = useRef<{ tx: number; ty: number; tz: number; radius: number }>({
+    tx: 0, ty: 14, tz: 0, radius: 140,
+  });
 
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const pinchRef = useRef<number | null>(null);
   const tapRef   = useRef<{ x: number; y: number; t: number } | null>(null);
 
   useEffect(() => { completedRef.current = completedSteps; }, [completedSteps]);
+
+  // Sync view-mode + focused step to refs so the render loop can react each
+  // frame without re-running effects on every prop tween.
+  useEffect(() => {
+    viewModeRef.current = viewMode;
+    focusedIdxRef.current = focusedStepIndex;
+    // Driving a fresh transition starts a new ease t at 0; the loop will
+    // animate the orbit toward the target derived from view mode / index.
+    transitionRef.current = { active: true, t: 0, dur: 1.0 };
+  }, [viewMode, focusedStepIndex]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -837,14 +1488,19 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
               if (d < bestD) { bestD = d; best = i; }
             });
             if (best >= 0) {
-              const cp = cpPositions.current[best];
-              orbitTgt.current = {
-                theta: orbitTgt.current.theta, phi: 1.10,
-                radius: modelRadiusRef.current * 0.40 + 12,
-                tx: cp.x, ty: cp.y, tz: cp.z,
-              };
+              // Hand the focus intent to the parent; it will flip viewMode
+              // and the render loop animates the camera in response.
+              onStepFocusRef.current?.(best);
             }
           }
+        }
+        // Pinch-out exit: when in focused mode, releasing at a radius wider
+        // than ~1.6× focus distance signals "I want to back out to overview".
+        if (
+          viewModeRef.current === 'focused' &&
+          orbitTgt.current.radius > modelRadiusRef.current * 0.7
+        ) {
+          onExitFocusRef.current?.();
         }
         touchRef.current = null; pinchRef.current = null; tapRef.current = null;
       },
@@ -853,53 +1509,58 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
 
   // ── WebGL init ─────────────────────────────────────────────────────────────
   const onContextCreate = useCallback(async (gl: any) => {
-    const THREE = await import('three');
+    try {
     THREERef.current = THREE;
 
     const cfg = cfgRef.current;
     const perm = makePerm(seed);
 
+    // ── Plan peak slots (one per step; summit = max-difficulty step) ──
+    // Slots are deterministic from `seed` + `steps`, so reseeding gives the
+    // same mountain. Slots are produced in step-index order: slots[i] is the
+    // peak that belongs to steps[i].
+    const slots = planPeakSlots(steps, seed, cfg);
+
     // ── Generate, erode, finalize the heightmap ──
-    console.log('[Mountain3D] generating heightmap...');
-    const t0 = Date.now();
-    const hm = genHeightmapBase(perm, cfg);
-    console.log('[Mountain3D] base heightmap', Date.now() - t0, 'ms');
-
-    const t1 = Date.now();
+    const hm = genHeightmapPeakAnchored(perm, cfg, slots);
     hydraulicErode(hm, seed, cfg.erodeDroplets);
-    console.log('[Mountain3D] hydraulic erosion', Date.now() - t1, 'ms');
-
-    const t2 = Date.now();
     thermalErode(hm, cfg.thermalIters);
-    console.log('[Mountain3D] thermal erosion', Date.now() - t2, 'ms');
+    clampToSummit(hm, slots);
 
     const glW = gl.drawingBufferWidth;
     const glH = gl.drawingBufferHeight;
     glSize.current = { w: glW, h: glH };
 
-    const renderer = new THREE.WebGLRenderer({
-      canvas: {
-        width: glW, height: glH, style: {} as any,
-        addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
-        clientWidth: glW, clientHeight: glH,
-      } as unknown as HTMLCanvasElement,
-      context: gl as unknown as WebGLRenderingContext,
-      antialias: true, alpha: false, powerPreference: 'high-performance',
-    });
+    // On web gl._webCanvas is set; on native we pass a fake canvas + expo-gl context.
+    const isWeb = !!(gl as any)._webCanvas;
+    const renderer = isWeb
+      ? new THREE.WebGLRenderer({
+          canvas: (gl as any)._webCanvas,
+          antialias: false, alpha: false, powerPreference: 'high-performance',
+        })
+      : new THREE.WebGLRenderer({
+          canvas: {
+            width: glW, height: glH, style: {} as any,
+            addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+            clientWidth: glW, clientHeight: glH,
+          } as unknown as HTMLCanvasElement,
+          context: gl as unknown as WebGLRenderingContext,
+          antialias: false, alpha: false, powerPreference: 'high-performance',
+        });
     renderer.setSize(glW, glH, false);
     renderer.setPixelRatio(1);
-    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.enabled = !isWeb;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.15;
     rendererRef.current = renderer;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(cfg.skyHorizon);
     scene.fog = new THREE.Fog(cfg.skyHorizon, cfg.fogNear, cfg.fogFar);
 
-    const camera = new THREE.PerspectiveCamera(50, glW / glH, 0.1, 2000);
+    // 58° FOV fills the frame better for portrait mobile; 50° was too narrow
+    const camera = new THREE.PerspectiveCamera(58, glW / glH, 0.1, 2000);
     cameraRef.current = camera;
     applyOrbit(camera, orbitCur.current);
 
@@ -914,21 +1575,24 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     skyMesh.renderOrder = -1;
     scene.add(skyMesh);
 
-    // Lighting — sun casts shadows; harsh contrast between lit and shadow
-    scene.add(new THREE.HemisphereLight(0xb8d0e4, 0x12181e, 0.42));
-    const sun = new THREE.DirectionalLight(0xfff0d0, 3.20);
+    // Lighting — directional sun with fill and bounce, no shadow maps on mobile.
+    // Slightly brighter hemi + sun give the silhouette more shape from far away,
+    // which is the camera distance most users see in overview mode.
+    scene.add(new THREE.HemisphereLight(0xb8d0e4, 0x12181e, 0.48));
+    const sun = new THREE.DirectionalLight(0xfff0d0, 3.55);
     sun.position.set(180, 260, 120);
-    sun.castShadow = true;
-    sun.shadow.mapSize.width = 1536;
-    sun.shadow.mapSize.height = 1536;
-    sun.shadow.camera.near = 50;
-    sun.shadow.camera.far  = 700;
-    sun.shadow.camera.left   = -75;
-    sun.shadow.camera.right  =  75;
-    sun.shadow.camera.top    =  75;
-    sun.shadow.camera.bottom = -75;
-    sun.shadow.bias = -0.0006;
-    sun.shadow.normalBias = 0.5;
+    sun.castShadow = !isWeb;
+    sun.shadow.mapSize.width  = 512;
+    sun.shadow.mapSize.height = 512;
+    sun.shadow.camera.near = 10;
+    sun.shadow.camera.far  = 900;
+    const _sc = TERRAIN_SIZE * 0.80;
+    (sun.shadow.camera as any).left   = -_sc;
+    (sun.shadow.camera as any).right  =  _sc;
+    (sun.shadow.camera as any).top    =  _sc;
+    (sun.shadow.camera as any).bottom = -_sc;
+    sun.shadow.bias       = -0.0015;
+    sun.shadow.normalBias =  0.04;
     scene.add(sun);
     sun.target.position.set(0, 0, 0);
     scene.add(sun.target);
@@ -941,11 +1605,10 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     scene.add(bounce);
     scene.add(new THREE.AmbientLight(0xc8d0d8, 0.06));
 
-    // Mountain
-    console.log('[Mountain3D] building mesh...');
-    const t3 = Date.now();
-    const mountain = buildMountainMesh(THREE, hm, perm, cfg);
-    console.log('[Mountain3D] mesh built', Date.now() - t3, 'ms');
+    // Mountain — low-LOD (SEGS=90) for initial render, hi (SEGS=160) on close-up
+    const mountain = buildMountainMesh(THREE, hm, perm, cfg, 90, isWeb);
+    mountainLoRef.current = mountain;
+    activeMeshRef.current = mountain;
     scene.add(mountain);
 
     const mBox = new THREE.Box3().setFromObject(mountain);
@@ -953,59 +1616,118 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     const modelRadius = Math.max(mSize.x, mSize.z) * 0.5;
     modelRadiusRef.current = modelRadius;
 
-    const overviewRadius = modelRadius * 2.0 + 18;
-    const lookY = mBox.min.y + mSize.y * 0.45;
-    orbitTgt.current = { theta: 0.40, phi: 0.78, radius: overviewRadius, tx: 0, ty: lookY, tz: 0 };
+    // Tighter overview radius + look at 35% height → mountain fills frame top-to-bottom
+    const overviewRadius = modelRadius * 1.75 + 14;
+    const lookY = mBox.min.y + mSize.y * 0.35;
+    overviewTgtRef.current = { tx: 0, ty: lookY, tz: 0, radius: overviewRadius };
+    // phi=0.72 (more overhead angle) shows the peak above the wide base
+    orbitTgt.current = { theta: 0.40, phi: 0.72, radius: overviewRadius, tx: 0, ty: lookY, tz: 0 };
     orbitCur.current = { ...orbitTgt.current };
     applyOrbit(camera, orbitCur.current);
 
-    // Checkpoints — sample post-erosion heightmap so they sit on real terrain
-    const cps: V3[] = Array.from({ length: steps.length }, (_, i) => {
-      const t = steps.length > 1 ? i / (steps.length - 1) : 0.5;
-      const spiral = Math.sin(t * Math.PI * 1.8) * (i % 2 === 0 ? 1 : -1);
-      const radial = (1 - t) * 0.42;
-      const x = spiral * mSize.x * radial * 0.55;
-      const z = (0.42 - t * 0.84) * mSize.z;
-      const y = sampleHeightGrid(hm, x, z) + cfg.heightScale * 0.022;
-      return { x, y, z };
-    });
+    // Checkpoints — snap to their planned peak slots. The summit slot's
+    // checkpoint sits on top of the highest peak (= the hardest step).
+    const cps: V3[] = slots.map(slot => ({
+      x: slot.x,
+      y: sampleHeightGrid(hm, slot.x, slot.z) + cfg.heightScale * 0.022,
+      z: slot.z,
+    }));
     cpPositions.current = cps;
 
     if (cps.length >= 2) {
       // ── Surface-following trail ──
-      // 1. Smooth Catmull-Rom curve through checkpoints (gives natural sweep)
-      // 2. Sample densely along it, snap each sample's Y to the heightmap +
-      //    a constant lift, so no point can ever pierce the mountain
-      // 3. Build a new curve from the snapped points
-      // 4. Render as a thin TubeGeometry (much more visible than a Line, and
-      //    receives lighting/shadow so it reads as a real path)
-      const TRAIL_LIFT = 0.55;
-      const ctrl = cps.map(p => new THREE.Vector3(p.x, p.y + TRAIL_LIFT, p.z));
-      const rawCurve = new THREE.CatmullRomCurve3(ctrl, false, 'centripetal', 0.5);
-      const dense = rawCurve.getPoints(Math.max(48, cps.length * 14));
-      const grounded = dense.map((p: any) => new THREE.Vector3(
-        p.x,
-        sampleHeightGrid(hm, p.x, p.z) + TRAIL_LIFT,
-        p.z,
-      ));
-      const trailCurve = new THREE.CatmullRomCurve3(grounded, false, 'centripetal', 0.5);
-      const tubeGeo = new THREE.TubeGeometry(
-        trailCurve,
-        Math.max(120, cps.length * 24), // tubular segments
-        0.18,                            // radius
-        6,                               // radial segments
-        false,
-      );
-      const tubeMat = new THREE.MeshStandardMaterial({
-        color:             0xfff4c2,
-        emissive:          0xffaa30,
-        emissiveIntensity: 0.45,
-        roughness: 0.35, metalness: 0.55,
-      });
-      const trailMesh = new THREE.Mesh(tubeGeo, tubeMat);
-      trailMesh.castShadow = false;
-      trailMesh.receiveShadow = false;
-      scene.add(trailMesh);
+      // Walk straight-line segments between consecutive checkpoints, sampling
+      // the heightmap at each step + a small lift. Feed the resulting points
+      // to a single CatmullRomCurve3 with *uniform* parameterization — that
+      // avoids the distance-based math in 'centripetal'/'chordal' modes that
+      // can blow up on the sharper curvature produced by scattered peaks.
+      // Wrapped in try/catch as belt-and-suspenders: if the trail fails, the
+      // rest of the scene still renders.
+      try {
+        const TRAIL_LIFT = 0.55;
+        const SAMPLES_PER_SEG = 16;
+        const groundedPts: any[] = [];
+
+        for (let i = 0; i < cps.length - 1; i++) {
+          const a = cps[i], b = cps[i + 1];
+          // First segment includes its start point; subsequent segments skip
+          // step 0 since it would duplicate the previous segment's endpoint.
+          const startStep = i === 0 ? 0 : 1;
+          for (let step = startStep; step <= SAMPLES_PER_SEG; step++) {
+            const t = step / SAMPLES_PER_SEG;
+            const px = a.x + (b.x - a.x) * t;
+            const pz = a.z + (b.z - a.z) * t;
+            const py = sampleHeightGrid(hm, px, pz) + TRAIL_LIFT;
+            groundedPts.push(new THREE.Vector3(px, py, pz));
+          }
+        }
+
+        if (groundedPts.length >= 4) {
+          const trailCurve = new THREE.CatmullRomCurve3(groundedPts, false, 'catmullrom', 0.5);
+          const numPts = Math.max(240, cps.length * 32);
+          const pts = trailCurve.getPoints(numPts);
+          const RWIDTH = 0.65;
+
+          const rVerts: number[] = [], rUvs: number[] = [], rIdx: number[] = [];
+          for (let ri = 0; ri < pts.length; ri++) {
+            const prev = pts[Math.max(0, ri - 1)];
+            const next = pts[Math.min(pts.length - 1, ri + 1)];
+            const tdx = next.x - prev.x, tdz = next.z - prev.z;
+            const tlen = Math.sqrt(tdx * tdx + tdz * tdz) || 1;
+            const sx = (-tdz / tlen) * RWIDTH * 0.5;
+            const sz = ( tdx / tlen) * RWIDTH * 0.5;
+            const t = ri / (pts.length - 1);
+            rVerts.push(
+              pts[ri].x + sx, pts[ri].y, pts[ri].z + sz,
+              pts[ri].x - sx, pts[ri].y, pts[ri].z - sz,
+            );
+            rUvs.push(0, t, 1, t);
+            if (ri < pts.length - 1) {
+              const b = ri * 2;
+              rIdx.push(b, b + 1, b + 2, b + 2, b + 1, b + 3);
+            }
+          }
+          const ribbonGeo = new THREE.BufferGeometry();
+          ribbonGeo.setAttribute('position', new THREE.Float32BufferAttribute(rVerts, 3));
+          ribbonGeo.setAttribute('uv',       new THREE.Float32BufferAttribute(rUvs,   2));
+          ribbonGeo.setIndex(rIdx);
+
+          // Two-tone stripe: bright green core, dark border — like a painted trail marking.
+          const ribbonMat = new THREE.ShaderMaterial({
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            transparent: true,
+            polygonOffset: true,
+            polygonOffsetFactor: -3,
+            polygonOffsetUnits: -3,
+            vertexShader: [
+              'varying vec2 vUv2;',
+              'void main() {',
+              '  vUv2 = uv;',
+              '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+              '}',
+            ].join('\n'),
+            fragmentShader: [
+              'varying vec2 vUv2;',
+              'void main() {',
+              '  float edge = abs(vUv2.x - 0.5) * 2.0;',
+              '  float core = smoothstep(0.78, 0.62, edge);',
+              '  vec3 coreCol   = vec3(0.16, 0.82, 0.32);',
+              '  vec3 borderCol = vec3(0.04, 0.32, 0.10);',
+              '  gl_FragColor   = vec4(mix(borderCol, coreCol, core), 0.93);',
+              '}',
+            ].join('\n'),
+          });
+
+          const trailMesh = new THREE.Mesh(ribbonGeo, ribbonMat);
+          trailMesh.castShadow    = false;
+          trailMesh.receiveShadow = false;
+          trailMesh.renderOrder   = 1;
+          scene.add(trailMesh);
+        }
+      } catch (trailErr) {
+        console.warn('[Mountain3D] trail build skipped:', trailErr);
+      }
     }
 
     cpMeshes.current = [];
@@ -1035,8 +1757,9 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
     // - orbitVel inertia decays exponentially after the user releases, giving
     //   a fling feel rather than a hard stop.
     lastFrameRef.current = Date.now();
-    const STIFFNESS    = 9.0;  // higher = snappier camera follow
-    const VEL_DECAY    = 2.4;  // higher = inertia stops sooner
+    const STIFFNESS    = 6.0;  // lowered from 14 — smooth cinematic follow
+    const TRANSITION_STIFFNESS = 3.0; // soft ease during view-mode transitions
+    const VEL_DECAY    = 1.4;  // slower decay = longer, more satisfying fling
     const VEL_THRESH   = 0.04;
 
     const loop = () => {
@@ -1046,13 +1769,50 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
       lastFrameRef.current = now;
       tRef.current += dt;
 
-      // Pulse current checkpoint
-      const idx = Math.max(0, Math.min(completedRef.current, cpMeshes.current.length - 1));
-      const cur = cpMeshes.current[idx];
-      if (cur) cur.scale.setScalar(1.55 + Math.sin(tRef.current * 3.2) * 0.10);
+      const inFocus = viewModeRef.current === 'focused';
+      const touching = !!touchRef.current || !!pinchRef.current;
 
-      // Apply inertia to target (only when no finger is down)
-      if (!touchRef.current && !pinchRef.current) {
+      // Drive orbit target from view mode each frame so prop-driven mode
+      // changes & focus index changes flow into the camera without extra
+      // effects. Mountain center is set once at mesh build (overviewTgtRef).
+      // While the user is actively touching, leave their gesture intact so
+      // pinch-out-to-exit and overview pinch can register.
+      if (inFocus && !touching) {
+        const fIdx = focusedIdxRef.current;
+        const cps = cpPositions.current;
+        if (cps.length > 0 && fIdx >= 0 && fIdx < cps.length) {
+          const cp = cps[fIdx];
+          orbitTgt.current.tx = cp.x;
+          orbitTgt.current.ty = cp.y;
+          orbitTgt.current.tz = cp.z;
+          orbitTgt.current.phi = 1.10;
+          orbitTgt.current.radius = modelRadius * 0.40 + 12;
+        }
+      } else if (!inFocus && !touching) {
+        // Overview: target the mountain center; let user freely set theta/phi.
+        const ov = overviewTgtRef.current;
+        orbitTgt.current.tx = ov.tx;
+        orbitTgt.current.ty = ov.ty;
+        orbitTgt.current.tz = ov.tz;
+        // Only nudge radius back if it strayed far. User can still pinch
+        // within [0.85..1.6] × overviewRadius freely.
+        const rMin = ov.radius * 0.85;
+        const rMax = ov.radius * 1.6;
+        if (orbitTgt.current.radius < rMin) orbitTgt.current.radius = rMin;
+        else if (orbitTgt.current.radius > rMax) orbitTgt.current.radius = rMax;
+      }
+
+      // Pulse only the focused checkpoint (overview keeps markers static so the
+      // mountain reads as serene from far). In focus mode pulse the focused
+      // step; otherwise leave all markers at their idle scales.
+      if (inFocus) {
+        const idx = Math.max(0, Math.min(focusedIdxRef.current, cpMeshes.current.length - 1));
+        const cur = cpMeshes.current[idx];
+        if (cur) cur.scale.setScalar(1.55 + Math.sin(tRef.current * 3.2) * 0.10);
+      }
+
+      // Apply inertia to target (only in overview, only when no finger is down)
+      if (!inFocus && !touchRef.current && !pinchRef.current) {
         const v = orbitVel.current;
         if (Math.abs(v.theta) > VEL_THRESH || Math.abs(v.phi) > VEL_THRESH) {
           orbitTgt.current.theta += v.theta * dt;
@@ -1064,28 +1824,76 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
         } else {
           v.theta = 0; v.phi = 0;
         }
+      } else if (inFocus) {
+        // Subtle drift in focused mode for parallax / "alive" feel.
+        orbitTgt.current.theta += 0.04 * dt;
       }
 
-      // Frame-rate-independent exponential smoothing
-      const f = 1 - Math.exp(-STIFFNESS * dt);
+      // Frame-rate-independent exponential smoothing. During an active
+      // view-mode transition use a softer stiffness so the camera arcs in
+      // smoothly rather than snapping.
+      const tr = transitionRef.current;
+      let stiffness = STIFFNESS;
+      if (tr.active) {
+        tr.t = Math.min(1, tr.t + dt / tr.dur);
+        // ease-in-out cubic
+        const e = tr.t < 0.5
+          ? 4 * tr.t * tr.t * tr.t
+          : 1 - Math.pow(-2 * tr.t + 2, 3) / 2;
+        stiffness = TRANSITION_STIFFNESS + (STIFFNESS - TRANSITION_STIFFNESS) * e;
+        if (tr.t >= 1) tr.active = false;
+      }
+      const f = 1 - Math.exp(-stiffness * dt);
       lerpOrbit(orbitCur.current, orbitTgt.current, f);
       applyOrbit(camera, orbitCur.current);
+
+      // Update shader camera distance uniform for LOD-driven detail
+      const activeShader = (activeMeshRef.current?.material as any)?.userData?.shader;
+      if (activeShader) {
+        activeShader.uniforms.uCamDist.value = orbitCur.current.radius;
+        activeShader.uniforms.uTime.value    = tRef.current;
+      }
+
+      // 2-tier LOD: lo (90 segs) in overview, hi (160 segs) when zoomed close.
+      // Keeping only 2 meshes alive prevents the OOM crash on prolonged sessions.
+      const curRadius = orbitCur.current.radius;
+      const loFromHi  = modelRadius * 0.80;
+      const hiFromLo  = modelRadius * 0.58;
+      const lodActive = activeMeshRef.current;
+      const lodLo     = mountainLoRef.current;
+      const lodHi     = mountainHiRef.current;
+
+      const swapLod = (next: any) => {
+        if (!next || lodActive === next) return;
+        scene.remove(lodActive);
+        scene.add(next);
+        activeMeshRef.current = next;
+      };
+
+      if (lodHi && curRadius < hiFromLo) {
+        swapLod(lodHi);
+      } else if (curRadius > loFromHi) {
+        swapLod(lodLo);
+      }
+
       renderer.render(scene, camera);
-      gl.endFrameEXP();
+      gl.endFrameEXP?.();
     };
     loop();
 
-    zoomTimerRef.current = setTimeout(() => {
-      const i2 = Math.max(0, Math.min(completedRef.current, cps.length - 1));
-      const cp = cps[i2];
-      if (cp) {
-        orbitTgt.current = {
-          theta: orbitTgt.current.theta, phi: 1.10,
-          radius: modelRadius * 0.40 + 12,
-          tx: cp.x, ty: cp.y, tz: cp.z,
-        };
-      }
-    }, 2400);
+    // Build hi-LOD mesh (SEGS=160) after initial render settles.
+    // Ultra LOD removed — 3 meshes simultaneously caused OOM on prolonged sessions.
+    setTimeout(() => {
+      const hiMesh = buildMountainMesh(THREE, hm, perm, cfg, 160, isWeb);
+      mountainHiRef.current = hiMesh;
+    }, 900);
+
+    // No on-load auto-fly: we always start in overview mode so the user can
+    // admire the whole roadmap. They can tap a step (or use the drawer) to
+    // enter focus mode, which the parent toggles via the viewMode prop.
+    } catch (err) {
+      console.error('[Mountain3D] fatal error in onContextCreate:', err);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1100,31 +1908,61 @@ export function ProceduralMountain3D({ steps, completedSteps, seed = 1337 }: Pro
       mat.needsUpdate = true;
       if (!current) mesh.scale.setScalar(done ? 1.18 : 1.0);
     });
-    const cps = cpPositions.current;
-    const i = Math.max(0, Math.min(completedSteps, cps.length - 1));
-    if (cps[i]) {
-      orbitTgt.current = {
-        theta: orbitTgt.current.theta, phi: 1.10,
-        radius: modelRadiusRef.current * 0.40 + 12,
-        tx: cps[i].x, ty: cps[i].y, tz: cps[i].z,
-      };
-    }
+    // Auto-fly to the new current step ONLY if we're already in focus mode —
+    // in overview we want the user's chosen camera left alone.
   }, [completedSteps]);
+
+  // Web path: bridge a <canvas> element into the same onContextCreate by wrapping
+  // it in a fake gl object that matches the expo-gl interface.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const canvas = webCanvasRef.current;
+    if (!canvas) return;
+    const dpr  = window.devicePixelRatio || 1;
+    // getBoundingClientRect returns 0×0 before first paint; fall back to window size.
+    const rect = canvas.getBoundingClientRect();
+    const cssW = rect.width  > 0 ? rect.width  : window.innerWidth;
+    const cssH = rect.height > 0 ? rect.height : window.innerHeight;
+    canvas.width  = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    const fakeGl: any = {
+      drawingBufferWidth:  canvas.width,
+      drawingBufferHeight: canvas.height,
+      _webCanvas: canvas,
+      endFrameEXP: () => {},
+    };
+    onContextCreate(fakeGl);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => () => {
     cancelAnimationFrame(rafRef.current);
     if (zoomTimerRef.current !== null) clearTimeout(zoomTimerRef.current);
+    mountainLoRef.current?.geometry?.dispose();
+    mountainLoRef.current?.material?.dispose();
+    mountainHiRef.current?.geometry?.dispose();
+    mountainHiRef.current?.material?.dispose();
     rendererRef.current?.dispose?.();
   }, []);
 
   return (
     <View style={StyleSheet.absoluteFill} {...panResponder.panHandlers}>
-      <GLView
-        style={StyleSheet.absoluteFill}
-        msaaSamples={8}
-        enableExperimentalWorkletSupport={false}
-        onContextCreate={onContextCreate}
-      />
+        {Platform.OS === 'web' ? (
+        <canvas
+          ref={webCanvasRef}
+          style={{
+            position: 'absolute', top: 0, left: 0,
+            width: '100%', height: '100%', display: 'block',
+          } as any}
+        />
+      ) : (
+        <GLView
+          style={StyleSheet.absoluteFill}
+          msaaSamples={0}
+          enableExperimentalWorkletSupport={false}
+          onContextCreate={onContextCreate}
+        />
+      )}
     </View>
   );
 }

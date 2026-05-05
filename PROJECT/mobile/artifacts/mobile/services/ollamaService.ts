@@ -1,12 +1,10 @@
 /**
- * ollamaService.ts
- * Direct integration with Ollama LLM running locally.
+ * Backend AI completion helpers.
  *
  * The Ollama base URL is derived from the same LAN host as the backend server —
  * so if the backend is http://192.168.1.100:4000, Ollama is http://192.168.1.100:11434.
- * This works seamlessly in Expo dev mode on both simulator and physical devices.
- *
- * Model: qwen2.5:14b
+ * Mobile calls the configured backend API only. The backend owns AI service and
+ * Ollama access, including model configuration.
  */
 
 import { getMobileApiBaseUrl, getMobileAccessToken } from "@/lib/api/runtime";
@@ -72,14 +70,14 @@ export async function generateCompletion(
       const content = data?.content?.trim() ?? "";
 
       if (__DEV__) {
-        console.log(`[ollama] attempt=${attempt + 1} len=${content.length} preview="${content.slice(0, 120)}"`);
+        console.log(`[ai] attempt=${attempt + 1} len=${content.length} preview="${content.slice(0, 120)}"`);
       }
 
       return content;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       if (__DEV__) {
-        console.warn(`[ollama] attempt=${attempt + 1} failed:`, lastError.message);
+        console.warn(`[ai] attempt=${attempt + 1} failed:`, lastError.message);
       }
       if (attempt < MAX_RETRIES - 1) {
         await new Promise((r) => setTimeout(r, 1500));
@@ -148,7 +146,7 @@ export async function generateStructuredJson<T>(
   }
 
   throw new Error(
-    "generateStructuredJson: could not parse valid JSON from Ollama after 2 attempts"
+    "generateStructuredJson: could not parse valid JSON from AI completion after 2 attempts"
   );
 }
 

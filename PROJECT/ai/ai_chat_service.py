@@ -123,7 +123,6 @@ async def handle_chat(
     service_context: AIChatServiceContext,
     payload: AIChatRequest,
 ) -> AIChatResponse:
-    print(f"DEBUG: Handling chat request for user {payload.user_id}")
     settings = service_context["settings"]
     pool = service_context["pool"]
 

@@ -37,7 +37,8 @@
       "Bash(node -e \"const d=require\\('./PROJECT/mobile/artifacts/mobile/node_modules/react-native-worklets/package.json'\\); console.log\\('version:', d.version\\)\")",
       "Bash(node -e \"const d=require\\('./PROJECT/mobile/artifacts/mobile/node_modules/react-native-reanimated/package.json'\\); console.log\\('version:', d.version, 'main:', d.main\\)\")",
       "Bash(node -e \"const d=require\\('./PROJECT/mobile/artifacts/mobile/node_modules/react-native-is-edge-to-edge/package.json'\\); console.log\\('version:', d.version\\)\")",
-      "Bash(node -e \"const d=require\\('c:/Users/youss/ISSPROJECT/PROJECT/mobile/artifacts/mobile/node_modules/react-native-reanimated/package.json'\\); console.log\\('peerDeps:', JSON.stringify\\(d.peerDependencies,null,2\\)\\); console.log\\('deps:', JSON.stringify\\(d.dependencies,null,2\\)\\)\")"
+      "Bash(node -e \"const d=require\\('c:/Users/youss/ISSPROJECT/PROJECT/mobile/artifacts/mobile/node_modules/react-native-reanimated/package.json'\\); console.log\\('peerDeps:', JSON.stringify\\(d.peerDependencies,null,2\\)\\); console.log\\('deps:', JSON.stringify\\(d.dependencies,null,2\\)\\)\")",
+      "Bash(npx --no-install tsc --noEmit -p .)"
     ]
   }
 }

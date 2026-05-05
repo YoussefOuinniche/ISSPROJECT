@@ -52,6 +52,20 @@ export interface SkillInsight {
   market_summary: string | null;
 }
 
+export type StepResourceProvider =
+  | "coursera"
+  | "udemy"
+  | "youtube"
+  | "edx"
+  | "other";
+
+export interface StepResource {
+  provider: StepResourceProvider;
+  title: string;
+  url: string;
+  free?: boolean;
+}
+
 export interface RoadmapStep {
   id: string;
   roadmap_id: string;
@@ -64,6 +78,7 @@ export interface RoadmapStep {
   duration_hours: number | null;
   status: "locked" | "available" | "in_progress" | "completed" | "skipped";
   completed_at: string | null;
+  resources?: StepResource[];
   // Embedded join results
   skills?: { id: string; name: string } | null;
   courses?: {
@@ -377,13 +392,76 @@ export async function getRoadmapWithSteps(
   if (!raw) return null;
 
   const rawSteps = raw.ai_roadmap_steps ?? [];
-  const steps = [...rawSteps].sort((a, b) => a.step_order - b.step_order);
+  const steps = [...rawSteps]
+    .sort((a, b) => a.step_order - b.step_order)
+    .map((s) => ({
+      ...s,
+      resources: ensureStepResources(s),
+    }));
 
   return {
     ...raw,
     steps,
     job_roles: raw.job_roles ?? null,
   };
+}
+
+/**
+ * Returns a step's curated resources if the AI populated any, otherwise
+ * synthesizes search-URL fallbacks across Coursera / Udemy / YouTube so the
+ * UI always has something to show. Real curated links replace these once the
+ * AI generator service is updated to populate `resources`.
+ */
+export function ensureStepResources(step: {
+  title: string;
+  resources?: StepResource[] | null;
+  skills?: { name: string } | null;
+  courses?: { title: string; url: string | null; provider: string | null } | null;
+}): StepResource[] {
+  const existing = Array.isArray(step.resources) ? step.resources : [];
+  if (existing.length > 0) return existing;
+
+  const query = encodeURIComponent(
+    [step.title, step.skills?.name].filter(Boolean).join(" ").trim() || step.title
+  );
+  const fallbacks: StepResource[] = [
+    {
+      provider: "coursera",
+      title: `Search Coursera for "${step.title}"`,
+      url: `https://www.coursera.org/search?query=${query}`,
+    },
+    {
+      provider: "udemy",
+      title: `Search Udemy for "${step.title}"`,
+      url: `https://www.udemy.com/courses/search/?q=${query}`,
+    },
+    {
+      provider: "youtube",
+      title: `Search YouTube for "${step.title}"`,
+      url: `https://www.youtube.com/results?search_query=${query}`,
+      free: true,
+    },
+  ];
+
+  // If a legacy single course link exists, surface it too as "other".
+  if (step.courses?.url && step.courses.title) {
+    fallbacks.push({
+      provider: (mapProvider(step.courses.provider) ?? "other") as StepResourceProvider,
+      title: step.courses.title,
+      url: step.courses.url,
+    });
+  }
+  return fallbacks;
+}
+
+function mapProvider(p: string | null | undefined): StepResourceProvider | null {
+  if (!p) return null;
+  const s = p.toLowerCase();
+  if (s.includes("coursera")) return "coursera";
+  if (s.includes("udemy")) return "udemy";
+  if (s.includes("youtube")) return "youtube";
+  if (s.includes("edx")) return "edx";
+  return "other";
 }
 
 /** Updates a single step's status (triggers DB-level auto-unlock of next step). */

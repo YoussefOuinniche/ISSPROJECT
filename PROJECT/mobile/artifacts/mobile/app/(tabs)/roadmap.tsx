@@ -42,11 +42,14 @@ import {
   type CheckpointDef,
 } from '@/components/roadmap/ProceduralMountain3D';
 import {
+  ensureStepResources,
   fetchProfileId,
   getRoadmapWithSteps,
   updateRoadmapStepStatus,
-  type RoadmapWithSteps,
   type RoadmapStep,
+  type RoadmapWithSteps,
+  type StepResource,
+  type StepResourceProvider,
 } from '@/services/supabaseService';
 import { getBottomContentPadding } from '@/lib/layout';
 
@@ -114,6 +117,14 @@ function parseDesc(desc: string | null): { body: string; why: string | null } {
   return { body: parts[0]?.trim() ?? '', why: parts[1]?.trim() ?? null };
 }
 
+// djb2 hash — gives each roadmap UUID a unique, well-distributed seed so
+// users with different roadmaps get visibly different mountains.
+function hashSeed(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return Math.abs(h) || 42;
+}
+
 // ─── Animated progress bar ────────────────────────────────────────────────────
 function ProgressBar({ pct, color }: { pct: number; color: string }) {
   const w = useSharedValue(0);
@@ -130,16 +141,33 @@ const pb = StyleSheet.create({
   fill:  { height: 3, borderRadius: 2 },
 });
 
-// ─── Bottom panel — current checkpoint detail ─────────────────────────────────
-function CheckpointPanel({
+// ─── Resource provider styling ────────────────────────────────────────────────
+const PROVIDER_META: Record<StepResourceProvider, { label: string; color: string; icon: React.ComponentProps<typeof Feather>['name'] }> = {
+  coursera: { label: 'Coursera', color: '#0056d2', icon: 'book-open' },
+  udemy:    { label: 'Udemy',    color: '#a435f0', icon: 'monitor' },
+  youtube:  { label: 'YouTube',  color: '#ff0000', icon: 'play-circle' },
+  edx:      { label: 'edX',      color: '#022b3a', icon: 'book' },
+  other:    { label: 'Resource', color: '#64748b', icon: 'link' },
+};
+
+// ─── Bottom sheet — three-snap drawer (peek / mid / full) ─────────────────────
+type SheetSnap = 'peek' | 'mid' | 'full';
+
+function CheckpointSheet({
   step,
   stepIndex,
   totalSteps,
   completedSteps,
+  steps,
+  snap,
+  onSnapChange,
   onStart,
   onComplete,
   onPrev,
   onNext,
+  onPickStep,
+  viewMode,
+  onExitFocus,
   theme,
   insetBottom,
 }: {
@@ -147,22 +175,69 @@ function CheckpointPanel({
   stepIndex: number;
   totalSteps: number;
   completedSteps: number;
+  steps: RoadmapStep[];
+  snap: SheetSnap;
+  onSnapChange: (s: SheetSnap) => void;
   onStart: () => void;
   onComplete: () => void;
   onPrev: () => void;
   onNext: () => void;
+  onPickStep: (i: number) => void;
+  viewMode: 'overview' | 'focused';
+  onExitFocus: () => void;
   theme: ReturnType<typeof useTheme>;
   insetBottom: number;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const panelH = useSharedValue(0);
-  const panelStyle = useAnimatedStyle(() => ({ maxHeight: panelH.value }));
+  const PEEK = 132;
+  const MID  = Math.round(SH * 0.50);
+  const FULL = Math.round(SH * 0.86);
+
+  const heightOf = (s: SheetSnap) => (s === 'peek' ? PEEK : s === 'mid' ? MID : FULL);
+
+  const sheetH = useSharedValue(heightOf(snap));
+  const dragStartH = useRef(heightOf(snap));
+  // Refs so the panResponder's persistent closures see fresh values without
+  // re-creating PanResponder.create() on every parent re-render.
+  const onSnapChangeRef = useRef(onSnapChange);
+  useEffect(() => { onSnapChangeRef.current = onSnapChange; }, [onSnapChange]);
 
   useEffect(() => {
-    panelH.value = withSpring(expanded ? 340 : 0, { damping: 18, stiffness: 100 });
-  }, [expanded]);
+    sheetH.value = withSpring(heightOf(snap), { damping: 22, stiffness: 180, mass: 0.8 });
+  }, [snap]);
 
-  // Swipe left/right on the non-scroll area to navigate steps
+  const sheetStyle = useAnimatedStyle(() => ({ height: sheetH.value }));
+
+  const dragPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => { dragStartH.current = sheetH.value; },
+      onPanResponderMove: (_, g) => {
+        const next = Math.max(PEEK, Math.min(FULL, dragStartH.current - g.dy));
+        sheetH.value = next;
+      },
+      onPanResponderRelease: (_, g) => {
+        const final = Math.max(PEEK, Math.min(FULL, dragStartH.current - g.dy));
+        // Snap to nearest of the three points, biased by velocity.
+        const v = -g.vy * 200;
+        const projected = final + v;
+        const distances: Array<[SheetSnap, number]> = [
+          ['peek', Math.abs(projected - PEEK)],
+          ['mid',  Math.abs(projected - MID)],
+          ['full', Math.abs(projected - FULL)],
+        ];
+        distances.sort((a, b) => a[1] - b[1]);
+        const next = distances[0][0];
+        // Always animate directly so the sheet doesn't stick mid-drag when
+        // the chosen snap matches the current parent state (no re-render →
+        // no useEffect → no spring otherwise).
+        sheetH.value = withSpring(heightOf(next), { damping: 22, stiffness: 180, mass: 0.8 });
+        onSnapChangeRef.current(next);
+      },
+    })
+  ).current;
+
+  // Swipe left/right on the header area for prev/next step navigation.
   const swipePan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
@@ -178,25 +253,23 @@ function CheckpointPanel({
   if (!step) return null;
 
   const { body, why } = parseDesc(step.description);
-  const isCompleted   = step.status === 'completed';
-  const isLocked      = step.status === 'locked' || step.status === 'skipped';
-  const canStart      = step.status === 'available';
-  const canComplete   = step.status === 'in_progress' || step.status === 'available';
-  const color         = statusColor(step.status, theme);
+  const isCompleted = step.status === 'completed';
+  const canStart    = step.status === 'available';
+  const canComplete = step.status === 'in_progress' || step.status === 'available';
+  const color       = statusColor(step.status, theme);
+  const resources   = ensureStepResources(step);
 
   return (
-    <View style={styles.panelWrap}>
-      <Reanimated.View entering={FadeInUp.delay(300).springify()}>
-      <BlurView intensity={85} tint="dark" style={styles.panel}>
+    <Reanimated.View style={[styles.panelWrap, sheetStyle]}>
+      <BlurView intensity={85} tint="dark" style={[styles.panel, { flex: 1 }]}>
 
-        {/* Drag handle — also triggers expand */}
-        <Pressable onPress={() => setExpanded(e => !e)} style={styles.handleWrap}>
+        {/* Drag handle — drag up/down to change snap */}
+        <View {...dragPan.panHandlers} style={styles.handleWrap}>
           <View style={styles.handle} />
-        </Pressable>
+        </View>
 
-        {/* Swipeable zone: dots + step header */}
+        {/* Header: dots + step badge + back-to-overview pill (when focused) */}
         <View {...swipePan.panHandlers}>
-          {/* Step navigation dots */}
           <View style={styles.dotStrip}>
             {Array.from({ length: totalSteps }, (_, i) => {
               const done    = i < completedSteps;
@@ -211,7 +284,6 @@ function CheckpointPanel({
             })}
           </View>
 
-          {/* Step header */}
           <View style={styles.stepHeader}>
             <View style={[styles.stepNumBadge, { borderColor: color + '60', backgroundColor: color + '18' }]}>
               <Text style={[styles.stepNum, { color }]}>
@@ -231,12 +303,23 @@ function CheckpointPanel({
                 ) : null}
               </View>
             </View>
-            <Pressable onPress={() => setExpanded(e => !e)} style={styles.chevronBtn}>
-              <Feather name={expanded ? 'chevron-down' : 'chevron-up'} size={18} color="rgba(255,255,255,0.55)" />
-            </Pressable>
+            {viewMode === 'focused' ? (
+              <Pressable onPress={onExitFocus} style={styles.backPill} accessibilityLabel="Back to roadmap">
+                <Feather name="map" size={12} color="#fbbf24" />
+                <Text style={styles.backPillTxt}>Roadmap</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => onSnapChange(snap === 'full' ? 'peek' : 'full')}
+                style={styles.viewAllPill}
+                accessibilityLabel="View all steps"
+              >
+                <Feather name={snap === 'full' ? 'chevron-down' : 'list'} size={12} color="rgba(255,255,255,0.85)" />
+                <Text style={styles.viewAllPillTxt}>{snap === 'full' ? 'Close' : 'All steps'}</Text>
+              </Pressable>
+            )}
           </View>
 
-          {/* Prominent complete button — always visible when step is actionable */}
           {canComplete && (
             <Pressable style={styles.completeBtn} onPress={onComplete}>
               <LinearGradient
@@ -257,38 +340,41 @@ function CheckpointPanel({
           )}
         </View>
 
-        {/* Expandable details */}
-        <Reanimated.View style={[{ overflow: 'hidden' }, panelStyle]}>
-          <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: 20 }}>
-            {body ? (
-              <Text style={styles.stepBody}>{body}</Text>
-            ) : null}
-            {why ? (
-              <View style={[styles.whyBox, { borderLeftColor: color }]}>
-                <Text style={styles.whyLabel}>WHY NEEDED</Text>
-                <Text style={styles.whyText}>{why}</Text>
-              </View>
-            ) : null}
-            {step.skills?.name ? (
-              <View style={[styles.skillChip, { borderColor: color + '50', backgroundColor: color + '15' }]}>
-                <Feather name="layers" size={11} color={color} />
-                <Text style={[styles.skillChipTxt, { color }]}>{step.skills.name}</Text>
-              </View>
-            ) : null}
-            {step.courses?.title ? (
-              <Pressable
-                style={styles.courseRow}
-                onPress={() => { if (step.courses?.url) Linking.openURL(step.courses.url).catch(() => null); }}
-              >
-                <Feather name="external-link" size={12} color="rgba(255,255,255,0.65)" />
-                <Text style={styles.courseTxt} numberOfLines={1}>{step.courses.title}</Text>
-              </Pressable>
-            ) : null}
-            <View style={{ height: 8 }} />
-          </ScrollView>
-        </Reanimated.View>
+        {/* Scrollable body — content depends on snap state */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: Math.max(insetBottom, 16) + 80 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {snap === 'full' ? (
+            <StepList
+              steps={steps}
+              activeIndex={stepIndex}
+              completedSteps={completedSteps}
+              theme={theme}
+              onPick={(i) => onPickStep(i)}
+            />
+          ) : (
+            <>
+              {body ? <Text style={styles.stepBody}>{body}</Text> : null}
+              {why ? (
+                <View style={[styles.whyBox, { borderLeftColor: color }]}>
+                  <Text style={styles.whyLabel}>WHY NEEDED</Text>
+                  <Text style={styles.whyText}>{why}</Text>
+                </View>
+              ) : null}
+              {step.skills?.name ? (
+                <View style={[styles.skillChip, { borderColor: color + '50', backgroundColor: color + '15' }]}>
+                  <Feather name="layers" size={11} color={color} />
+                  <Text style={[styles.skillChipTxt, { color }]}>{step.skills.name}</Text>
+                </View>
+              ) : null}
+              <ResourceGrid resources={resources} />
+            </>
+          )}
+        </ScrollView>
 
-        {/* Navigation row */}
+        {/* Pinned action row at the bottom of the sheet */}
         <View style={[styles.actionRow, { paddingBottom: Math.max(insetBottom, 16) }]}>
           <View style={styles.navBtns}>
             <Pressable
@@ -308,7 +394,6 @@ function CheckpointPanel({
             </Pressable>
           </View>
 
-          {/* Secondary start button (only shown in action row) */}
           {canStart && (
             <View style={styles.actionBtns}>
               <Pressable style={[styles.actionBtn, styles.startBtn]} onPress={onStart}>
@@ -319,7 +404,84 @@ function CheckpointPanel({
           )}
         </View>
       </BlurView>
-      </Reanimated.View>
+    </Reanimated.View>
+  );
+}
+
+// ─── Multi-platform resource grid ─────────────────────────────────────────────
+function ResourceGrid({ resources }: { resources: StepResource[] }) {
+  if (!resources.length) return null;
+  return (
+    <View style={styles.resourceGrid}>
+      <Text style={styles.resourceLabel}>LEARN ON</Text>
+      <View style={styles.resourceRow}>
+        {resources.map((r, i) => {
+          const meta = PROVIDER_META[r.provider] ?? PROVIDER_META.other;
+          return (
+            <Pressable
+              key={`${r.provider}-${i}`}
+              style={[styles.resourceCard, { borderColor: meta.color + '55', backgroundColor: meta.color + '12' }]}
+              onPress={() => Linking.openURL(r.url).catch(() => null)}
+            >
+              <Feather name={meta.icon} size={14} color={meta.color} />
+              <Text style={[styles.resourceCardLabel, { color: meta.color }]}>{meta.label}</Text>
+              <Text style={styles.resourceCardTitle} numberOfLines={2}>{r.title}</Text>
+              {r.free ? <Text style={styles.resourceFreeBadge}>FREE</Text> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ─── Full step list (rendered at 'full' snap) ─────────────────────────────────
+function StepList({
+  steps,
+  activeIndex,
+  completedSteps,
+  theme,
+  onPick,
+}: {
+  steps: RoadmapStep[];
+  activeIndex: number;
+  completedSteps: number;
+  theme: ReturnType<typeof useTheme>;
+  onPick: (i: number) => void;
+}) {
+  return (
+    <View style={{ paddingTop: 4 }}>
+      <Text style={styles.listLabel}>ALL STEPS · TAP TO FOCUS</Text>
+      {steps.map((s, i) => {
+        const done    = i < completedSteps;
+        const current = i === activeIndex;
+        const color   = statusColor(s.status, theme);
+        return (
+          <Pressable
+            key={s.id}
+            onPress={() => onPick(i)}
+            style={[styles.listCard, current && styles.listCardActive]}
+          >
+            <View style={[styles.listNum, { borderColor: color + '50', backgroundColor: color + '18' }]}>
+              <Text style={[styles.listNumTxt, { color }]}>
+                {done ? '✓' : String(s.step_order).padStart(2, '0')}
+              </Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.listTitle} numberOfLines={2}>{s.title}</Text>
+              <View style={styles.listMeta}>
+                <Feather name={statusIcon(s.status)} size={10} color={color} />
+                <Text style={[styles.listStatus, { color }]}>
+                  {{ locked: 'Locked', available: 'Available', in_progress: 'In Progress',
+                     completed: 'Completed', skipped: 'Skipped' }[s.status]}
+                </Text>
+                {s.duration_hours ? <Text style={styles.listDur}>· {formatH(s.duration_hours)}</Text> : null}
+              </View>
+            </View>
+            <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.40)" />
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
@@ -432,51 +594,103 @@ function EmptyView({ theme, insetTop }: { theme: ReturnType<typeof useTheme>; in
   );
 }
 
+// ─── Difficulty heuristic ─────────────────────────────────────────────────────
+// Score a step in [0, 1]. Highest-scored step becomes the mountain summit.
+// Signals (cheapest → strongest):
+//   • duration_hours      — longer effort ≈ harder
+//   • title/description   — keywords (advanced, capstone, deploy, …) push up;
+//                           (intro, basics, setup, …) push down
+//   • step_order          — small late-stage tiebreaker
+const HARD_KW = ['advanced', 'production', 'capstone', 'deploy', 'system design',
+  'architect', 'optimi', 'security', 'distributed', 'concurrent', 'interview',
+  'scalab', 'reliab', 'perform'];
+const EASY_KW = ['intro', 'overview', 'basic', 'getting started', 'setup',
+  'install', 'hello', 'fundamental'];
+
+function computeDifficulty(step: RoadmapStep, totalSteps: number): number {
+  let score = 0.5;
+  const dur = step.duration_hours ?? 8;
+  // Map 0..40h → 0..1, centered at 0.5 contribution
+  score += (Math.min(1, dur / 40) - 0.5) * 0.45;
+
+  const text = `${step.title} ${step.description ?? ''}`.toLowerCase();
+  for (const kw of HARD_KW) if (text.includes(kw)) score += 0.07;
+  for (const kw of EASY_KW) if (text.includes(kw)) score -= 0.07;
+
+  // Late steps slightly harder as a tiebreaker
+  if (totalSteps > 1) score += (step.step_order / totalSteps) * 0.08;
+
+  return Math.max(0.05, Math.min(1.0, score));
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function RoadmapScreen() {
   const theme  = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [roadmap,    setRoadmap]    = useState<RoadmapWithSteps | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [profileId,  setProfileId]  = useState<string | null>(null);
-  const [viewedIdx,  setViewedIdx]  = useState(0); // which checkpoint the panel shows
+  const [roadmap,        setRoadmap]        = useState<RoadmapWithSteps | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error,          setError]          = useState<string | null>(null);
+  const [profileId,      setProfileId]      = useState<string | null>(null);
+  const [viewedIdx,      setViewedIdx]      = useState(0); // which checkpoint the panel shows
+  const [viewMode,       setViewMode]       = useState<'overview' | 'focused'>('overview');
+  const [sheetSnap,      setSheetSnap]      = useState<SheetSnap>('peek');
 
-  const loadRoadmap = useCallback(async () => {
+  // Refetches do NOT flip a `loading` flag — that would unmount the GL canvas
+  // and cause a black flash on every step completion. Only the very first
+  // load shows <LoadingView />; subsequent fetches mutate `roadmap` in place.
+  const loadRoadmap = useCallback(async (opts: { silent?: boolean } = {}) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!opts.silent) setError(null);
       let pid = profileId;
       if (!pid) { pid = await fetchProfileId(); setProfileId(pid); }
-      if (!pid) { setError('Profile not found. Please log in again.'); return; }
+      if (!pid) {
+        if (!opts.silent) setError('Profile not found. Please log in again.');
+        return;
+      }
       const rm = await getRoadmapWithSteps(pid);
       setRoadmap(rm);
-      // Initialise viewed index to the current checkpoint
-      if (rm) {
+      if (rm && !opts.silent) {
         const idx = rm.steps.findIndex(s => s.status !== 'completed');
         setViewedIdx(idx >= 0 ? idx : rm.steps.length - 1);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load');
+      if (!opts.silent) setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [profileId]);
 
   useEffect(() => { loadRoadmap(); }, []);
 
+  // Optimistic update so the mountain canvas never unmounts on step completion.
+  // The DB write fans out in the background; on failure we silently refetch
+  // (still without flipping initialLoading, so still no flash).
   async function handleStatusChange(stepId: string, status: RoadmapStep['status']) {
+    setRoadmap(prev => {
+      if (!prev) return prev;
+      const nowIso = new Date().toISOString();
+      const nextSteps = prev.steps.map(s =>
+        s.id === stepId
+          ? { ...s, status, completed_at: status === 'completed' ? nowIso : s.completed_at }
+          : s,
+      );
+      return { ...prev, steps: nextSteps };
+    });
     try {
       await updateRoadmapStepStatus(stepId, status);
-      await loadRoadmap();
-    } catch { /* silent */ }
+    } catch {
+      // Reconcile silently if the write failed
+      loadRoadmap({ silent: true });
+    }
   }
 
   // ── Guards ────────────────────────────────────────────────────────────────────
-  if (loading) return <LoadingView theme={theme} />;
-  if (error)   return <ErrorView message={error} onRetry={loadRoadmap} theme={theme} />;
-  if (!roadmap) return <EmptyView theme={theme} insetTop={insets.top} />;
+  // Only the first load gets the loading view. After that we keep the canvas
+  // mounted at all costs.
+  if (initialLoading && !roadmap) return <LoadingView theme={theme} />;
+  if (error && !roadmap)          return <ErrorView message={error} onRetry={loadRoadmap} theme={theme} />;
+  if (!roadmap)                   return <EmptyView theme={theme} insetTop={insets.top} />;
 
   // ── Data helpers ──────────────────────────────────────────────────────────────
   const steps          = roadmap.steps;
@@ -484,14 +698,41 @@ export default function RoadmapScreen() {
   const completedSteps = steps.filter(s => s.status === 'completed').length;
   const currentStep    = steps[viewedIdx] ?? null;
 
-  // Map RoadmapStep → CheckpointDef for the mountain
+  // Map RoadmapStep → CheckpointDef for the mountain (with computed difficulty;
+  // the mountain uses the max-difficulty step as the summit).
   const checkpoints: CheckpointDef[] = steps.map(s => ({
-    id:     s.id,
-    title:  s.title,
-    status: s.status,
+    id:         s.id,
+    title:      s.title,
+    status:     s.status,
+    difficulty: computeDifficulty(s, totalSteps),
   }));
 
   const topPad = Platform.OS === 'web' ? insets.top + 67 : insets.top;
+
+  // Richer per-roadmap seed: blend the roadmap UUID with the step titles so
+  // step content (not just count + UUID) drives the mountain shape. Two
+  // roadmaps with the same role and step count but different generated
+  // content will read as visually different mountains.
+  const seed = (() => {
+    if (!roadmap.id) return 42;
+    const titles = steps.map(s => s.title).join('|');
+    return hashSeed(`${roadmap.id}|${titles}`);
+  })();
+
+  // Total estimated hours scales the mountain's height a little — longer
+  // roadmaps get noticeably taller summits.
+  const totalHours = steps.reduce((acc, s) => acc + (s.duration_hours ?? 0), 0);
+  const scaleBoost = 1 + Math.min(0.4, Math.max(0, totalHours / 120));
+
+  const focusStep = (i: number) => {
+    setViewedIdx(i);
+    setViewMode('focused');
+    setSheetSnap('mid');
+  };
+  const exitFocus = () => {
+    setViewMode('overview');
+    setSheetSnap('peek');
+  };
 
   // ── Full-screen mountain layout ───────────────────────────────────────────────
   return (
@@ -501,7 +742,12 @@ export default function RoadmapScreen() {
       <ProceduralMountain3D
         steps={checkpoints}
         completedSteps={completedSteps}
-        seed={roadmap.id ? roadmap.id.charCodeAt(0) : 42}
+        seed={seed}
+        scaleBoost={scaleBoost}
+        viewMode={viewMode}
+        focusedStepIndex={viewMode === 'focused' ? viewedIdx : -1}
+        onStepFocus={focusStep}
+        onExitFocus={exitFocus}
       />
 
       {/* ── Top overlay (transparent gradient + title) ── */}
@@ -514,13 +760,16 @@ export default function RoadmapScreen() {
         theme={theme}
       />
 
-      {/* ── Bottom checkpoint panel ── */}
+      {/* ── Bottom checkpoint sheet (peek / mid / full snaps) ── */}
       <View style={styles.bottomWrap} pointerEvents="box-none">
-        <CheckpointPanel
+        <CheckpointSheet
           step={currentStep}
           stepIndex={viewedIdx}
           totalSteps={totalSteps}
           completedSteps={completedSteps}
+          steps={steps}
+          snap={sheetSnap}
+          onSnapChange={setSheetSnap}
           onStart={() => {
             if (currentStep) handleStatusChange(currentStep.id, 'in_progress');
           }}
@@ -532,6 +781,9 @@ export default function RoadmapScreen() {
           }}
           onPrev={() => setViewedIdx(v => Math.max(0, v - 1))}
           onNext={() => setViewedIdx(v => Math.min(totalSteps - 1, v + 1))}
+          onPickStep={focusStep}
+          viewMode={viewMode}
+          onExitFocus={exitFocus}
           theme={theme}
           insetBottom={insets.bottom}
         />
@@ -709,4 +961,68 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(74,222,128,0.08)',
   },
   completedBadgeTxt: { fontFamily: SANS_MED, fontSize: 14, color: '#4ade80' },
+
+  // ── View-mode pills ──
+  backPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6,
+    backgroundColor: 'rgba(251,191,36,0.14)',
+    borderWidth: 1, borderColor: 'rgba(251,191,36,0.45)',
+  },
+  backPillTxt: { fontFamily: SANS_MED, fontSize: 11, color: '#fbbf24', letterSpacing: 0.4 },
+  viewAllPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)',
+  },
+  viewAllPillTxt: { fontFamily: SANS_MED, fontSize: 11, color: 'rgba(255,255,255,0.85)', letterSpacing: 0.4 },
+
+  // ── Resource grid ──
+  resourceGrid: { marginTop: 8, marginBottom: 8 },
+  resourceLabel: {
+    fontFamily: SANS_MED, fontSize: 9, color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 1.2, marginBottom: 8,
+  },
+  resourceRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  resourceCard: {
+    width: '48%',
+    borderWidth: 1, borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    gap: 4,
+  },
+  resourceCardLabel: { fontFamily: SANS_MED, fontSize: 11, letterSpacing: 0.5 },
+  resourceCardTitle: { fontFamily: SANS_REG, fontSize: 11, color: 'rgba(255,255,255,0.78)', lineHeight: 15 },
+  resourceFreeBadge: {
+    fontFamily: SANS_MED, fontSize: 9, color: '#4ade80',
+    letterSpacing: 0.6, marginTop: 2,
+  },
+
+  // ── Full step list ──
+  listLabel: {
+    fontFamily: SANS_MED, fontSize: 9, color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 1.2, marginBottom: 10, marginTop: 4,
+  },
+  listCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: 12, paddingVertical: 12,
+    marginBottom: 8,
+    borderRadius: 12, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  listCardActive: {
+    borderColor: 'rgba(251,191,36,0.55)',
+    backgroundColor: 'rgba(251,191,36,0.08)',
+  },
+  listNum: {
+    width: 30, height: 30, borderRadius: 8,
+    borderWidth: 1.2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  listNumTxt: { fontFamily: SANS, fontSize: 11 },
+  listTitle: { fontFamily: SANS_MED, fontSize: 13, color: '#fff', lineHeight: 18 },
+  listMeta:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  listStatus: { fontFamily: SANS_MED, fontSize: 10 },
+  listDur:    { fontFamily: SANS_REG, fontSize: 10, color: 'rgba(255,255,255,0.45)' },
 });

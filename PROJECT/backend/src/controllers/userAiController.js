@@ -245,6 +245,14 @@ const generateRoadmap = async (req, res) => {
             skills: userSkills,
             timeframe_months: timeframeMonths || null,
           },
+          // Ask the AI service to populate per-step learning resources for
+          // multi-platform display in the mobile UI. The service should
+          // return each step with a `resources` array of
+          // { provider: 'coursera'|'udemy'|'youtube'|'edx'|'other',
+          //   title: string, url: string, free?: boolean }.
+          // Mobile renders search-URL fallbacks if missing, so ignoring this
+          // flag is safe — UI never breaks.
+          include_resources: true,
         }),
         signal: AbortSignal.timeout(60000),
       });
@@ -264,9 +272,38 @@ const generateRoadmap = async (req, res) => {
   }
 };
 
+function normalizeOllamaBaseUrl(rawUrl) {
+  return String(rawUrl || 'http://localhost:11434').trim().replace(/\/+$/, '');
+}
+
+async function requestOllamaCompletion({ baseUrl, model, messages, temperature, signal }) {
+  const normalizedBaseUrl = normalizeOllamaBaseUrl(baseUrl);
+  const openAiBaseUrl = normalizedBaseUrl.endsWith('/v1')
+    ? normalizedBaseUrl
+    : `${normalizedBaseUrl}/v1`;
+
+  const response = await fetch(`${openAiBaseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, messages, temperature }),
+    signal,
+  });
+
+  if (!response.ok) {
+    return { ok: false, status: response.status, content: '' };
+  }
+
+  const data = await response.json();
+  return {
+    ok: true,
+    status: response.status,
+    content: data?.choices?.[0]?.message?.content?.trim() || '',
+  };
+}
+
 // POST /api/user/ai/complete
-// Proxies a raw completion request to local Ollama so mobile devices
-// don't need direct access to port 11434 (which is often firewalled).
+// Proxies raw completion requests through the backend so mobile devices never
+// call Ollama directly.
 const ollamaComplete = async (req, res) => {
   try {
     const { system_prompt, messages, temperature = 0.7 } = req.body;
@@ -274,8 +311,8 @@ const ollamaComplete = async (req, res) => {
       return res.status(400).json({ success: false, error: 'messages array is required' });
     }
 
-    const ollamaBaseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-    const model = process.env.OLLAMA_MODEL_CHAT || process.env.OLLAMA_MODEL || 'qwen2.5:14b';
+    const ollamaBaseUrl = process.env.OLLAMA_URL || process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const model = process.env.OLLAMA_MODEL_CHAT || process.env.OLLAMA_MODEL || 'qwen2.5:7b';
 
     const fullMessages = system_prompt
       ? [{ role: 'system', content: system_prompt }, ...messages]
@@ -286,21 +323,21 @@ const ollamaComplete = async (req, res) => {
 
     let content = '';
     try {
-      const ollamaRes = await fetch(`${ollamaBaseUrl}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, messages: fullMessages, stream: false, options: { temperature, num_ctx: 8192 } }),
+      const completion = await requestOllamaCompletion({
+        baseUrl: ollamaBaseUrl,
+        model,
+        messages: fullMessages,
+        temperature,
         signal: controller.signal,
       });
       clearTimeout(timer);
-      if (!ollamaRes.ok) {
-        return res.status(502).json({ success: false, error: `Ollama HTTP ${ollamaRes.status}` });
+      if (!completion.ok) {
+        return res.status(502).json({ success: false, error: `AI completion HTTP ${completion.status}` });
       }
-      const data = await ollamaRes.json();
-      content = data?.message?.content?.trim() ?? data?.response?.trim() ?? '';
+      content = completion.content;
     } catch (err) {
       clearTimeout(timer);
-      return res.status(504).json({ success: false, error: 'Ollama request timed out or is unreachable' });
+      return res.status(504).json({ success: false, error: 'AI completion request timed out or is unreachable' });
     }
 
     return res.json({ success: true, content });

@@ -43,6 +43,30 @@ async def ensure_ai_chat_schema(db_pool: asyncpg.Pool) -> None:
         )
 
 
+async def ensure_ollama_model(http_client: httpx.AsyncClient, model: str) -> bool:
+    try:
+        response = await http_client.get("/models")
+        response.raise_for_status()
+        payload = response.json()
+    except Exception as exc:
+        logger.warning("AI model unavailable: %s", exc)
+        return False
+
+    models = payload.get("data", [])
+    available_models = [
+        str(item.get("id"))
+        for item in models
+        if isinstance(item, dict) and item.get("id")
+    ]
+
+    if model not in available_models:
+        logger.warning("AI model unavailable: %s is not listed by Ollama.", model)
+        return False
+
+    print(f"AI model running: {model}", flush=True)
+    return True
+
+
 async def initialize_ai_chat_runtime(app: FastAPI) -> None:
     settings = load_ai_chat_settings()
     http_client: httpx.AsyncClient | None = None
@@ -58,18 +82,21 @@ async def initialize_ai_chat_runtime(app: FastAPI) -> None:
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
 
-        try:
-            db_pool = await asyncpg.create_pool(
-                dsn=settings["database_url"],
-                min_size=settings["db_pool_min_size"],
-                max_size=settings["db_pool_max_size"],
-            )
-            await ensure_ai_chat_schema(db_pool)
-        except Exception:
-            logger.exception("AI chat runtime could not connect to Postgres. Continuing in no-db mode.")
-            if db_pool is not None:
-                await db_pool.close()
-            db_pool = None
+        await ensure_ollama_model(http_client, settings["ollama_model"])
+
+        if settings["database_url"]:
+            try:
+                db_pool = await asyncpg.create_pool(
+                    dsn=settings["database_url"],
+                    min_size=settings["db_pool_min_size"],
+                    max_size=settings["db_pool_max_size"],
+                )
+                await ensure_ai_chat_schema(db_pool)
+            except Exception as exc:
+                logger.debug("AI DB startup error: %s", exc)
+                if db_pool is not None:
+                    await db_pool.close()
+                db_pool = None
 
         app.state.ai_chat_settings = settings
         app.state.ai_chat_db_pool = db_pool
@@ -83,9 +110,8 @@ async def initialize_ai_chat_runtime(app: FastAPI) -> None:
             pool=db_pool,
             settings=settings,
         )
-        logger.info("AI chat runtime initialized against %s", settings["ollama_url"])
     except Exception:
-        logger.exception("Failed to initialize AI chat runtime.")
+        logger.warning("Failed to initialize AI chat runtime.")
         app.state.ai_chat_settings = settings
         app.state.ai_chat_db_pool = None
         app.state.ai_chat_http_client = None
