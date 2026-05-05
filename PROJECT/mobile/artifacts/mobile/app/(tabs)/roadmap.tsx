@@ -1,7 +1,7 @@
 'use no memo';
 /**
- * Roadmap screen — full-screen procedural 3D mountain.
- * The mountain renders edge-to-edge with transparent overlays:
+ * Roadmap screen - full-screen real-world 3D mountain.
+ * Mapbox renders satellite imagery over DEM terrain with transparent overlays:
  *   • Top bar  — title, role badge, compact progress
  *   • Bottom panel (BlurView) — current checkpoint details + action buttons
  *   • Progress dots strip — one dot per step
@@ -38,9 +38,9 @@ import Svg, { Circle, Defs, LinearGradient as SvgGrad, Path, Rect, Stop } from '
 
 import { useTheme, SERIF, SANS, SANS_MED, SANS_REG } from '@/constants/theme';
 import {
-  ProceduralMountain3D,
+  RealWorldMountain3D,
   type CheckpointDef,
-} from '@/components/roadmap/ProceduralMountain3D';
+} from '@/components/roadmap/RealWorldMountain3D';
 import {
   ensureStepResources,
   fetchProfileId,
@@ -594,35 +594,6 @@ function EmptyView({ theme, insetTop }: { theme: ReturnType<typeof useTheme>; in
   );
 }
 
-// ─── Difficulty heuristic ─────────────────────────────────────────────────────
-// Score a step in [0, 1]. Highest-scored step becomes the mountain summit.
-// Signals (cheapest → strongest):
-//   • duration_hours      — longer effort ≈ harder
-//   • title/description   — keywords (advanced, capstone, deploy, …) push up;
-//                           (intro, basics, setup, …) push down
-//   • step_order          — small late-stage tiebreaker
-const HARD_KW = ['advanced', 'production', 'capstone', 'deploy', 'system design',
-  'architect', 'optimi', 'security', 'distributed', 'concurrent', 'interview',
-  'scalab', 'reliab', 'perform'];
-const EASY_KW = ['intro', 'overview', 'basic', 'getting started', 'setup',
-  'install', 'hello', 'fundamental'];
-
-function computeDifficulty(step: RoadmapStep, totalSteps: number): number {
-  let score = 0.5;
-  const dur = step.duration_hours ?? 8;
-  // Map 0..40h → 0..1, centered at 0.5 contribution
-  score += (Math.min(1, dur / 40) - 0.5) * 0.45;
-
-  const text = `${step.title} ${step.description ?? ''}`.toLowerCase();
-  for (const kw of HARD_KW) if (text.includes(kw)) score += 0.07;
-  for (const kw of EASY_KW) if (text.includes(kw)) score -= 0.07;
-
-  // Late steps slightly harder as a tiebreaker
-  if (totalSteps > 1) score += (step.step_order / totalSteps) * 0.08;
-
-  return Math.max(0.05, Math.min(1.0, score));
-}
-
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function RoadmapScreen() {
   const theme  = useTheme();
@@ -698,32 +669,25 @@ export default function RoadmapScreen() {
   const completedSteps = steps.filter(s => s.status === 'completed').length;
   const currentStep    = steps[viewedIdx] ?? null;
 
-  // Map RoadmapStep → CheckpointDef for the mountain (with computed difficulty;
-  // the mountain uses the max-difficulty step as the summit).
+  // Map RoadmapStep to checkpoint metadata for the route overlay.
   const checkpoints: CheckpointDef[] = steps.map(s => ({
     id:         s.id,
     title:      s.title,
     status:     s.status,
-    difficulty: computeDifficulty(s, totalSteps),
   }));
 
   const topPad = Platform.OS === 'web' ? insets.top + 67 : insets.top;
 
-  // Richer per-roadmap seed: blend the roadmap UUID with the step titles so
-  // step content (not just count + UUID) drives the mountain shape. Two
-  // roadmaps with the same role and step count but different generated
-  // content will read as visually different mountains.
+  // Stable per-roadmap selector: blend the roadmap UUID with step titles so
+  // each roadmap picks a real mountain route consistently. Mapbox supplies
+  // the DEM terrain and satellite imagery at runtime.
   const seed = (() => {
     if (!roadmap.id) return 42;
     const titles = steps.map(s => s.title).join('|');
     return hashSeed(`${roadmap.id}|${titles}`);
   })();
 
-  // Total estimated hours scales the mountain's height a little — longer
-  // roadmaps get noticeably taller summits.
-  const totalHours = steps.reduce((acc, s) => acc + (s.duration_hours ?? 0), 0);
-  const scaleBoost = 1 + Math.min(0.4, Math.max(0, totalHours / 120));
-
+  // Focusing a step moves the Mapbox camera to that route checkpoint.
   const focusStep = (i: number) => {
     setViewedIdx(i);
     setViewMode('focused');
@@ -739,11 +703,10 @@ export default function RoadmapScreen() {
     <View style={{ flex: 1, backgroundColor: '#0a0f18' }}>
 
       {/* ── 3D Mountain (fills entire screen) ── */}
-      <ProceduralMountain3D
+      <RealWorldMountain3D
         steps={checkpoints}
         completedSteps={completedSteps}
         seed={seed}
-        scaleBoost={scaleBoost}
         viewMode={viewMode}
         focusedStepIndex={viewMode === 'focused' ? viewedIdx : -1}
         onStepFocus={focusStep}
