@@ -440,51 +440,101 @@ function EmptyView({ theme, insetTop }: { theme: ReturnType<typeof useTheme>; in
   );
 }
 
+// ─── Difficulty heuristic ─────────────────────────────────────────────────────
+// Score a step in [0, 1]. Highest-scored step becomes the mountain summit.
+// Signals (cheapest → strongest):
+//   • duration_hours      — longer effort ≈ harder
+//   • title/description   — keywords (advanced, capstone, deploy, …) push up;
+//                           (intro, basics, setup, …) push down
+//   • step_order          — small late-stage tiebreaker
+const HARD_KW = ['advanced', 'production', 'capstone', 'deploy', 'system design',
+  'architect', 'optimi', 'security', 'distributed', 'concurrent', 'interview',
+  'scalab', 'reliab', 'perform'];
+const EASY_KW = ['intro', 'overview', 'basic', 'getting started', 'setup',
+  'install', 'hello', 'fundamental'];
+
+function computeDifficulty(step: RoadmapStep, totalSteps: number): number {
+  let score = 0.5;
+  const dur = step.duration_hours ?? 8;
+  // Map 0..40h → 0..1, centered at 0.5 contribution
+  score += (Math.min(1, dur / 40) - 0.5) * 0.45;
+
+  const text = `${step.title} ${step.description ?? ''}`.toLowerCase();
+  for (const kw of HARD_KW) if (text.includes(kw)) score += 0.07;
+  for (const kw of EASY_KW) if (text.includes(kw)) score -= 0.07;
+
+  // Late steps slightly harder as a tiebreaker
+  if (totalSteps > 1) score += (step.step_order / totalSteps) * 0.08;
+
+  return Math.max(0.05, Math.min(1.0, score));
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function RoadmapScreen() {
   const theme  = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [roadmap,    setRoadmap]    = useState<RoadmapWithSteps | null>(null);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
-  const [profileId,  setProfileId]  = useState<string | null>(null);
-  const [viewedIdx,  setViewedIdx]  = useState(0); // which checkpoint the panel shows
+  const [roadmap,        setRoadmap]        = useState<RoadmapWithSteps | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error,          setError]          = useState<string | null>(null);
+  const [profileId,      setProfileId]      = useState<string | null>(null);
+  const [viewedIdx,      setViewedIdx]      = useState(0); // which checkpoint the panel shows
 
-  const loadRoadmap = useCallback(async () => {
+  // Refetches do NOT flip a `loading` flag — that would unmount the GL canvas
+  // and cause a black flash on every step completion. Only the very first
+  // load shows <LoadingView />; subsequent fetches mutate `roadmap` in place.
+  const loadRoadmap = useCallback(async (opts: { silent?: boolean } = {}) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!opts.silent) setError(null);
       let pid = profileId;
       if (!pid) { pid = await fetchProfileId(); setProfileId(pid); }
-      if (!pid) { setError('Profile not found. Please log in again.'); return; }
+      if (!pid) {
+        if (!opts.silent) setError('Profile not found. Please log in again.');
+        return;
+      }
       const rm = await getRoadmapWithSteps(pid);
       setRoadmap(rm);
-      // Initialise viewed index to the current checkpoint
-      if (rm) {
+      if (rm && !opts.silent) {
         const idx = rm.steps.findIndex(s => s.status !== 'completed');
         setViewedIdx(idx >= 0 ? idx : rm.steps.length - 1);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load');
+      if (!opts.silent) setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [profileId]);
 
   useEffect(() => { loadRoadmap(); }, []);
 
+  // Optimistic update so the mountain canvas never unmounts on step completion.
+  // The DB write fans out in the background; on failure we silently refetch
+  // (still without flipping initialLoading, so still no flash).
   async function handleStatusChange(stepId: string, status: RoadmapStep['status']) {
+    setRoadmap(prev => {
+      if (!prev) return prev;
+      const nowIso = new Date().toISOString();
+      const nextSteps = prev.steps.map(s =>
+        s.id === stepId
+          ? { ...s, status, completed_at: status === 'completed' ? nowIso : s.completed_at }
+          : s,
+      );
+      return { ...prev, steps: nextSteps };
+    });
     try {
       await updateRoadmapStepStatus(stepId, status);
-      await loadRoadmap();
-    } catch { /* silent */ }
+    } catch {
+      // Reconcile silently if the write failed
+      loadRoadmap({ silent: true });
+    }
   }
 
   // ── Guards ────────────────────────────────────────────────────────────────────
-  if (loading) return <LoadingView theme={theme} />;
-  if (error)   return <ErrorView message={error} onRetry={loadRoadmap} theme={theme} />;
-  if (!roadmap) return <EmptyView theme={theme} insetTop={insets.top} />;
+  // Only the first load gets the loading view. After that we keep the canvas
+  // mounted at all costs.
+  if (initialLoading && !roadmap) return <LoadingView theme={theme} />;
+  if (error && !roadmap)          return <ErrorView message={error} onRetry={loadRoadmap} theme={theme} />;
+  if (!roadmap)                   return <EmptyView theme={theme} insetTop={insets.top} />;
 
   // ── Data helpers ──────────────────────────────────────────────────────────────
   const steps          = roadmap.steps;
@@ -492,11 +542,13 @@ export default function RoadmapScreen() {
   const completedSteps = steps.filter(s => s.status === 'completed').length;
   const currentStep    = steps[viewedIdx] ?? null;
 
-  // Map RoadmapStep → CheckpointDef for the mountain
+  // Map RoadmapStep → CheckpointDef for the mountain (with computed difficulty;
+  // the mountain uses the max-difficulty step as the summit).
   const checkpoints: CheckpointDef[] = steps.map(s => ({
-    id:     s.id,
-    title:  s.title,
-    status: s.status,
+    id:         s.id,
+    title:      s.title,
+    status:     s.status,
+    difficulty: computeDifficulty(s, totalSteps),
   }));
 
   const topPad = Platform.OS === 'web' ? insets.top + 67 : insets.top;
