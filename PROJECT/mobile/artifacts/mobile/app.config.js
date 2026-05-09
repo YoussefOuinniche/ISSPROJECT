@@ -2,7 +2,7 @@ export default ({ config }) => ({
   ...config,
   expo: {
     ...config?.expo,
-    name: 'SkillPulse',
+    name: 'NexaPath',
     slug: 'skillpulse',
     version: '1.0.0',
     orientation: 'portrait',
@@ -11,7 +11,7 @@ export default ({ config }) => ({
     splash: {
       image: './assets/images/logo-Photoroom.png',
       resizeMode: 'contain',
-      backgroundColor: '#F7F8FA',
+      backgroundColor: '#03071A',
     },
     ios: { supportsTablet: false },
     android: { usesCleartextTraffic: true },

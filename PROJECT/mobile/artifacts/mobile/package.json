@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@rnmapbox/maps": "^10.3.0",
+    "expo-dev-client": "~6.0.21",
     "expo-file-system": "~19.0.22",
     "expo-linear-gradient": "~15.0.8"
   },

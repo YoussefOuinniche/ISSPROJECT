@@ -5,102 +5,116 @@ import { router } from "expo-router";
 import React, { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import Animated, {
+  Easing,
+  FadeInLeft,
   FadeInUp,
+  interpolate,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withSequence,
   withTiming,
-  Easing,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGetCurrentUser } from "@workspace/api-client-react";
 
-import Colors from "@/constants/colors";
 import { getMobileAccessToken } from "@/lib/api/runtime";
+
+const BRAND_WORD = "NexaPath";
+const WORD_STEPS = ["h", "th", "ath", "Path", "aPath", "xaPath", "exaPath", BRAND_WORD];
+const STEP_DURATION = 260;
+const FINAL_HOLD = 900;
 
 export default function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const [hasStoredSession, setHasStoredSession] = useState(false);
   const [isBooting, setIsBooting] = useState(true);
+  const [wordStepIndex, setWordStepIndex] = useState(0);
+  const [animationDone, setAnimationDone] = useState(false);
   const currentUserQuery = useGetCurrentUser();
 
-  // Floating animation for logo
+  // Subtle continuous motion keeps the splash alive while auth state is checked.
   const floatY = useSharedValue(0);
-  // Pulsing ring scale
   const ringScale = useSharedValue(1);
   const ringOpacity = useSharedValue(0.6);
-  // Orb movements
-  const orb1X = useSharedValue(0);
-  const orb1Y = useSharedValue(0);
-  const orb2X = useSharedValue(0);
-  const orb2Y = useSharedValue(0);
+
+  // Final brand lockup animation, played once the full word is visible.
+  const wordScale = useSharedValue(1);
+  const wordLift = useSharedValue(0);
+  const glowProgress = useSharedValue(0);
+  const underlineProgress = useSharedValue(0);
 
   useEffect(() => {
-    // Logo float
     floatY.value = withRepeat(
       withSequence(
-        withTiming(-14, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0,   { duration: 2200, easing: Easing.inOut(Easing.sin) })
+        withTiming(-10, { duration: 2200, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0, { duration: 2200, easing: Easing.inOut(Easing.sin) })
       ),
       -1,
       false
     );
 
-    // Pulsing ring
     ringScale.value = withRepeat(
       withSequence(
-        withTiming(1.35, { duration: 1800, easing: Easing.out(Easing.ease) }),
-        withTiming(1.0,  { duration: 1800, easing: Easing.in(Easing.ease) })
+        withTiming(1.28, { duration: 1800, easing: Easing.out(Easing.ease) }),
+        withTiming(1, { duration: 1800, easing: Easing.in(Easing.ease) })
       ),
       -1,
       false
     );
     ringOpacity.value = withRepeat(
       withSequence(
-        withTiming(0,   { duration: 1800 }),
+        withTiming(0, { duration: 1800 }),
         withTiming(0.5, { duration: 1800 })
       ),
       -1,
       false
     );
+  }, [floatY, ringOpacity, ringScale]);
 
-    // Orb 1 drifting
-    orb1X.value = withRepeat(
-      withSequence(
-        withTiming(30,  { duration: 4000, easing: Easing.inOut(Easing.sin) }),
-        withTiming(-20, { duration: 4000, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0,   { duration: 4000, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1, false
-    );
-    orb1Y.value = withRepeat(
-      withSequence(
-        withTiming(-25, { duration: 3500, easing: Easing.inOut(Easing.sin) }),
-        withTiming(20,  { duration: 3500, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0,   { duration: 3500, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1, false
+  useEffect(() => {
+    const timers: ReturnType<typeof setTimeout>[] = [];
+
+    // Exact requested construction: h -> th -> ath -> Path -> ... -> NexaPath.
+    WORD_STEPS.forEach((_, index) => {
+      timers.push(
+        setTimeout(() => {
+          setWordStepIndex(index);
+        }, index * STEP_DURATION)
+      );
+    });
+
+    timers.push(
+      setTimeout(() => {
+        glowProgress.value = withTiming(1, {
+          duration: 420,
+          easing: Easing.out(Easing.cubic),
+        });
+        underlineProgress.value = withTiming(1, {
+          duration: 520,
+          easing: Easing.out(Easing.cubic),
+        });
+        wordLift.value = withSequence(
+          withTiming(-5, { duration: 240, easing: Easing.out(Easing.cubic) }),
+          withTiming(0, { duration: 360, easing: Easing.out(Easing.cubic) })
+        );
+        wordScale.value = withSequence(
+          withTiming(1.07, { duration: 240, easing: Easing.out(Easing.cubic) }),
+          withTiming(1, { duration: 360, easing: Easing.out(Easing.cubic) })
+        );
+      }, WORD_STEPS.length * STEP_DURATION)
     );
 
-    // Orb 2 drifting (offset phase)
-    orb2X.value = withRepeat(
-      withSequence(
-        withTiming(-25, { duration: 5000, easing: Easing.inOut(Easing.sin) }),
-        withTiming(20,  { duration: 5000, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0,   { duration: 5000, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1, false
+    timers.push(
+      setTimeout(() => {
+        setAnimationDone(true);
+      }, WORD_STEPS.length * STEP_DURATION + FINAL_HOLD)
     );
-    orb2Y.value = withRepeat(
-      withSequence(
-        withTiming(30,  { duration: 4500, easing: Easing.inOut(Easing.sin) }),
-        withTiming(-20, { duration: 4500, easing: Easing.inOut(Easing.sin) }),
-        withTiming(0,   { duration: 4500, easing: Easing.inOut(Easing.sin) })
-      ),
-      -1, false
-    );
-  }, []);
+
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, [glowProgress, underlineProgress, wordLift, wordScale]);
 
   const logoAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: floatY.value }],
@@ -111,20 +125,32 @@ export default function WelcomeScreen() {
     opacity: ringOpacity.value,
   }));
 
-  const orb1Style = useAnimatedStyle(() => ({
-    transform: [{ translateX: orb1X.value }, { translateY: orb1Y.value }],
+  const wordAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: wordLift.value }, { scale: wordScale.value }],
   }));
 
-  const orb2Style = useAnimatedStyle(() => ({
-    transform: [{ translateX: orb2X.value }, { translateY: orb2Y.value }],
+  const glowAnimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(glowProgress.value, [0, 1], [0.12, 0.75]),
+    transform: [{ scale: interpolate(glowProgress.value, [0, 1], [0.94, 1.08]) }],
+  }));
+
+  const underlineAnimStyle = useAnimatedStyle(() => ({
+    opacity: glowProgress.value,
+    transform: [{ scaleX: underlineProgress.value }],
   }));
 
   useEffect(() => {
     let mounted = true;
     getMobileAccessToken()
-      .then((token) => { if (mounted) setHasStoredSession(Boolean(token)); })
-      .finally(() => { if (mounted) setIsBooting(false); });
-    return () => { mounted = false; };
+      .then((token) => {
+        if (mounted) setHasStoredSession(Boolean(token));
+      })
+      .finally(() => {
+        if (mounted) setIsBooting(false);
+      });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const canAutoEnter = (() => {
@@ -135,23 +161,26 @@ export default function WelcomeScreen() {
     return Boolean(envelope.user);
   })();
 
-  // Redirect: no stored token → login immediately after boot check
+  const displayedWord = WORD_STEPS[wordStepIndex];
+  const previousWord = wordStepIndex > 0 ? WORD_STEPS[wordStepIndex - 1] : "";
+  const incomingLetter = displayedWord.slice(0, displayedWord.length - previousWord.length);
+  const stableSuffix = displayedWord.slice(incomingLetter.length);
+
   useEffect(() => {
-    if (isBooting) return;
+    // Navigation waits for the animation, then follows the existing auth destination rules.
+    if (!animationDone || isBooting) return;
     if (!hasStoredSession) {
       router.replace("/login");
       return;
     }
-    // Has a stored token — wait for the server to validate it
     if (currentUserQuery.isLoading) return;
     if (canAutoEnter) {
       router.replace("/(tabs)");
     } else {
       router.replace("/login");
     }
-  }, [isBooting, hasStoredSession, canAutoEnter, currentUserQuery.isLoading, currentUserQuery.isError]);
+  }, [animationDone, isBooting, hasStoredSession, canAutoEnter, currentUserQuery.isLoading, currentUserQuery.isError]);
 
-  // Show animated splash while determining auth state
   return (
     <LinearGradient
       colors={["#03071A", "#060D2B", "#0A1540"]}
@@ -159,13 +188,10 @@ export default function WelcomeScreen() {
       end={{ x: 1, y: 1 }}
       style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
     >
-      {/* Floating background orbs */}
-      <Animated.View style={[styles.orb1, orb1Style]} />
-      <Animated.View style={[styles.orb2, orb2Style]} />
+      <View style={styles.topBeam} />
+      <View style={styles.bottomBeam} />
 
-      {/* Hero section */}
       <View style={styles.hero}>
-        {/* Pulsing ring behind logo */}
         <View style={styles.logoWrap}>
           <Animated.View style={[styles.pulseRing, ringAnimStyle]} />
           <Animated.View style={[styles.logoFrame, logoAnimStyle]}>
@@ -177,9 +203,27 @@ export default function WelcomeScreen() {
           </Animated.View>
         </View>
 
-        <Animated.Text entering={FadeInUp.duration(600).delay(200)} style={styles.title}>
-          NexaPath
-        </Animated.Text>
+        <Animated.View
+          entering={FadeInUp.duration(520).delay(120)}
+          style={[styles.wordLockup, wordAnimStyle]}
+          accessible
+          accessibilityLabel={displayedWord}
+        >
+          <Animated.View style={[styles.wordGlow, glowAnimStyle]} />
+          <View style={styles.wordTrack}>
+            {incomingLetter ? (
+              <Animated.Text
+                key={`${wordStepIndex}-${incomingLetter}`}
+                entering={FadeInLeft.duration(240).springify().damping(18)}
+                style={[styles.title, styles.incomingLetter]}
+              >
+                {incomingLetter}
+              </Animated.Text>
+            ) : null}
+            <Text style={styles.title}>{stableSuffix}</Text>
+          </View>
+          <Animated.View style={[styles.underline, underlineAnimStyle]} />
+        </Animated.View>
 
         <Animated.Text entering={FadeInUp.duration(600).delay(350)} style={styles.tagline}>
           Your AI-powered career navigator
@@ -195,78 +239,109 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     overflow: "hidden",
   },
-  // Background orbs
-  orb1: {
+  topBeam: {
     position: "absolute",
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: "rgba(39,227,244,0.07)",
-    top: -60,
+    top: 88,
+    left: -40,
+    right: -40,
+    height: 1,
+    backgroundColor: "rgba(78, 209, 220, 0.18)",
+    transform: [{ rotate: "-12deg" }],
+  },
+  bottomBeam: {
+    position: "absolute",
     left: -80,
+    right: -80,
+    bottom: 116,
+    height: 1,
+    backgroundColor: "rgba(135, 162, 255, 0.16)",
+    transform: [{ rotate: "-12deg" }],
   },
-  orb2: {
-    position: "absolute",
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: "rgba(80,120,255,0.08)",
-    bottom: 80,
-    right: -60,
-  },
-  // Hero
   hero: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 16,
+    gap: 18,
   },
   logoWrap: {
     alignItems: "center",
     justifyContent: "center",
-    width: 160,
-    height: 160,
-    marginBottom: 8,
+    width: 138,
+    height: 138,
+    marginBottom: 4,
   },
   pulseRing: {
     position: "absolute",
-    width: 160,
-    height: 160,
-    borderRadius: 80,
+    width: 138,
+    height: 138,
+    borderRadius: 69,
     borderWidth: 2,
-    borderColor: "rgba(39,227,244,0.6)",
+    borderColor: "rgba(56, 213, 224, 0.48)",
   },
   logoFrame: {
-    width: 130,
-    height: 130,
-    borderRadius: 30,
-    backgroundColor: "rgba(5,17,46,0.85)",
+    width: 112,
+    height: 112,
+    borderRadius: 28,
+    backgroundColor: "rgba(5, 17, 46, 0.86)",
     borderWidth: 1,
-    borderColor: "rgba(39,227,244,0.45)",
+    borderColor: "rgba(56, 213, 224, 0.38)",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#2BE6F6",
-    shadowOpacity: 0.5,
-    shadowRadius: 28,
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
     shadowOffset: { width: 0, height: 10 },
   },
   logo: {
-    width: 110,
-    height: 110,
+    width: 94,
+    height: 94,
+  },
+  wordLockup: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 66,
+  },
+  wordGlow: {
+    position: "absolute",
+    width: 236,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "rgba(43, 230, 246, 0.18)",
+  },
+  wordTrack: {
+    width: 236,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
   },
   title: {
     color: "#F3FAFF",
     fontSize: 42,
     fontFamily: "Inter_700Bold",
-    letterSpacing: 1,
-    textShadowColor: "rgba(39,227,244,0.4)",
+    letterSpacing: 0,
+    textShadowColor: "rgba(39, 227, 244, 0.34)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 12,
   },
+  incomingLetter: {
+    color: "#FFFFFF",
+    textShadowColor: "rgba(94, 245, 255, 0.82)",
+    textShadowRadius: 18,
+  },
+  underline: {
+    width: 164,
+    height: 2,
+    borderRadius: 2,
+    marginTop: 7,
+    backgroundColor: "#35DDEB",
+    shadowColor: "#35DDEB",
+    shadowOpacity: 0.7,
+    shadowRadius: 14,
+  },
   tagline: {
-    color: "rgba(180,220,255,0.75)",
+    color: "rgba(202, 226, 245, 0.72)",
     fontSize: 15,
     fontFamily: "Inter_400Regular",
-    letterSpacing: 0.3,
+    letterSpacing: 0,
   },
 });

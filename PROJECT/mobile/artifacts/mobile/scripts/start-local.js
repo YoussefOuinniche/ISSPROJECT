@@ -2,6 +2,7 @@ const path = require("path");
 const { spawn } = require("child_process");
 
 const projectRoot = path.resolve(__dirname, "..");
+const expoCli = path.join(projectRoot, "node_modules", "expo", "bin", "cli");
 const rawPort = process.env.MOBILE_PORT || process.env.PORT || "8081";
 const port = Number.parseInt(rawPort, 10);
 const rawHostMode = (process.env.MOBILE_HOST || "lan").toLowerCase();
@@ -24,26 +25,21 @@ if (!hostFlags[rawHostMode]) {
 }
 
 const expoArgs = [
-  "exec",
-  "expo",
   "start",
   hostFlags[rawHostMode],
   "--port",
   String(port),
 ];
 
-const child =
-  process.platform === "win32"
-    ? spawn("cmd.exe", ["/d", "/s", "/c", `pnpm ${expoArgs.join(" ")}`], {
-        cwd: projectRoot,
-        env: process.env,
-        stdio: "inherit",
-      })
-    : spawn("pnpm", expoArgs, {
-        cwd: projectRoot,
-        env: process.env,
-        stdio: "inherit",
-      });
+if (process.env.EXPO_DEV_CLIENT !== "0") {
+  expoArgs.push("--dev-client");
+}
+
+const child = spawn(process.execPath, [expoCli, ...expoArgs], {
+  cwd: projectRoot,
+  env: process.env,
+  stdio: "inherit",
+});
 
 child.on("error", (error) => {
   console.error(`Failed to start Expo: ${error.message}`);
