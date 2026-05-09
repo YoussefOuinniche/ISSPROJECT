@@ -80,7 +80,7 @@ export default function SettingsScreen() {
               </View>
               <View style={s.rowLabel}>
                 <Text style={s.rowText}>Dark Mode</Text>
-                <Text style={s.rowSub}>{theme.isDark ? 'Forest night theme' : 'Mountain day theme'}</Text>
+                <Text style={s.rowSub}>{theme.isDark ? 'Dark focus theme' : 'Light focus theme'}</Text>
               </View>
               <Switch
                 value={theme.isDark}

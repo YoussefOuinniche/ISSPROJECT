@@ -31,9 +31,7 @@ const expoArgs = [
   String(port),
 ];
 
-if (process.env.EXPO_DEV_CLIENT !== "0") {
-  expoArgs.push("--dev-client");
-}
+expoArgs.push("--go");
 
 const child = spawn(process.execPath, [expoCli, ...expoArgs], {
   cwd: projectRoot,

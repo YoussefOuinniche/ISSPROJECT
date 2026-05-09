@@ -31,7 +31,7 @@ export const DarkTheme = {
   warmLight: 'rgba(240,174,48,0.16)',
   gold: '#F0AE30',
 
-  // Mountain scene layers (dark navy sky + slate mountain)
+  // Illustration layers
   sky1: '#03080F',
   sky2: '#060C18',
   mtn1: '#091422',
@@ -78,7 +78,7 @@ export const LightTheme = {
   warmLight: 'rgba(224,120,32,0.13)',
   gold: '#C88E0A',
 
-  // Mountain scene layers (light — sky blue, snow peaks)
+  // Illustration layers
   sky1: '#BACED8',
   sky2: '#D0E2EE',
   mtn1: '#7AA0C0',

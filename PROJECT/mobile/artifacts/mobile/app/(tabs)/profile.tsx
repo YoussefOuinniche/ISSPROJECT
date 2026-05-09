@@ -43,7 +43,7 @@ import { useTheme, SERIF, SANS, SANS_MED, SANS_REG } from '@/constants/theme';
 const { width: SW } = Dimensions.get('window');
 
 // ─── Rank system ─────────────────────────────────────────────────────────────
-const RANKS = ['Basecamp', 'Camp I', 'Camp II', 'Summit'];
+const RANKS = ['Starter', 'Learner', 'Advanced', 'Expert'];
 const RANK_TIERS = 8;
 
 function getRankInfo(skillScore: number): { name: string; tier: number; nextXP: number; xp: number } {
@@ -54,8 +54,8 @@ function getRankInfo(skillScore: number): { name: string; tier: number; nextXP: 
   return { name: RANKS[rankIdx], tier, nextXP, xp };
 }
 
-// ─── Mountain header (light: sage; dark: forest) ──────────────────────────────
-function ClimberMountainScene({ theme }: { theme: ReturnType<typeof useTheme> }) {
+// ─── Profile header scene ─────────────────────────────────────────────────────
+function ProfileHeaderScene({ theme }: { theme: ReturnType<typeof useTheme> }) {
   const H = 200;
   const W = SW;
   const BIRD_PATHS = [
@@ -84,14 +84,14 @@ function ClimberMountainScene({ theme }: { theme: ReturnType<typeof useTheme> })
       <Circle cx={W * 0.85} cy={H * 0.18} r={22} fill={theme.isDark ? '#FDEDC0' : '#FDEDC0'} opacity={theme.isDark ? 0.85 : 0.95} />
       <Circle cx={W * 0.85} cy={H * 0.18} r={30} fill={theme.isDark ? '#FDEDC0' : '#FDEDC0'} opacity={0.14} />
 
-      {/* Far mountains */}
+      {/* Far progress layers */}
       <Path
         d={`M0,${H} L${W * 0.08},${H * 0.55} L${W * 0.18},${H * 0.65} L${W * 0.30},${H * 0.45} L${W * 0.42},${H * 0.58} L${W * 0.55},${H * 0.38} L${W * 0.65},${H * 0.50} L${W * 0.78},${H * 0.35} L${W * 0.90},${H * 0.48} L${W},${H * 0.42} L${W},${H} Z`}
         fill={theme.mtn1}
         opacity={0.85}
       />
 
-      {/* Mid mountains */}
+      {/* Mid progress layers */}
       <Path
         d={`M0,${H} L${W * 0.12},${H * 0.70} L${W * 0.24},${H * 0.78} L${W * 0.38},${H * 0.60} L${W * 0.52},${H * 0.72} L${W * 0.65},${H * 0.56} L${W * 0.76},${H * 0.68} L${W * 0.88},${H * 0.58} L${W},${H * 0.62} L${W},${H} Z`}
         fill={theme.mtn2}
@@ -212,7 +212,7 @@ function SkillElevationBar({ name, level, color, theme }: {
 
 // ─── Checkpoint milestone ─────────────────────────────────────────────────────
 function Milestones({ completed, theme }: { completed: number; theme: ReturnType<typeof useTheme> }) {
-  const nodes = ['Basecamp', 'Camp I', 'Camp II', 'Summit'];
+  const nodes = ['Starter', 'Learner', 'Advanced', 'Expert'];
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
       {nodes.map((n, i) => {
@@ -295,8 +295,8 @@ export default function ProfileScreen() {
   const rankInfo = getRankInfo(skillScore);
   const earnedAch = [skills.length > 0, Boolean(aiTopGoal), highPriority > 0].filter(Boolean).length;
   const mantraQuotes = [
-    '"Yesterday ended last night. Today is fresh — lace up and climb."',
-    '"Every ascent begins with a single step forward."',
+    '"Yesterday ended last night. Today is fresh. Start with one step."',
+    '"Every strong plan begins with one focused action."',
     '"The peak is earned, not given. One day at a time."',
   ];
   const mantra = mantraQuotes[new Date().getDate() % mantraQuotes.length];
@@ -317,16 +317,16 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: getBottomContentPadding(insets.bottom, { hasTabBar: true }) }}
       >
 
-        {/* ── Mountain Scene Header ── */}
+        {/* ── Profile Scene Header ── */}
         <View style={{ position: 'relative' }}>
           <View style={{ paddingTop: Platform.OS === 'web' ? insets.top + 60 : insets.top }}>
-            <ClimberMountainScene theme={theme} />
+            <ProfileHeaderScene theme={theme} />
           </View>
           {/* Header controls overlay */}
           <View style={[s.sceneHeader, { paddingTop: Platform.OS === 'web' ? insets.top + 60 : insets.top + 14 }]}>
             <View>
-              <Text style={[s.sceneEye, { color: theme.textSecondary }]}>CLIMBER · ID 000001</Text>
-              <Text style={[s.sceneTitle, { color: theme.text }]}>My climb</Text>
+              <Text style={[s.sceneEye, { color: theme.textSecondary }]}>PROFILE · ID 000001</Text>
+              <Text style={[s.sceneTitle, { color: theme.text }]}>My progress</Text>
             </View>
           </View>
         </View>
@@ -403,7 +403,7 @@ export default function ProfileScreen() {
               <View style={s.checkHeader}>
                 <View>
                   <Text style={[s.checkEye, { color: theme.textTertiary }]}>NEXT CHECKPOINT</Text>
-                  <Text style={[s.checkTitle, { color: theme.text }]}>{rankInfo.name === 'Summit' ? 'You reached the Summit!' : `${RANKS[Math.min(RANKS.indexOf(rankInfo.name) + 1, RANKS.length - 1)]} · Foothills`}</Text>
+                  <Text style={[s.checkTitle, { color: theme.text }]}>{rankInfo.name === 'Expert' ? 'You reached Expert!' : `${RANKS[Math.min(RANKS.indexOf(rankInfo.name) + 1, RANKS.length - 1)]} · Next level`}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={[s.checkXP, { color: theme.accent }]}>{rankInfo.xp}<Text style={[s.checkXPLabel, { color: theme.textTertiary }]}>/100</Text></Text>

@@ -79,11 +79,11 @@ function getDayLabel(roadmap: HomeData['roadmap']): { num: string; label: string
   if (progress_pct < 25) return { num, label: 'Early Climb' };
   if (progress_pct < 50) return { num, label: 'Mid Ascent' };
   if (progress_pct < 75) return { num, label: 'High Terrain' };
-  return { num, label: 'Near Summit' };
+  return { num, label: 'Almost Ready' };
 }
 
-// ─── Mountain Hero Illustration ───────────────────────────────────────────────
-function MountainHero({ theme }: { theme: ReturnType<typeof useTheme> }) {
+// ─── Progress Hero Illustration ───────────────────────────────────────────────
+function ProgressHero({ theme }: { theme: ReturnType<typeof useTheme> }) {
   const H = 210;
   const W = SW;
   return (
@@ -107,19 +107,19 @@ function MountainHero({ theme }: { theme: ReturnType<typeof useTheme> }) {
         <Circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={theme.starColor} opacity={s.op} />
       ))}
 
-      {/* Far mountains (deepest) */}
+      {/* Far progress layers */}
       <Path
         d={`M0,${H} L${W * 0.05},${H * 0.52} L${W * 0.12},${H * 0.60} L${W * 0.20},${H * 0.43} L${W * 0.28},${H * 0.53} L${W * 0.36},${H * 0.37} L${W * 0.44},${H * 0.48} L${W * 0.52},${H * 0.33} L${W * 0.60},${H * 0.44} L${W * 0.68},${H * 0.30} L${W * 0.76},${H * 0.42} L${W * 0.84},${H * 0.27} L${W * 0.92},${H * 0.38} L${W},${H * 0.32} L${W},${H} Z`}
         fill={theme.mtn1}
       />
 
-      {/* Mid mountains */}
+      {/* Mid progress layers */}
       <Path
         d={`M0,${H} L${W * 0.08},${H * 0.63} L${W * 0.18},${H * 0.72} L${W * 0.28},${H * 0.55} L${W * 0.38},${H * 0.67} L${W * 0.48},${H * 0.50} L${W * 0.57},${H * 0.62} L${W * 0.66},${H * 0.46} L${W * 0.75},${H * 0.58} L${W * 0.84},${H * 0.43} L${W * 0.92},${H * 0.54} L${W},${H * 0.48} L${W},${H} Z`}
         fill={theme.mtn2}
       />
 
-      {/* Near mountains */}
+      {/* Near progress layers */}
       <Path
         d={`M0,${H} L${W * 0.10},${H * 0.76} L${W * 0.22},${H * 0.83} L${W * 0.34},${H * 0.70} L${W * 0.46},${H * 0.79} L${W * 0.58},${H * 0.67} L${W * 0.70},${H * 0.76} L${W * 0.82},${H * 0.65} L${W * 0.92},${H * 0.74} L${W},${H * 0.68} L${W},${H} Z`}
         fill={theme.mtn3}
@@ -131,7 +131,7 @@ function MountainHero({ theme }: { theme: ReturnType<typeof useTheme> }) {
         fill={theme.mtn4}
       />
 
-      {/* Dotted climbing path → tallest peak ~(84%, 27%) */}
+      {/* Dotted learning path */}
       <Path
         d={`M${W * 0.22},${H * 0.96} C${W * 0.42},${H * 0.72} ${W * 0.64},${H * 0.52} ${W * 0.84},${H * 0.30}`}
         stroke={theme.pathColor}
@@ -417,21 +417,21 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── Mountain Hero ── */}
+        {/* ── Progress Hero ── */}
         <View style={s.heroWrap}>
-          <MountainHero theme={theme} />
+          <ProgressHero theme={theme} />
           {/* Quote overlay */}
           <View style={s.quoteOverlay}>
             <Text style={[s.quoteMain, { color: theme.text }]}>
-              The mountain doesn't move.
+              Progress starts here.
             </Text>
             <Text style={[s.quoteSub, { color: theme.textSecondary }]}>
-              You do. One step at a time, {firstName}.
+              One focused step at a time, {firstName}.
             </Text>
           </View>
         </View>
 
-        {/* ── TODAY'S CLIMB — conditional on roadmap ── */}
+        {/* ── TODAY'S STEP — conditional on roadmap ── */}
         {roadmap ? (
           <Reanimated.View entering={FadeInDown.delay(80).springify()}>
             <View style={[s.climbCard, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
@@ -440,7 +440,7 @@ export default function HomeScreen() {
               <View style={s.climbInner}>
                 <View style={s.climbHeadRow}>
                   <View>
-                    <Text style={[s.climbEye, { color: theme.accent }]}>TODAY'S CLIMB</Text>
+                    <Text style={[s.climbEye, { color: theme.accent }]}>TODAY'S STEP</Text>
                     <Text style={[s.climbTitle, { color: theme.text }]}>One small step.{'\n'}Every single day.</Text>
                   </View>
                   <View style={[s.streakBadge, { backgroundColor: theme.warmLight, borderColor: theme.warm + '50' }]}>
@@ -455,7 +455,7 @@ export default function HomeScreen() {
                   style={[s.climbBtn, { backgroundColor: theme.accent }]}
                   onPress={() => router.push('/(tabs)/roadmap')}
                 >
-                  <Text style={[s.climbBtnText, { color: theme.textOnAccent }]}>Begin today's climb  →</Text>
+                  <Text style={[s.climbBtnText, { color: theme.textOnAccent }]}>Begin today's step  →</Text>
                 </Pressable>
               </View>
             </View>
@@ -491,7 +491,7 @@ export default function HomeScreen() {
               <View style={[s.pathTopBar, { backgroundColor: theme.warm }]} />
               <View style={s.pathInner}>
                 <Text style={[s.pathEye, { color: theme.warm }]}>YOUR PATH AWAITS</Text>
-                <Text style={[s.pathTitle, { color: theme.text }]}>Map your climb.{'\n'}Start your journey.</Text>
+                <Text style={[s.pathTitle, { color: theme.text }]}>Map your plan.{'\n'}Start your journey.</Text>
                 <Text style={[s.pathDesc, { color: theme.textSecondary }]}>
                   Chat with NexaPath AI to build your personalized learning roadmap. Takes about 5 minutes.
                 </Text>

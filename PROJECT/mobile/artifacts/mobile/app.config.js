@@ -20,17 +20,10 @@ export default ({ config }) => ({
       ['expo-router', { origin: 'https://replit.com/' }],
       'expo-font',
       'expo-web-browser',
-      [
-        '@rnmapbox/maps',
-        {
-          RNMapboxMapsDownloadToken: process.env.RNMAPBOX_MAPS_DOWNLOAD_TOKEN,
-        },
-      ],
     ],
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL,
       apiBaseUrl: process.env.EXPO_PUBLIC_API_URL,
-      mapboxAccessToken: process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN,
     },
     experiments: {
       typedRoutes: true,

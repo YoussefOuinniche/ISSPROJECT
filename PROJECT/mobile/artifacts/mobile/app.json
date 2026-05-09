@@ -30,8 +30,7 @@
         }
       ],
       "expo-font",
-      "expo-web-browser",
-      "@rnmapbox/maps"
+      "expo-web-browser"
     ],
     "extra": {},
     "experiments": {

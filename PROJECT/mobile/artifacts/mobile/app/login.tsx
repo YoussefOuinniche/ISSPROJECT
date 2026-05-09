@@ -35,7 +35,7 @@ WebBrowser.maybeCompleteAuthSession();
 const { width: SW } = Dimensions.get('window');
 const T = DarkTheme; // Login always uses dark theme
 
-// ─── Login-specific mountain scene ────────────────────────────────────────────
+// ─── Login-specific progress scene ────────────────────────────────────────────
 const STAR_POS = [
   { cx: 22, cy: 18, r: 1.3, op: 0.7 },
   { cx: 60, cy: 10, r: 0.9, op: 0.5 },
@@ -49,7 +49,7 @@ const STAR_POS = [
   { cx: 355, cy: 30, r: 0.9, op: 0.48 },
 ];
 
-function LoginMountain() {
+function LoginProgressScene() {
   const H = 180;
   const W = SW;
   return (
@@ -68,12 +68,12 @@ function LoginMountain() {
       {STAR_POS.map((s, i) => (
         <Circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={T.starColor} opacity={s.op} />
       ))}
-      {/* Far mountains */}
+      {/* Far progress layers */}
       <Path
         d={`M0,${H} L${W*0.06},${H*0.48} L${W*0.14},${H*0.58} L${W*0.22},${H*0.38} L${W*0.30},${H*0.52} L${W*0.40},${H*0.30} L${W*0.50},${H*0.45} L${W*0.60},${H*0.28} L${W*0.70},${H*0.40} L${W*0.80},${H*0.25} L${W*0.90},${H*0.36} L${W},${H*0.30} L${W},${H} Z`}
         fill={T.mtn1}
       />
-      {/* Mid mountains */}
+      {/* Mid progress layers */}
       <Path
         d={`M0,${H} L${W*0.10},${H*0.60} L${W*0.22},${H*0.70} L${W*0.35},${H*0.52} L${W*0.48},${H*0.64} L${W*0.60},${H*0.47} L${W*0.72},${H*0.60} L${W*0.84},${H*0.44} L${W*0.94},${H*0.55} L${W},${H*0.50} L${W},${H} Z`}
         fill={T.mtn2}
@@ -143,9 +143,9 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Mountain hero ── */}
+        {/* ── Progress hero ── */}
         <View style={s.heroWrap}>
-          <LoginMountain />
+          <LoginProgressScene />
           {/* Brand overlay */}
           <View style={[s.brandOverlay, { paddingTop: insets.top + 18 }]}>
             <Text style={[s.brandEye, { color: T.textTertiary }]}>NEXAPATH</Text>
@@ -157,7 +157,7 @@ export default function LoginScreen() {
         <Reanimated.View entering={FadeInDown.delay(60).springify()} style={s.welcomeBlock}>
           <Text style={[s.welcomeTitle, { color: T.text }]}>Welcome back.</Text>
           <Text style={[s.welcomeSub, { color: T.textSecondary }]}>
-            Continue your climb. Sign in to resume your path.
+            Continue your learning plan. Sign in to resume your path.
           </Text>
         </Reanimated.View>
 
@@ -244,7 +244,7 @@ export default function LoginScreen() {
               <ActivityIndicator color={T.textOnAccent} size="small" />
             ) : (
               <>
-                <Text style={[s.ctaBtnTxt, { color: T.textOnAccent }]}>Begin my climb</Text>
+                <Text style={[s.ctaBtnTxt, { color: T.textOnAccent }]}>Begin my plan</Text>
                 <Feather name="arrow-right" size={16} color={T.textOnAccent} />
               </>
             )}
