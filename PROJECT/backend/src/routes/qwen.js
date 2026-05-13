@@ -17,7 +17,7 @@ router.post('/chat', chat);
 // POST /api/qwen/score          — score a single candidate answer
 router.post('/score', score);
 
-// POST /api/qwen/roadmap        — generate full roadmap + mountain params
+// POST /api/qwen/roadmap        — generate full roadmap
 router.post('/roadmap', generateRoadmap);
 
 module.exports = router;

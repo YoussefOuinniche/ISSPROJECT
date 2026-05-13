@@ -7,7 +7,6 @@ import {
   FlatList,
   Text,
   TouchableOpacity,
-  Dimensions,
   Keyboard,
   Platform,
   type KeyboardEvent,
@@ -22,9 +21,6 @@ import Reanimated, {
   FadeInUp,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
-  withSequence,
-  withSpring,
   withTiming,
   ZoomIn,
 } from 'react-native-reanimated';
@@ -40,7 +36,6 @@ import {
   type RoadmapWithSteps,
 } from '@/services/supabaseService';
 
-const { width: SW } = Dimensions.get('window');
 const BG = Colors.background;
 const BG2 = Colors.background2;
 
@@ -49,46 +44,6 @@ interface Message {
   text: string;
   isUser: boolean;
   createdAt?: string;
-}
-
-// ─── Floating Orb ──────────────────────────────────────────────────────────────
-function FloatingOrb({ size, color, left, top, duration }: {
-  size: number; color: string; left: number; top: number; duration: number;
-}) {
-  const translateY = useSharedValue(0);
-  useEffect(() => {
-    translateY.value = withRepeat(
-      withSequence(withTiming(-18, { duration }), withTiming(8, { duration: duration * 0.8 })),
-      -1, true,
-    );
-  }, []);
-  const s = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
-  return (
-    <Reanimated.View
-      style={[{ position: 'absolute', left, top, width: size, height: size, borderRadius: size / 2, backgroundColor: color }, s]}
-    />
-  );
-}
-
-// ─── Star Particle ─────────────────────────────────────────────────────────────
-function StarParticle({ x, y, size, delay }: { x: number; y: number; size: number; delay: number }) {
-  const opacity = useSharedValue(0);
-  useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0, { duration: 0 }),
-        withTiming(0.7, { duration: 800 + delay * 100 }),
-        withTiming(0.1, { duration: 1200 }),
-      ),
-      -1, false,
-    );
-  }, []);
-  const s = useAnimatedStyle(() => ({ opacity: opacity.value }));
-  return (
-    <Reanimated.View
-      style={[{ position: 'absolute', left: x, top: y, width: size, height: size, borderRadius: size / 2, backgroundColor: Colors.primary }, s]}
-    />
-  );
 }
 
 export default function AIChatScreen() {
@@ -226,8 +181,8 @@ export default function AIChatScreen() {
                 <Feather name="cpu" size={14} color={Colors.primary} />
               </View>
               <View>
-                <Text style={styles.headerTitle}>AI_ASSISTANT</Text>
-                <Text style={styles.headerSub}>nexapath.career_guide</Text>
+                <Text style={styles.headerTitle}>AI Assistant</Text>
+                <Text style={styles.headerSub}>Roadmap-aware career guide</Text>
               </View>
             </View>
           ),
@@ -242,20 +197,20 @@ export default function AIChatScreen() {
           {hasContext ? (
             <Reanimated.View entering={FadeInDown.duration(400)} style={styles.contextCard}>
               <View style={styles.contextTopLine} />
-              <Text style={styles.contextEyebrow}>{'// AI_CONTEXT'}</Text>
+              <Text style={styles.contextEyebrow}>Assistant context</Text>
               {assistantTargetRole ? (
                 <Text style={styles.contextLine}>
-                  <Text style={styles.contextKey}>TARGET: </Text>{assistantTargetRole}
+                  <Text style={styles.contextKey}>Target: </Text>{assistantTargetRole}
                 </Text>
               ) : null}
               {assistantUrgentGaps.length > 0 ? (
                 <Text style={styles.contextLine}>
-                  <Text style={styles.contextKey}>GAPS: </Text>{assistantUrgentGaps.join(', ')}
+                  <Text style={styles.contextKey}>Gaps: </Text>{assistantUrgentGaps.join(', ')}
                 </Text>
               ) : null}
               {assistantNextStep ? (
                 <Text style={[styles.contextLine, { color: Colors.textTertiary }]}>
-                  <Text style={styles.contextKey}>NEXT: </Text>{assistantNextStep}
+                  <Text style={styles.contextKey}>Next: </Text>{assistantNextStep}
                 </Text>
               ) : null}
               {activeRoadmap ? (() => {
@@ -292,15 +247,15 @@ export default function AIChatScreen() {
               <Reanimated.View entering={ZoomIn.springify()} style={styles.loadingOrb}>
                 <View style={styles.loadingCore} />
               </Reanimated.View>
-              <Text style={styles.emptyTitle}>LOADING_HISTORY...</Text>
+              <Text style={styles.emptyTitle}>Loading chat history</Text>
             </View>
           ) : messages.length === 0 && !loading ? (
             <View style={styles.emptyState}>
               <Reanimated.View entering={ZoomIn.springify()} style={styles.emptyIconWrap}>
                 <Feather name="cpu" size={28} color={Colors.primary} />
               </Reanimated.View>
-              <Text style={styles.emptyTitle}>{'$ nexa ai --chat'}</Text>
-              <Text style={styles.emptySubtitle}>{'> ask about skills, gaps, or career moves'}</Text>
+              <Text style={styles.emptyTitle}>Ask NexaPath AI</Text>
+              <Text style={styles.emptySubtitle}>Skills, gaps, roadmap steps, and career decisions.</Text>
             </View>
           ) : (
             <FlatList

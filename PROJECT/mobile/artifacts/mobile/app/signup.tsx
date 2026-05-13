@@ -115,7 +115,7 @@ export default function SignupScreen() {
             <Text style={styles.titleWhite}>$ nexa</Text>
             <Text style={styles.titleRed}>signup</Text>
           </View>
-          <Text style={styles.subtitle}>{'// start your AI-powered career journey'}</Text>
+          <Text style={styles.subtitle}>{'// start your AI-powered career plan'}</Text>
         </Animated.View>
 
         {/* Form Card */}

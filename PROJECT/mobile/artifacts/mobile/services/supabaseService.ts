@@ -106,6 +106,24 @@ export interface RoadmapWithSteps extends Roadmap {
   job_roles?: { title: string; seniority_level: string | null } | null;
 }
 
+export interface CommunityRoadmapShare {
+  id: string;
+  roadmap_id: string;
+  profile_id: string;
+  title: string;
+  summary: string | null;
+  completed_steps: number;
+  total_steps: number;
+  shared_at: string;
+  profiles?: { full_name?: string | null; title?: string | null } | null;
+  ai_roadmaps?: {
+    title?: string | null;
+    summary?: string | null;
+    estimated_weeks?: number | null;
+    job_roles?: { title?: string | null } | null;
+  } | null;
+}
+
 // ─── HTTP Helpers ──────────────────────────────────────────────────────────────
 
 function buildHeaders(
@@ -474,6 +492,41 @@ export async function updateRoadmapStepStatus(
     body.completed_at = new Date().toISOString();
   }
   await sbPatch("ai_roadmap_steps", `id=eq.${encodeURIComponent(stepId)}`, body);
+}
+
+export async function shareCompletedRoadmap(roadmap: RoadmapWithSteps): Promise<void> {
+  const totalSteps = roadmap.steps.length;
+  const completedSteps = roadmap.steps.filter((step) => step.status === "completed").length;
+  if (!totalSteps || completedSteps < totalSteps) {
+    throw new Error("Finish every roadmap step before sharing it with the community.");
+  }
+
+  await sbUpsert(
+    "community_roadmap_shares",
+    {
+      roadmap_id: roadmap.id,
+      profile_id: roadmap.profile_id,
+      title: roadmap.title,
+      summary: roadmap.summary,
+      completed_steps: completedSteps,
+      total_steps: totalSteps,
+      is_public: true,
+      shared_at: new Date().toISOString(),
+    },
+    "roadmap_id"
+  );
+}
+
+export async function getCommunityRoadmapShares(): Promise<CommunityRoadmapShare[]> {
+  return sbGet<CommunityRoadmapShare>(
+    "community_roadmap_shares",
+    [
+      "is_public=eq.true",
+      "select=id,roadmap_id,profile_id,title,summary,completed_steps,total_steps,shared_at,profiles(full_name,title),ai_roadmaps(title,summary,estimated_weeks,job_roles(title))",
+      "order=shared_at.desc",
+      "limit=50",
+    ].join("&")
+  );
 }
 
 // ─── Chat Persistence ───────────────────────────────────────────────────────────

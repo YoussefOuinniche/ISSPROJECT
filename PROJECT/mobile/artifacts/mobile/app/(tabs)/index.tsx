@@ -5,7 +5,6 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Dimensions,
   Platform,
   Pressable,
   RefreshControl,
@@ -14,9 +13,8 @@ import {
   Text,
   TextInput,
   View,
-  Animated as RNAnimated,
 } from 'react-native';
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Path, Polyline, Rect, Stop } from 'react-native-svg';
+import Svg, { Polyline } from 'react-native-svg';
 import Reanimated, {
   FadeInDown,
   FadeInLeft,
@@ -25,7 +23,7 @@ import Reanimated, {
   useAnimatedStyle,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useTheme, SERIF, SANS, SANS_MED, SANS_REG } from '@/constants/theme';
+import { useTheme, SANS, SANS_MED, SANS_REG } from '@/constants/theme';
 import { getBottomContentPadding } from '@/lib/layout';
 import {
   getHomeData,
@@ -35,23 +33,7 @@ import {
   type JobSearchResult,
 } from '@/lib/api/mobileApi';
 
-const { width: SW } = Dimensions.get('window');
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-const STAR_POSITIONS = [
-  { cx: 28, cy: 18, r: 1.4, op: 0.72 },
-  { cx: 68, cy: 11, r: 1.0, op: 0.50 },
-  { cx: 102, cy: 28, r: 1.4, op: 0.84 },
-  { cx: 148, cy: 16, r: 0.9, op: 0.60 },
-  { cx: 180, cy: 7, r: 1.4, op: 0.68 },
-  { cx: 222, cy: 24, r: 1.0, op: 0.55 },
-  { cx: 258, cy: 14, r: 1.4, op: 0.90 },
-  { cx: 298, cy: 20, r: 1.0, op: 0.62 },
-  { cx: 332, cy: 9, r: 1.4, op: 0.72 },
-  { cx: 358, cy: 32, r: 1.0, op: 0.48 },
-  { cx: 48, cy: 40, r: 0.8, op: 0.42 },
-  { cx: 310, cy: 42, r: 0.8, op: 0.38 },
-];
 
 function fmtSalary(tnd: number | null) {
   if (!tnd) return null;
@@ -70,86 +52,61 @@ function seedSparkline(slug: string, growthPct: number | null, points = 10): num
 }
 
 function getDayLabel(roadmap: HomeData['roadmap']): { num: string; label: string } {
-  if (!roadmap) return { num: '001', label: 'First Light' };
+  if (!roadmap) return { num: '001', label: 'Plan Ready' };
   const { progress_pct, estimated_weeks } = roadmap;
   const totalDays = (estimated_weeks ?? 12) * 7;
   const currentDay = Math.max(1, Math.round((progress_pct / 100) * totalDays));
   const num = String(currentDay).padStart(3, '0');
-  if (progress_pct < 5) return { num, label: 'First Light' };
-  if (progress_pct < 25) return { num, label: 'Early Climb' };
-  if (progress_pct < 50) return { num, label: 'Mid Ascent' };
-  if (progress_pct < 75) return { num, label: 'High Terrain' };
-  return { num, label: 'Almost Ready' };
+  if (progress_pct < 5) return { num, label: 'Plan Ready' };
+  if (progress_pct < 25) return { num, label: 'Getting Started' };
+  if (progress_pct < 50) return { num, label: 'Building Momentum' };
+  if (progress_pct < 75) return { num, label: 'Strong Progress' };
+  return { num, label: 'Nearly Done' };
 }
 
 // ─── Progress Hero Illustration ───────────────────────────────────────────────
-function ProgressHero({ theme }: { theme: ReturnType<typeof useTheme> }) {
-  const H = 210;
-  const W = SW;
+function BrandHero({ firstName, theme }: { firstName: string; theme: ReturnType<typeof useTheme> }) {
   return (
-    <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'flex' }}>
-      <Defs>
-        <SvgGradient id="skyDark" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={theme.sky1} stopOpacity="1" />
-          <Stop offset="1" stopColor={theme.sky2} stopOpacity="1" />
-        </SvgGradient>
-        <SvgGradient id="quoteOverlay" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={theme.bg} stopOpacity="0" />
-          <Stop offset="1" stopColor={theme.bg} stopOpacity="0.92" />
-        </SvgGradient>
-      </Defs>
-
-      {/* Sky */}
-      <Rect x={0} y={0} width={W} height={H} fill="url(#skyDark)" />
-
-      {/* Stars */}
-      {STAR_POSITIONS.map((s, i) => (
-        <Circle key={i} cx={s.cx} cy={s.cy} r={s.r} fill={theme.starColor} opacity={s.op} />
-      ))}
-
-      {/* Far progress layers */}
-      <Path
-        d={`M0,${H} L${W * 0.05},${H * 0.52} L${W * 0.12},${H * 0.60} L${W * 0.20},${H * 0.43} L${W * 0.28},${H * 0.53} L${W * 0.36},${H * 0.37} L${W * 0.44},${H * 0.48} L${W * 0.52},${H * 0.33} L${W * 0.60},${H * 0.44} L${W * 0.68},${H * 0.30} L${W * 0.76},${H * 0.42} L${W * 0.84},${H * 0.27} L${W * 0.92},${H * 0.38} L${W},${H * 0.32} L${W},${H} Z`}
-        fill={theme.mtn1}
-      />
-
-      {/* Mid progress layers */}
-      <Path
-        d={`M0,${H} L${W * 0.08},${H * 0.63} L${W * 0.18},${H * 0.72} L${W * 0.28},${H * 0.55} L${W * 0.38},${H * 0.67} L${W * 0.48},${H * 0.50} L${W * 0.57},${H * 0.62} L${W * 0.66},${H * 0.46} L${W * 0.75},${H * 0.58} L${W * 0.84},${H * 0.43} L${W * 0.92},${H * 0.54} L${W},${H * 0.48} L${W},${H} Z`}
-        fill={theme.mtn2}
-      />
-
-      {/* Near progress layers */}
-      <Path
-        d={`M0,${H} L${W * 0.10},${H * 0.76} L${W * 0.22},${H * 0.83} L${W * 0.34},${H * 0.70} L${W * 0.46},${H * 0.79} L${W * 0.58},${H * 0.67} L${W * 0.70},${H * 0.76} L${W * 0.82},${H * 0.65} L${W * 0.92},${H * 0.74} L${W},${H * 0.68} L${W},${H} Z`}
-        fill={theme.mtn3}
-      />
-
-      {/* Foreground */}
-      <Path
-        d={`M0,${H} L${W * 0.15},${H * 0.88} L${W * 0.32},${H * 0.92} L${W * 0.50},${H * 0.85} L${W * 0.68},${H * 0.90} L${W * 0.85},${H * 0.84} L${W},${H * 0.87} L${W},${H} Z`}
-        fill={theme.mtn4}
-      />
-
-      {/* Dotted learning path */}
-      <Path
-        d={`M${W * 0.22},${H * 0.96} C${W * 0.42},${H * 0.72} ${W * 0.64},${H * 0.52} ${W * 0.84},${H * 0.30}`}
-        stroke={theme.pathColor}
-        strokeWidth={1.8}
-        strokeDasharray="5,7"
-        fill="none"
-        strokeLinecap="round"
-      />
-
-      {/* Peak marker dot */}
-      <Circle cx={W * 0.84} cy={H * 0.27} r={4} fill={theme.warm} opacity={0.9} />
-      <Circle cx={W * 0.84} cy={H * 0.27} r={7} fill={theme.warm} opacity={0.18} />
-
-      {/* Bottom gradient overlay for text readability */}
-      <Rect x={0} y={H * 0.5} width={W} height={H * 0.5} fill="url(#quoteOverlay)" />
-    </Svg>
+    <View style={[bh.card, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
+      <View style={bh.copy}>
+        <Text style={[bh.kicker, { color: theme.accent }]}>TODAY</Text>
+        <Text style={[bh.title, { color: theme.text }]}>Focus your next step</Text>
+        <Text style={[bh.body, { color: theme.textSecondary }]}>
+          One useful action at a time, {firstName}.
+        </Text>
+      </View>
+      <View style={bh.logoBadge}>
+        <Image source={require('@/assets/images/logo-Photoroom.png')} contentFit="contain" style={bh.logo} />
+      </View>
+    </View>
   );
 }
+
+const bh = StyleSheet.create({
+  card: {
+    minHeight: 154,
+    borderRadius: 18,
+    borderWidth: 1,
+    marginHorizontal: 16,
+    padding: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  copy: { flex: 1 },
+  kicker: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.3, marginBottom: 8 },
+  title: { fontFamily: SANS, fontSize: 24, lineHeight: 30, marginBottom: 8 },
+  body: { fontFamily: SANS_REG, fontSize: 13, lineHeight: 20 },
+  logoBadge: {
+    width: 74,
+    height: 74,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  logo: { width: 58, height: 58 },
+});
 
 // ─── Mini sparkline ───────────────────────────────────────────────────────────
 function MiniSparkline({ slug, growth, color }: { slug: string; growth: number | null; color: string }) {
@@ -215,9 +172,8 @@ function JobCard({ job, index, theme }: { job: TrendingJob; index: number; theme
         onPressOut={() => { scale.value = withSpring(1); }}
         onPress={() => router.push({ pathname: '/job-detail', params: { data: JSON.stringify(job) } })}
       >
-        <View style={jc.thumb}>
-          <Image source={{ uri: job.image_url }} contentFit="cover" style={StyleSheet.absoluteFillObject} transition={300} />
-          <View style={jc.thumbOverlay} />
+        <View style={[jc.iconCell, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '30' }]}>
+          <Feather name="briefcase" size={20} color={theme.accent} />
         </View>
         <View style={jc.info}>
           <Text style={[jc.cat, { color: theme.textTertiary }]} numberOfLines={1}>
@@ -253,8 +209,14 @@ function JobCard({ job, index, theme }: { job: TrendingJob; index: number; theme
 
 const jc = StyleSheet.create({
   card: { flexDirection: 'row', borderWidth: 1, borderRadius: 14, overflow: 'hidden', minHeight: 76, marginBottom: 8 },
-  thumb: { width: 64, height: 76, flexShrink: 0 },
-  thumbOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
+  iconCell: {
+    width: 64,
+    height: 76,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRightWidth: 1,
+  },
   info: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
   cat: { fontFamily: SANS_MED, fontSize: 9, letterSpacing: 0.6, marginBottom: 3 },
   title: { fontFamily: SANS_MED, fontSize: 13, lineHeight: 18, marginBottom: 4 },
@@ -389,9 +351,14 @@ export default function HomeScreen() {
 
         {/* ── Brand Header ── */}
         <View style={[s.header, { paddingTop: insets.top + 12 }]}>
-          <View>
+          <View style={s.brandRow}>
+            <View style={s.headerLogoBadge}>
+              <Image source={require('@/assets/images/logo-Photoroom.png')} contentFit="contain" style={s.headerLogo} />
+            </View>
+            <View>
             <Text style={[s.brandEye, { color: theme.textTertiary }]}>NEXAPATH</Text>
-            <Text style={[s.brandTitle, { color: theme.text }]}>Lace up.</Text>
+            <Text style={[s.brandTitle, { color: theme.text }]}>Home</Text>
+            </View>
           </View>
           <View style={s.headerIcons}>
             <Pressable
@@ -418,44 +385,33 @@ export default function HomeScreen() {
         </View>
 
         {/* ── Progress Hero ── */}
-        <View style={s.heroWrap}>
-          <ProgressHero theme={theme} />
-          {/* Quote overlay */}
-          <View style={s.quoteOverlay}>
-            <Text style={[s.quoteMain, { color: theme.text }]}>
-              Progress starts here.
-            </Text>
-            <Text style={[s.quoteSub, { color: theme.textSecondary }]}>
-              One focused step at a time, {firstName}.
-            </Text>
-          </View>
-        </View>
+        <BrandHero firstName={firstName} theme={theme} />
 
         {/* ── TODAY'S STEP — conditional on roadmap ── */}
         {roadmap ? (
           <Reanimated.View entering={FadeInDown.delay(80).springify()}>
-            <View style={[s.climbCard, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
+            <View style={[s.planCard, { backgroundColor: theme.surfaceCard, borderColor: theme.border }]}>
               {/* Accent top bar */}
-              <View style={[s.climbTopBar, { backgroundColor: theme.accent }]} />
-              <View style={s.climbInner}>
-                <View style={s.climbHeadRow}>
+              <View style={[s.planTopBar, { backgroundColor: theme.accent }]} />
+              <View style={s.planInner}>
+                <View style={s.planHeadRow}>
                   <View>
-                    <Text style={[s.climbEye, { color: theme.accent }]}>TODAY'S STEP</Text>
-                    <Text style={[s.climbTitle, { color: theme.text }]}>One small step.{'\n'}Every single day.</Text>
+                    <Text style={[s.planEye, { color: theme.accent }]}>TODAY'S STEP</Text>
+                    <Text style={[s.planTitle, { color: theme.text }]}>One focused task.{'\n'}Every single day.</Text>
                   </View>
                   <View style={[s.streakBadge, { backgroundColor: theme.warmLight, borderColor: theme.warm + '50' }]}>
                     <Text style={[s.streakNum, { color: theme.warm }]}>{roadmap.completed_steps}</Text>
                     <Text style={[s.streakLabel, { color: theme.warm + 'AA' }]}>DAY{'\n'}STREAK</Text>
                   </View>
                 </View>
-                <Text style={[s.climbDesc, { color: theme.textSecondary }]}>
+                <Text style={[s.planDesc, { color: theme.textSecondary }]}>
                   15 minutes. One concept. You start fresh every morning — that's the whole deal.
                 </Text>
                 <Pressable
-                  style={[s.climbBtn, { backgroundColor: theme.accent }]}
+                  style={[s.planBtn, { backgroundColor: theme.accent }]}
                   onPress={() => router.push('/(tabs)/roadmap')}
                 >
-                  <Text style={[s.climbBtnText, { color: theme.textOnAccent }]}>Begin today's step  →</Text>
+                  <Text style={[s.planBtnText, { color: theme.textOnAccent }]}>Begin today's step</Text>
                 </Pressable>
               </View>
             </View>
@@ -464,7 +420,7 @@ export default function HomeScreen() {
             <Reanimated.View entering={FadeInDown.delay(140).springify()}>
               <View style={[s.weekCard, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
                 <View style={s.weekHeader}>
-                  <Text style={[s.weekTitle, { color: theme.text }]}>Climbs completed</Text>
+                  <Text style={[s.weekTitle, { color: theme.text }]}>Steps completed</Text>
                   <Text style={[s.weekCount, { color: theme.textTertiary }]}>0 / 7</Text>
                 </View>
                 <View style={s.weekDots}>
@@ -491,7 +447,7 @@ export default function HomeScreen() {
               <View style={[s.pathTopBar, { backgroundColor: theme.warm }]} />
               <View style={s.pathInner}>
                 <Text style={[s.pathEye, { color: theme.warm }]}>YOUR PATH AWAITS</Text>
-                <Text style={[s.pathTitle, { color: theme.text }]}>Map your plan.{'\n'}Start your journey.</Text>
+                <Text style={[s.pathTitle, { color: theme.text }]}>Map your plan.{'\n'}Start clean.</Text>
                 <Text style={[s.pathDesc, { color: theme.textSecondary }]}>
                   Chat with NexaPath AI to build your personalized learning roadmap. Takes about 5 minutes.
                 </Text>
@@ -500,7 +456,7 @@ export default function HomeScreen() {
                   onPress={() => router.push('/onboarding-chat')}
                 >
                   <Feather name="map" size={15} color="#FFF" />
-                  <Text style={s.pathBtnText}>Build my path  →</Text>
+                  <Text style={s.pathBtnText}>Build my roadmap</Text>
                 </Pressable>
               </View>
             </View>
@@ -618,7 +574,17 @@ function makeStyles(theme: ReturnType<typeof useTheme>) {
       paddingBottom: 6,
     },
     brandEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 2.5, marginBottom: 4 },
-    brandTitle: { fontFamily: SANS, fontSize: 40, letterSpacing: -1.5 },
+    brandTitle: { fontFamily: SANS, fontSize: 34, letterSpacing: 0 },
+    brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    headerLogoBadge: {
+      width: 52,
+      height: 52,
+      borderRadius: 16,
+      backgroundColor: '#FFFFFF',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerLogo: { width: 42, height: 42 },
     headerIcons: { flexDirection: 'row', gap: 8, paddingTop: 6 },
     iconBtn: {
       width: 40, height: 40, borderRadius: 12,
@@ -637,30 +603,15 @@ function makeStyles(theme: ReturnType<typeof useTheme>) {
     dayDiamond: { width: 6, height: 6, borderRadius: 2, transform: [{ rotate: '45deg' }] },
     dayText: { fontFamily: SANS_MED, fontSize: 11, letterSpacing: 0.6 },
 
-    // Hero
-    heroWrap: { marginHorizontal: 0, marginBottom: 0, position: 'relative' },
-    quoteOverlay: {
-      position: 'absolute',
-      bottom: 16, left: 22, right: 22,
-    },
-    quoteMain: {
-      fontFamily: SERIF, fontSize: 22, fontStyle: 'italic', lineHeight: 30,
-      letterSpacing: 0.2, marginBottom: 4,
-    },
-    quoteSub: {
-      fontFamily: SERIF, fontSize: 14, fontStyle: 'italic', lineHeight: 20,
-    },
-
-    // Today's Climb card
-    climbCard: {
+    planCard: {
       marginHorizontal: 16, marginTop: 16, marginBottom: 4,
       borderRadius: 18, borderWidth: 1, overflow: 'hidden',
     },
-    climbTopBar: { height: 3 },
-    climbInner: { padding: 18 },
-    climbHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-    climbEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.5, marginBottom: 6 },
-    climbTitle: { fontFamily: SANS, fontSize: 20, letterSpacing: -0.4, lineHeight: 26 },
+    planTopBar: { height: 3 },
+    planInner: { padding: 18 },
+    planHeadRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
+    planEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.5, marginBottom: 6 },
+    planTitle: { fontFamily: SANS, fontSize: 20, letterSpacing: 0, lineHeight: 26 },
     streakBadge: {
       alignItems: 'center',
       paddingHorizontal: 12, paddingVertical: 8,
@@ -668,12 +619,12 @@ function makeStyles(theme: ReturnType<typeof useTheme>) {
     },
     streakNum: { fontFamily: SANS, fontSize: 22, lineHeight: 26 },
     streakLabel: { fontFamily: SANS_MED, fontSize: 8, letterSpacing: 1, textAlign: 'center', marginTop: 2 },
-    climbDesc: { fontFamily: SANS_REG, fontSize: 13, lineHeight: 20, marginBottom: 16 },
-    climbBtn: {
+    planDesc: { fontFamily: SANS_REG, fontSize: 13, lineHeight: 20, marginBottom: 16 },
+    planBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
       paddingVertical: 14, borderRadius: 12,
     },
-    climbBtnText: { fontFamily: SANS, fontSize: 15, letterSpacing: 0.2 },
+    planBtnText: { fontFamily: SANS, fontSize: 15, letterSpacing: 0 },
 
     // Last 7 days
     weekCard: {

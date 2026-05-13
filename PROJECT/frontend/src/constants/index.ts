@@ -22,6 +22,7 @@ export const ROUTES = {
   USERS:               "/users",
   JOB_ROLES:           "/job-roles",
   ROADMAPS:            "/roadmaps",
+  COMMUNITY:           "/community",
   SUBSCRIPTIONS:       "/subscriptions",
   AI_CHAT:             "/ai-chat",
   AI_ROADMAP:          "/ai-roadmap",

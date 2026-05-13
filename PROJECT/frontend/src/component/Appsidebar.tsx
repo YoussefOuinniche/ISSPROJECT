@@ -2,7 +2,7 @@ import { useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard, BookOpen, Zap, Users,
   Briefcase, Map, CreditCard, Settings,
-  ChevronLeft, ChevronRight, MessageSquareText, Wand2,
+  ChevronLeft, ChevronRight, MessageSquareText, Wand2, Share2,
 } from "lucide-react";
 import { useSidebar } from "@/component/ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -23,6 +23,7 @@ const sections = [
       { title: "Courses",   url: ROUTES.COURSES,   icon: BookOpen },
       { title: "Skills",    url: ROUTES.SKILLS,    icon: Zap },
       { title: "Roadmaps",  url: ROUTES.ROADMAPS,  icon: Map },
+      { title: "Community", url: ROUTES.COMMUNITY, icon: Share2 },
     ],
   },
   {

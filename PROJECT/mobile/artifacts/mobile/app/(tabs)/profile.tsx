@@ -1,21 +1,15 @@
 'use no memo';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useEffect } from 'react';
+import React from 'react';
 import Reanimated, {
   FadeIn,
   FadeInDown,
   useAnimatedStyle,
   useSharedValue,
-  withRepeat,
-  withSequence,
   withSpring,
-  withTiming,
-  ZoomIn,
 } from 'react-native-reanimated';
 import {
-  Dimensions,
   Platform,
   Pressable,
   ScrollView,
@@ -23,14 +17,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, {
-  Circle,
-  Defs,
-  LinearGradient as SvgGradient,
-  Path,
-  Rect,
-  Stop,
-} from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetCurrentUser, useGetUserDashboard, useLogoutAuth } from '@workspace/api-client-react';
@@ -39,8 +25,6 @@ import { computeProfileCompleteness } from '@/lib/profileScore';
 import { getBottomContentPadding } from '@/lib/layout';
 import { useAIProfile } from '@/hooks/useAIProfile';
 import { useTheme, SERIF, SANS, SANS_MED, SANS_REG } from '@/constants/theme';
-
-const { width: SW } = Dimensions.get('window');
 
 // ─── Rank system ─────────────────────────────────────────────────────────────
 const RANKS = ['Starter', 'Learner', 'Advanced', 'Expert'];
@@ -54,65 +38,36 @@ function getRankInfo(skillScore: number): { name: string; tier: number; nextXP: 
   return { name: RANKS[rankIdx], tier, nextXP, xp };
 }
 
-// ─── Profile header scene ─────────────────────────────────────────────────────
-function ProfileHeaderScene({ theme }: { theme: ReturnType<typeof useTheme> }) {
-  const H = 200;
-  const W = SW;
-  const BIRD_PATHS = [
-    `M${W * 0.18},${H * 0.24} q3,-4 6,0 q3,4 6,0`,
-    `M${W * 0.32},${H * 0.16} q3,-3.5 5.5,0 q3,3.5 5.5,0`,
-    `M${W * 0.55},${H * 0.20} q2.5,-3 5,0 q2.5,3 5,0`,
-  ];
-
+function ProfileHeaderPanel({ theme, initials }: { theme: ReturnType<typeof useTheme>; initials: string }) {
   return (
-    <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
-      <Defs>
-        <SvgGradient id="sceneGrad" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={theme.sky1} stopOpacity="1" />
-          <Stop offset="1" stopColor={theme.sky2} stopOpacity="1" />
-        </SvgGradient>
-        <SvgGradient id="sceneOverlay" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0.5" stopColor={theme.bg} stopOpacity="0" />
-          <Stop offset="1" stopColor={theme.bg} stopOpacity="1" />
-        </SvgGradient>
-      </Defs>
-
-      {/* Sky */}
-      <Rect x={0} y={0} width={W} height={H} fill="url(#sceneGrad)" />
-
-      {/* Sun / Moon */}
-      <Circle cx={W * 0.85} cy={H * 0.18} r={22} fill={theme.isDark ? '#FDEDC0' : '#FDEDC0'} opacity={theme.isDark ? 0.85 : 0.95} />
-      <Circle cx={W * 0.85} cy={H * 0.18} r={30} fill={theme.isDark ? '#FDEDC0' : '#FDEDC0'} opacity={0.14} />
-
-      {/* Far progress layers */}
-      <Path
-        d={`M0,${H} L${W * 0.08},${H * 0.55} L${W * 0.18},${H * 0.65} L${W * 0.30},${H * 0.45} L${W * 0.42},${H * 0.58} L${W * 0.55},${H * 0.38} L${W * 0.65},${H * 0.50} L${W * 0.78},${H * 0.35} L${W * 0.90},${H * 0.48} L${W},${H * 0.42} L${W},${H} Z`}
-        fill={theme.mtn1}
-        opacity={0.85}
-      />
-
-      {/* Mid progress layers */}
-      <Path
-        d={`M0,${H} L${W * 0.12},${H * 0.70} L${W * 0.24},${H * 0.78} L${W * 0.38},${H * 0.60} L${W * 0.52},${H * 0.72} L${W * 0.65},${H * 0.56} L${W * 0.76},${H * 0.68} L${W * 0.88},${H * 0.58} L${W},${H * 0.62} L${W},${H} Z`}
-        fill={theme.mtn2}
-      />
-
-      {/* Near hills */}
-      <Path
-        d={`M0,${H} L${W * 0.18},${H * 0.82} L${W * 0.36},${H * 0.88} L${W * 0.54},${H * 0.76} L${W * 0.72},${H * 0.84} L${W * 0.88},${H * 0.78} L${W},${H * 0.82} L${W},${H} Z`}
-        fill={theme.mtn3}
-      />
-
-      {/* Birds */}
-      {BIRD_PATHS.map((d, i) => (
-        <Path key={i} d={d} stroke={theme.isDark ? theme.text : theme.mtn1} strokeWidth={1.4} fill="none" opacity={0.70} />
-      ))}
-
-      {/* Bottom gradient blend */}
-      <Rect x={0} y={H * 0.55} width={W} height={H * 0.45} fill="url(#sceneOverlay)" />
-    </Svg>
+    <View style={[ph.panel, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
+      <View>
+        <Text style={[ph.kicker, { color: theme.textSecondary }]}>PROFILE</Text>
+        <Text style={[ph.title, { color: theme.text }]}>My progress</Text>
+      </View>
+      <View style={[ph.avatar, { backgroundColor: theme.accent }]}>
+        <Text style={[ph.avatarText, { color: theme.textOnAccent }]}>{initials}</Text>
+      </View>
+    </View>
   );
 }
+
+const ph = StyleSheet.create({
+  panel: {
+    minHeight: 150,
+    marginHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  kicker: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.5, marginBottom: 6 },
+  title: { fontFamily: SANS, fontSize: 30, letterSpacing: 0 },
+  avatar: { width: 68, height: 68, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { fontFamily: SANS, fontSize: 24 },
+});
 
 // ─── Stat pill ────────────────────────────────────────────────────────────────
 function StatPill({
@@ -297,7 +252,7 @@ export default function ProfileScreen() {
   const mantraQuotes = [
     '"Yesterday ended last night. Today is fresh. Start with one step."',
     '"Every strong plan begins with one focused action."',
-    '"The peak is earned, not given. One day at a time."',
+    '"Strong careers are built one focused action at a time."',
   ];
   const mantra = mantraQuotes[new Date().getDate() % mantraQuotes.length];
 
@@ -317,18 +272,8 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: getBottomContentPadding(insets.bottom, { hasTabBar: true }) }}
       >
 
-        {/* ── Profile Scene Header ── */}
-        <View style={{ position: 'relative' }}>
-          <View style={{ paddingTop: Platform.OS === 'web' ? insets.top + 60 : insets.top }}>
-            <ProfileHeaderScene theme={theme} />
-          </View>
-          {/* Header controls overlay */}
-          <View style={[s.sceneHeader, { paddingTop: Platform.OS === 'web' ? insets.top + 60 : insets.top + 14 }]}>
-            <View>
-              <Text style={[s.sceneEye, { color: theme.textSecondary }]}>PROFILE · ID 000001</Text>
-              <Text style={[s.sceneTitle, { color: theme.text }]}>My progress</Text>
-            </View>
-          </View>
+        <View style={{ paddingTop: Platform.OS === 'web' ? insets.top + 76 : insets.top + 16 }}>
+          <ProfileHeaderPanel theme={theme} initials={initials} />
         </View>
 
         <View style={s.body}>
@@ -344,7 +289,7 @@ export default function ProfileScreen() {
                 <View style={s.profileInfo}>
                   <Text style={[s.profileName, { color: theme.text }]}>{shortName}</Text>
                   <Text style={[s.profileSince, { color: theme.textSecondary }]}>
-                    Climbing since Day 001
+                    Active since Day 001
                   </Text>
                   {email ? (
                     <View style={s.emailRow}>
@@ -483,21 +428,6 @@ function makeStyles(theme: ReturnType<typeof useTheme>) {
   return StyleSheet.create({
     root: { flex: 1 },
     body: { paddingHorizontal: 16, paddingTop: 8 },
-
-    // Scene header overlay
-    sceneHeader: {
-      position: 'absolute', top: 0, left: 0, right: 0,
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-      paddingHorizontal: 20,
-    },
-    sceneEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.5, marginBottom: 4 },
-    sceneTitle: { fontFamily: SERIF, fontSize: 34, fontStyle: 'italic', letterSpacing: 0.2 },
-    sceneRight: { flexDirection: 'row', gap: 8, paddingTop: 6 },
-    sceneBtn: {
-      width: 38, height: 38, borderRadius: 12,
-      alignItems: 'center', justifyContent: 'center', borderWidth: 1,
-    },
-
     // Profile card
     profileCard: {
       borderRadius: 20, borderWidth: 1, padding: 18, marginBottom: 12,

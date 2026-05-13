@@ -666,7 +666,7 @@ export default function OnboardingChatScreen() {
       const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
       setIsEarlyExit(true);
       appendAIMessage(
-        `ASSESSMENT_LOCKED ⚠️\n\nBasic score: ${avg.toFixed(1)}/10 — this indicates you're at the very beginning of this journey.\n\nThis is your starting point. We will not go deeper. Press GENERATE ROADMAP to compile your beginner roadmap.`
+        `ASSESSMENT_LOCKED\n\nBasic score: ${avg.toFixed(1)}/10. This indicates you are at the beginning of this plan.\n\nThis is your starting point. We will not go deeper. Press GENERATE ROADMAP to compile your beginner roadmap.`
       );
       // Use default advanced scores so compatibility is weighted low (beginner)
       finishAssessment(scores, [2, 2, 2, 2, 2]);

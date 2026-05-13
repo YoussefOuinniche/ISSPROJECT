@@ -22,6 +22,7 @@ import {
   ensureStepResources,
   fetchProfileId,
   getRoadmapWithSteps,
+  shareCompletedRoadmap,
   updateRoadmapStepStatus,
   type RoadmapStep,
   type RoadmapWithSteps,
@@ -293,6 +294,7 @@ export default function RoadmapScreen() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [shareState, setShareState] = useState<'idle' | 'sharing' | 'shared' | 'error'>('idle');
 
   const loadRoadmap = useCallback(async (opts: { silent?: boolean } = {}) => {
     try {
@@ -353,6 +355,18 @@ export default function RoadmapScreen() {
   const completedSteps = steps.filter(step => step.status === 'completed').length;
   const progress = totalSteps ? Math.round((completedSteps / totalSteps) * 100) : 0;
   const activeStep = steps[selectedIndex] ?? steps[0] ?? null;
+  const isComplete = totalSteps > 0 && completedSteps === totalSteps;
+
+  async function handleShareRoadmap() {
+    if (!roadmap || !isComplete || shareState === 'sharing') return;
+    setShareState('sharing');
+    try {
+      await shareCompletedRoadmap(roadmap);
+      setShareState('shared');
+    } catch {
+      setShareState('error');
+    }
+  }
 
   return (
     <View style={[styles.screen, { backgroundColor: theme.bg }]}>
@@ -376,6 +390,21 @@ export default function RoadmapScreen() {
           </View>
         </View>
         <ProgressBar value={progress} color={theme.primary} />
+        {isComplete ? (
+          <Pressable
+            style={[styles.shareButton, { backgroundColor: theme.accent }]}
+            onPress={handleShareRoadmap}
+            disabled={shareState === 'sharing'}
+          >
+            <Feather name={shareState === 'shared' ? 'check-circle' : 'share-2'} size={15} color={theme.textOnAccent} />
+            <Text style={[styles.shareButtonText, { color: theme.textOnAccent }]}>
+              {shareState === 'sharing' ? 'Sharing...' : shareState === 'shared' ? 'Shared to Community' : 'Share to Community'}
+            </Text>
+          </Pressable>
+        ) : null}
+        {shareState === 'error' ? (
+          <Text style={[styles.shareError, { color: theme.warm }]}>Could not share yet. Try again.</Text>
+        ) : null}
       </LinearGradient>
 
       <ScrollView
@@ -486,6 +515,24 @@ const styles = StyleSheet.create({
   progressFill: {
     height: 7,
     borderRadius: 999,
+  },
+  shareButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    marginTop: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  shareButtonText: {
+    fontFamily: SANS,
+    fontSize: 14,
+  },
+  shareError: {
+    fontFamily: SANS_REG,
+    fontSize: 12,
+    marginTop: 8,
   },
   content: {
     paddingHorizontal: 18,

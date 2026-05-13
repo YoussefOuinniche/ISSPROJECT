@@ -166,9 +166,8 @@ Respond with ONLY valid JSON — no markdown, no explanation outside the object.
 /**
  * POST /api/qwen/roadmap
  * Body: { name, role, basicScores, advancedScores, educationLevel, yearsExperience }
- * Returns: { steps, mountainParams, mock }
+ * Returns: { steps, mock }
  * steps: Array<{ order, title, description, isWeak }>
- * mountainParams: { stepCount, biome, heightScale, roughness }
  */
 async function generateRoadmap(req, res, next) {
   try {
@@ -190,10 +189,7 @@ async function generateRoadmap(req, res, next) {
     // Determine weak areas (score < 6)
     const weakCount = allScores.filter(s => s < 6).length;
 
-    // Mountain parameters
     const stepCount = Math.min(10, Math.max(1, weakCount || Math.ceil((10 - avg))));
-    const biome     = stepCount <= 3 ? 'hill' : stepCount <= 6 ? 'mountain' : 'peak';
-    const mountainParams = { stepCount, biome, heightScale: stepCount * 2.8, roughness: stepCount / 10 };
 
     if (MOCK_MODE) {
       const steps = Array.from({ length: stepCount }, (_, i) => ({
@@ -203,7 +199,7 @@ async function generateRoadmap(req, res, next) {
         description: `Strengthen your understanding of this core area for ${role}.`,
         isWeak:      true,
       }));
-      return res.json({ success: true, steps, mountainParams, avg, mock: true });
+      return res.json({ success: true, steps, avg, mock: true });
     }
 
     const system = `You are a career roadmap expert. Given a candidate's assessment scores,
@@ -261,7 +257,6 @@ Generate the roadmap JSON now.`;
     res.json({
       success:         true,
       steps:           parsed.steps || [],
-      mountainParams,
       avg,
       mock:            false,
     });

@@ -31,13 +31,13 @@ export const DarkTheme = {
   warmLight: 'rgba(240,174,48,0.16)',
   gold: '#F0AE30',
 
-  // Illustration layers
+  // Brand surfaces
   sky1: '#03080F',
   sky2: '#060C18',
-  mtn1: '#091422',
-  mtn2: '#0E1E36',
-  mtn3: '#14284A',
-  mtn4: '#1A3260',
+  panel1: '#091422',
+  panel2: '#0E1E36',
+  panel3: '#14284A',
+  panel4: '#1A3260',
   starColor: 'rgba(224,236,255,0.70)',
   pathColor: 'rgba(74,144,226,0.55)',
 
@@ -78,13 +78,13 @@ export const LightTheme = {
   warmLight: 'rgba(224,120,32,0.13)',
   gold: '#C88E0A',
 
-  // Illustration layers
+  // Brand surfaces
   sky1: '#BACED8',
   sky2: '#D0E2EE',
-  mtn1: '#7AA0C0',
-  mtn2: '#9AB8D0',
-  mtn3: '#B4CAE0',
-  mtn4: '#C8DCF0',
+  panel1: '#7AA0C0',
+  panel2: '#9AB8D0',
+  panel3: '#B4CAE0',
+  panel4: '#C8DCF0',
   starColor: 'rgba(255,255,255,0.95)',
   pathColor: 'rgba(30,80,180,0.28)',
 

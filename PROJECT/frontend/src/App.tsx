@@ -14,6 +14,7 @@ import UsersPage from "./pages/UsersPage";
 import JobRoles from "./pages/JobRoles";
 import Roadmaps from "./pages/Roadmaps";
 import RoadmapDetail from "./pages/RoadmapDetail";
+import Community from "./pages/Community";
 import Subscriptions from "./pages/Subscriptions";
 import SettingsPage from "./pages/SettingsPage";
 import LoginPage from "./pages/LoginPage";
@@ -46,6 +47,7 @@ function ProtectedRoutes() {
           <Route path="/job-roles"           element={<JobRoles />} />
           <Route path="/roadmaps"            element={<Roadmaps />} />
           <Route path="/roadmaps/:id"        element={<RoadmapDetail />} />
+          <Route path="/community"           element={<Community />} />
           <Route path="/subscriptions"       element={<Subscriptions />} />
           <Route path="/ai-chat"             element={<AIChat />} />
           <Route path="/ai-roadmap"          element={<AIRoadmapGenerator />} />

@@ -83,14 +83,21 @@ export default function TabLayout() {
       <Tabs.Screen
         name="roadmap"
         options={{
-          title: 'Route',
+          title: 'Roadmap',
           tabBarIcon: ({ focused }) => <TabIcon name="map" focused={focused} theme={theme} />,
+        }}
+      />
+      <Tabs.Screen
+        name="community"
+        options={{
+          title: 'Community',
+          tabBarIcon: ({ focused }) => <TabIcon name="users" focused={focused} theme={theme} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Climber',
+          title: 'Profile',
           tabBarIcon: ({ focused }) => <TabIcon name="user" focused={focused} theme={theme} />,
         }}
       />

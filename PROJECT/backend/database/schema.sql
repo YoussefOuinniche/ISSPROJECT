@@ -170,6 +170,29 @@ CREATE INDEX IF NOT EXISTS idx_skill_trends_window_start
     ON skill_trends (window_start DESC);
 
 -- ============================================================
+-- 12. COMMUNITY_ROADMAP_SHARES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS community_roadmap_shares (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    roadmap_id      UUID NOT NULL REFERENCES ai_roadmaps(id) ON DELETE CASCADE,
+    profile_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    title           VARCHAR(255) NOT NULL,
+    summary         TEXT,
+    completed_steps INTEGER NOT NULL DEFAULT 0 CHECK (completed_steps >= 0),
+    total_steps     INTEGER NOT NULL DEFAULT 0 CHECK (total_steps >= 0),
+    is_public       BOOLEAN NOT NULL DEFAULT TRUE,
+    shared_at       TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (roadmap_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_community_roadmap_shares_public_shared
+    ON community_roadmap_shares (is_public, shared_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_community_roadmap_shares_profile
+    ON community_roadmap_shares (profile_id, shared_at DESC);
+
+-- ============================================================
 -- AUTO-UPDATE updated_at TRIGGER
 -- ============================================================
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -184,7 +207,7 @@ DO $$
 DECLARE
     t TEXT;
 BEGIN
-    FOREACH t IN ARRAY ARRAY['users','profiles','skills','user_skills','skill_gaps','trends','recommendations']
+    FOREACH t IN ARRAY ARRAY['users','profiles','skills','user_skills','skill_gaps','trends','recommendations','community_roadmap_shares']
     LOOP
         EXECUTE format(
             'DROP TRIGGER IF EXISTS trg_%s_updated_at ON %I;
