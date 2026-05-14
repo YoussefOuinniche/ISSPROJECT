@@ -1,10 +1,8 @@
 import React, { useState } from "react";
-import { Platform, Pressable, Text, View, TextInput, StyleSheet } from "react-native";
+import { Pressable, TextInput, StyleSheet, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import Colors from "@/constants/colors";
 
-const MONO = Platform.OS === "ios" ? "Courier New" : "monospace";
+import { SANS_REG, useTheme } from "@/constants/theme";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -12,39 +10,40 @@ interface ChatInputProps {
 }
 
 export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
+  const theme = useTheme();
   const [text, setText] = useState("");
+  const canSend = Boolean(text.trim() && !disabled);
 
   const handleSend = () => {
-    if (text.trim() && !disabled) {
-      onSend(text.trim());
-      setText("");
-    }
+    if (!canSend) return;
+    onSend(text.trim());
+    setText("");
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.prompt}>{">"}</Text>
-      <TextInput
-        style={styles.input}
-        value={text}
-        onChangeText={setText}
-        placeholder="ask nexapath_ai_"
-        placeholderTextColor={Colors.textTertiary}
-        multiline
-        maxLength={500}
-        editable={!disabled}
-      />
+    <View style={[styles.container, { backgroundColor: theme.surface, borderTopColor: theme.borderSubtle }]}>
+      <View style={[styles.inputWrap, { backgroundColor: theme.bg2, borderColor: theme.borderSubtle }]}>
+        <TextInput
+          style={[styles.input, { color: theme.text }]}
+          value={text}
+          onChangeText={setText}
+          placeholder="Ask about your roadmap, skills, or next role..."
+          placeholderTextColor={theme.textTertiary}
+          multiline
+          maxLength={500}
+          editable={!disabled}
+        />
+      </View>
       <Pressable
-        style={[styles.sendButton, (!text.trim() || disabled) && styles.sendButtonDisabled]}
+        style={[
+          styles.sendButton,
+          { backgroundColor: canSend ? theme.accent : theme.borderSubtle },
+          !canSend && styles.sendButtonDisabled,
+        ]}
         onPress={handleSend}
-        disabled={!text.trim() || disabled}
+        disabled={!canSend}
       >
-        <LinearGradient
-          colors={text.trim() && !disabled ? [Colors.primary, Colors.primaryDark] : [Colors.borderSubtle, Colors.borderSubtle]}
-          style={styles.sendGrad}
-        >
-          <Feather name="send" size={14} color="#fff" />
-        </LinearGradient>
+        <Feather name="send" size={17} color={theme.textOnAccent} />
       </Pressable>
     </View>
   );
@@ -55,44 +54,35 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderSubtle,
-    gap: 8,
-  },
-  prompt: {
-    fontFamily: MONO,
-    fontSize: 16,
-    color: Colors.primary,
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 120,
-    backgroundColor: Colors.background2,
-    borderRadius: 5,
-    paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 12,
-    fontSize: 13,
-    color: Colors.textPrimary,
-    fontFamily: MONO,
+    borderTopWidth: 1,
+    gap: 10,
+  },
+  inputWrap: {
+    flex: 1,
+    minHeight: 48,
+    maxHeight: 126,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: Colors.borderSubtle,
+    paddingHorizontal: 14,
+    paddingVertical: 3,
+  },
+  input: {
+    minHeight: 42,
+    maxHeight: 112,
+    paddingTop: 10,
+    paddingBottom: 10,
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: SANS_REG,
   },
   sendButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 5,
-    overflow: "hidden",
-  },
-  sendButtonDisabled: { opacity: 0.35 },
-  sendGrad: {
-    flex: 1,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
+  sendButtonDisabled: { opacity: 0.45 },
 });

@@ -6,16 +6,17 @@ export default ({ config }) => ({
     slug: 'skillpulse',
     version: '1.0.0',
     orientation: 'portrait',
+    scheme: 'mobile',
     userInterfaceStyle: 'light',
     newArchEnabled: true,
     splash: {
-      image: './assets/images/logo-Photoroom.png',
+      image: './assets/images/splash-icon.png',
       resizeMode: 'contain',
       backgroundColor: '#03071A',
     },
     ios: { supportsTablet: false },
     android: { usesCleartextTraffic: true },
-    web: { favicon: './assets/images/logo-Photoroom.png' },
+    web: { favicon: './assets/images/icon.png' },
     plugins: [
       ['expo-router', { origin: 'https://replit.com/' }],
       'expo-font',
@@ -24,6 +25,8 @@ export default ({ config }) => ({
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL,
       apiBaseUrl: process.env.EXPO_PUBLIC_API_URL,
+      supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
+      supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
     },
     experiments: {
       typedRoutes: true,

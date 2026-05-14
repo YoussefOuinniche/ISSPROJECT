@@ -1,348 +1,517 @@
-# NexaPath — AI-Powered Upskilling Platform
+# NexaPath Mobile App
 
-NexaPath is a full-stack platform that helps users identify skill gaps, generate personalized learning roadmaps, and track career progress — powered by a local Ollama LLM (qwen2.5:7b).
+NexaPath is an AI-powered mobile learning and career guidance app. It helps a user define a target role, assess their current skill level, generate a personalized learning roadmap, track progress step by step, discover job-market trends, and chat with an AI career assistant.
 
----
+The mobile app is built with Expo, React Native, Expo Router, React Query, and generated TypeScript API clients. It is part of a larger full-stack workspace that includes a Node.js backend, a FastAPI AI service, Supabase/PostgreSQL data storage, and a React admin dashboard.
 
-## Tech Stack
+## Project Context
 
-| Layer | Technology |
-|-------|-----------|
-| **Frontend (Web)** | React 18, TypeScript, Vite, TailwindCSS, shadcn/ui, React Query |
-| **Backend API** | Node.js, Express 4, JWT, Helmet |
-| **Database** | Supabase (PostgreSQL) |
-| **AI Service** | Python 3.11+, FastAPI, asyncpg, httpx |
-| **LLM** | Ollama · qwen2.5:7b (local inference) |
-| **Mobile** | Expo / React Native (workspace in `mobile/`) |
+NexaPath is designed around one core user journey:
 
----
+1. A learner creates an account or signs in.
+2. The app checks whether a valid session already exists and routes the user automatically.
+3. If the learner has no roadmap yet, the app guides them through an AI onboarding assessment.
+4. The assessment collects profile information, target role, current skills, education, experience, weekly learning availability, and knowledge scores.
+5. The roadmap generator analyzes skill gaps, maps those gaps to learning resources, asks the local LLM for a structured learning plan, then saves the roadmap and steps.
+6. The learner follows the roadmap, marks steps as started or completed, and can share a completed roadmap with the community.
+7. The learner can use AI chat, recommendations, job search, trends, and profile insights to keep the plan aligned with their career goal.
 
-## Folder Structure
+## Repository Layout
 
-```
-ISSPROJECT/
-├── ai/                        # Python FastAPI AI service (port 8000)
-│   ├── backend.py             # FastAPI app entry point
-│   ├── services/              # LLM service abstraction
-│   ├── ai_chat_*              # Chat feature modules
-│   ├── ai_roadmap_*           # Roadmap generation modules
-│   ├── ai_skill_gap_*         # Skill gap analysis modules
-│   ├── ai_profile_*           # Profile extraction modules
-│   ├── trend_worker.py        # Background trend processing
-│   └── requirements.txt       # Python dependencies
-│
-├── backend/                   # Node.js Express API (port 5000)
-│   ├── src/
-│   │   ├── server.js          # Entry point
-│   │   ├── app.js             # Express app + routes
-│   │   ├── controllers/       # Route handlers
-│   │   ├── models/            # Supabase query models
-│   │   ├── routes/            # Route definitions
-│   │   ├── middlewares/       # Auth & validation middleware
-│   │   └── utils/             # Shared utilities
-│   ├── documentation/         # Backend API docs
-│   └── .env                   # Backend config
-│
-├── frontend/                  # React + Vite web app (port 5173)
-│   ├── src/
-│   │   ├── pages/             # Route pages (Dashboard, AI Chat, Roadmaps…)
-│   │   ├── component/         # Shared UI components
-│   │   ├── lib/api.ts         # Axios services for backend + AI
-│   │   └── constants/         # App constants + route definitions
-│   └── .env                   # Frontend env vars
-│
-└── mobile/                    # Expo React Native app
-    └── artifacts/
-        └── mobile/            # Mobile app source
+```text
+PROJECT/
+  ai/                              FastAPI AI service and LLM integration
+  backend/                         Node.js/Express API, auth, Supabase models, job aggregation
+  frontend/                        React/Vite admin dashboard
+  mobile/
+    package.json                   PNPM workspace scripts
+    lib/                           Generated API packages and DB helper packages
+    artifacts/
+      mobile/                      Expo React Native mobile app
+      api-server/                  Lightweight API server artifact
+  project_requirements/            Project PDFs and diagrams
 ```
 
----
+The mobile app source is located at:
+
+```text
+PROJECT/mobile/artifacts/mobile
+```
+
+## Mobile App Structure
+
+```text
+PROJECT/mobile/artifacts/mobile/
+  app/                             Expo Router screens and route groups
+    _layout.tsx                    Root stack, font loading, API runtime setup
+    index.tsx                      Splash/session bootstrap screen
+    login.tsx                      Email login
+    signup.tsx                     Account registration
+    onboarding-chat.tsx            AI onboarding assessment chat
+    recommendations.tsx            AI recommendation view
+    profile-completion.tsx         Profile completion workflow
+    job-detail.tsx                 Job role detail view
+    settings.tsx                   Account/profile settings
+    (tabs)/
+      _layout.tsx                  Bottom tab navigation
+      index.tsx                    Today/home dashboard
+      roadmap.tsx                  Learning roadmap and step tracking
+      community.tsx                Shared completed roadmaps
+      profile.tsx                  Profile, progress, AI insights, account menu
+      ai-chat.tsx                  Hidden tab route for AI chat
+      skills.tsx                   Hidden tab route for skill detail/workflows
+      learn.tsx                    Hidden tab route for learning content
+      trends.tsx                   Hidden tab route for market trends
+  components/                      Reusable UI, chat, profile, roadmap components
+  constants/                       Theme, color, profile option, roadmap role constants
+  hooks/                           Shared hooks such as AI profile cache
+  lib/                             Runtime, API helpers, layout, scoring utilities
+  services/                        Backend, Supabase, onboarding, roadmap, Ollama services
+  assets/images/                   App icon, splash, logo assets
+```
+
+## Main Features
+
+### Authentication
+
+- Email/password login and registration.
+- JWT token persistence with `@react-native-async-storage/async-storage`.
+- Automatic boot routing from `app/index.tsx`.
+- Logout clears local token state and React Query cache.
+- Google sign-in buttons exist in the UI, but OAuth configuration is not wired yet.
+
+### Runtime API Discovery
+
+The app configures its backend URL at startup in `lib/api/runtime.ts`.
+
+It tries these candidates:
+
+1. `app.json` / Expo `extra.apiBaseUrl`, if provided.
+2. Backend URL derived from the Expo development host IP.
+3. Cached working backend URL from AsyncStorage.
+4. `http://localhost:5000`.
+
+Each candidate is checked through `/health`. The first reachable URL becomes the API base URL for generated React Query hooks and custom fetch helpers.
+
+### Today Dashboard
+
+The `Today` tab gives the learner a compact daily overview:
+
+- Current roadmap status and next step CTA.
+- A "build my roadmap" CTA when no roadmap exists.
+- AI job search for roles, skills, or keywords.
+- Global trending roles.
+- Tunisia market data.
+- Salary ranking in TND.
+- Pull-to-refresh loading behavior.
+
+### AI Onboarding Assessment
+
+The onboarding flow is implemented through `services/onboardingService.ts` and `services/roadmapService.ts`.
+
+It collects:
+
+- Full name.
+- Target career role.
+- Education level.
+- Years of experience.
+- Weekly learning availability.
+- Current stack/tools.
+- Basic and advanced assessment answers.
+- Compatibility percentage and overall level.
+
+The assessment uses a conversational state machine:
+
+```text
+GREETING
+COLLECT_NAME
+COLLECT_TARGET_ROLE
+COLLECT_PROFILE
+ASSESS_BASIC
+ASSESS_ADVANCED
+SHOW_COMPATIBILITY
+GENERATING_ROADMAP
+ROADMAP_READY
+```
+
+### Roadmap Generation
+
+The roadmap generation pipeline is:
+
+```text
+profile update
+  -> skill gap analysis
+  -> course/resource mapping
+  -> LLM structured roadmap generation
+  -> roadmap sanitization
+  -> Supabase persistence
+  -> chat history persistence
+  -> notification creation
+```
+
+If Ollama or the AI generator fails, the app creates a fallback roadmap from detected gap skills so the user still gets a usable plan.
+
+Each roadmap step can include:
+
+- Title and description.
+- Status: `locked`, `available`, `in_progress`, `completed`, or `skipped`.
+- Skill and course links.
+- Estimated duration.
+- Provider resources for Coursera, Udemy, YouTube, edX, or fallback search links.
+
+### Roadmap Tracking
+
+The `Roadmap` tab supports:
+
+- Loading the latest active or completed roadmap for the current profile.
+- Selecting individual roadmap steps.
+- Starting and completing steps.
+- Progress percentage calculation.
+- Auto-generated resource links when no curated resources are stored.
+- Sharing a completed roadmap to the community feed.
+
+### Community
+
+The `Community` tab lists public roadmap shares from `community_roadmap_shares`.
+
+It shows:
+
+- Shared roadmap title.
+- Learner display name.
+- Target role.
+- Summary.
+- Completed step count.
+- Share date.
+
+### Profile and AI Insights
+
+The `Profile` tab combines backend profile data and AI-derived profile data.
+
+It displays:
+
+- User identity and email.
+- Rank, tier, XP-style profile completeness, streak placeholder, and badges.
+- Skill elevation bars.
+- AI-inferred top goal and profile hint.
+- Account actions for settings, recommendations, AI roadmap, privacy/help placeholders, and sign out.
+
+The hook `hooks/useAIProfile.ts` keeps AI profile data in a small global cache so profile-related screens can share fresh AI context.
+
+### AI Chat and AI APIs
+
+The app uses backend-proxied AI endpoints instead of calling the AI service directly for most user features.
+
+Relevant helpers:
+
+- `lib/api/chatApi.ts` sends messages to `/api/user/ai/chat` and reads `/api/user/ai/history`.
+- `lib/api/profileApi.ts` loads explicit and AI-enriched profile data from `/api/user/profile`.
+- `lib/api/mobileApi.ts` includes AI helpers for skill gaps, roadmap generation, recommendations, career advice, job descriptions, and job search.
+
+## Technology Stack
+
+| Area | Technology |
+| --- | --- |
+| Mobile framework | Expo SDK 54, React Native 0.81 |
+| Navigation | Expo Router 6 |
+| UI | React Native, Expo Image, Expo Linear Gradient, Feather icons |
+| Animation | React Native Reanimated |
+| Server state | TanStack React Query |
+| Local storage | AsyncStorage |
+| API client | Generated `@workspace/api-client-react` plus custom fetch helpers |
+| Backend | Node.js, Express, JWT, Supabase client |
+| AI service | Python, FastAPI, Ollama |
+| Database | Supabase/PostgreSQL |
+| Package manager | PNPM workspace |
 
 ## Prerequisites
 
-- **Node.js** 18+
-- **Python** 3.11+
-- **Ollama** — [install from ollama.com](https://ollama.com)
-- A **Supabase** project (free tier works)
+- Node.js 18 or newer.
+- PNPM.
+- Python 3.11 or newer.
+- Expo Go on a physical iOS/Android device, or an emulator/simulator.
+- A Supabase project with the schema/migrations from `PROJECT/backend/database`.
+- Ollama installed locally when testing AI generation.
+- Optional: Adzuna API credentials for live job aggregation.
 
----
+## Environment Configuration
 
-## Installation
+### Backend
 
-### 1. Clone & install
+Create `PROJECT/backend/.env` from `PROJECT/backend/.env.example`.
 
-```bash
-git clone git@github.com:YoussefOuinniche/ISSPROJECT.git
-cd ISSPROJECT
-```
+Important values:
 
-### 2. Backend
-
-```bash
-cd backend
-npm install
-```
-
-Create `backend/.env`:
 ```env
+DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
+SUPABASE_URL=https://[PROJECT_REF].supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key_here
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
+ADZUNA_APP_ID=your_adzuna_app_id_here
+ADZUNA_API_KEY=your_adzuna_api_key_here
+REDIS_URL=redis://localhost:6379
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:7b
 PORT=5000
-SUPABASE_URL=https://<your-project>.supabase.co
-SUPABASE_ANON_KEY=<anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-JWT_SECRET=change_this_in_production
+JWT_SECRET=change_this_in_development
 JWT_EXPIRE=7d
-ADMIN_EMAIL=admin@nexapath.com
-ADMIN_API_KEY=your_admin_api_key
-NODE_ENV=development
 ```
 
-### 3. Frontend
+### Mobile
 
-```bash
-cd frontend
-npm install
-```
+The mobile app can run without an explicit `.env` because `lib/api/runtime.ts` attempts to auto-detect the backend from the Expo host.
 
-`frontend/.env` (already committed):
+For explicit configuration, provide an Expo `extra.apiBaseUrl` value in `app.config.js` or `app.json`, or use the existing `EXPO_PUBLIC_API_URL` path for the legacy Axios service in `services/api.js`.
+
+Example:
+
 ```env
-VITE_API_URL=http://localhost:5000/api
-VITE_AI_URL=http://localhost:8000
+EXPO_PUBLIC_API_URL=http://192.168.1.50:5000
 ```
 
-### 4. AI Service
+Use your computer's LAN IP when testing from a physical device. `localhost` on a phone points to the phone, not your computer.
 
-```bash
-cd ai
-pip install -r requirements.txt
-```
+### AI Service
 
-`ai/.env` (already committed with safe defaults):
+The Python AI service reads its own environment variables from the `ai` folder. Common values are:
+
 ```env
 AI_REQUIRE_AUTH=false
 OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:7b
-OLLAMA_MODEL_CHAT=qwen2.5:7b
-DATABASE_URL=postgresql://postgres:[password]@db.<project>.supabase.co:5432/postgres
+DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
 ```
 
-### 5. Ollama
+## Installation
 
-```bash
-# Install Ollama from https://ollama.com, then:
-ollama pull qwen2.5:7b
-```
-
----
-
-## Running the Project
-
-Open **3 terminal tabs**:
-
-```bash
-# Tab 1 — Ollama LLM
-ollama serve
-
-# Tab 2 — Backend API + AI Service
-cd backend && npm run dev
-
-# Tab 3 — Frontend
-cd frontend && npm run dev
-```
-
-`backend/npm run dev` starts both services in the same terminal:
-
-```bash
-npm run dev:backend  # Express API on port 5000
-npm run dev:ai       # FastAPI AI service on port 8000
-```
-
-The AI script runs `python -m uvicorn backend:app --reload --port 8000` from `../ai`.
-If you use a Python virtual environment on Windows, activate it before starting the backend:
+From the workspace root:
 
 ```powershell
-cd ai
+cd PROJECT
+```
+
+Install backend dependencies:
+
+```powershell
+cd backend
+npm install
+```
+
+Install AI service dependencies:
+
+```powershell
+cd ..\ai
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cd ..\backend
+```
+
+Install mobile workspace dependencies:
+
+```powershell
+cd ..\mobile
+pnpm install
+```
+
+If PNPM is missing:
+
+```powershell
+npm install -g pnpm
+```
+
+## Running Locally
+
+Start Ollama:
+
+```powershell
+ollama serve
+```
+
+Pull the model used by the backend or AI service:
+
+```powershell
+ollama pull qwen2.5:7b
+```
+
+Start the backend and AI service:
+
+```powershell
+cd PROJECT\backend
 npm run dev
 ```
 
-Then open: **http://localhost:5173**
+The backend script starts:
 
-Login credentials:
-- Email: `admin@nexapath.com`
-- Password: `issproject`
+- Express API on port `5000`.
+- FastAPI AI service on port `8000`.
 
----
+Start the mobile app:
 
-## Running on Mobile (Expo)
-
-```bash
-cd mobile
-npm install   # or pnpm install
-npx expo start
+```powershell
+cd PROJECT\mobile
+pnpm --dir artifacts/mobile run start
 ```
 
-Scan the QR code with Expo Go (iOS/Android), or press `w` to open in browser.
+Alternative with explicit Expo host mode:
 
-The mobile app uses the same backend API. Make sure your backend `.env` has `FRONTEND_URL` set to your machine's local IP if testing on a real device.
+```powershell
+cd PROJECT\mobile\artifacts\mobile
+$env:MOBILE_HOST="lan"
+$env:MOBILE_PORT="8081"
+pnpm run start
+```
 
----
+Then scan the Expo QR code with Expo Go.
 
-## API Documentation
+## Useful Scripts
 
-### Backend (Express · port 5000)
+From `PROJECT/mobile`:
 
-#### Authentication (`/api/auth`)
+```powershell
+pnpm --dir artifacts/mobile run start
+pnpm --dir artifacts/mobile run typecheck
+pnpm run build
+pnpm run typecheck
+```
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | User login |
-| POST | `/api/auth/refresh-token` | Refresh JWT token |
-| GET | `/api/auth/me` | Get current user |
-| POST | `/api/auth/logout` | Logout |
+From `PROJECT/backend`:
 
-#### Admin (`/api/admin`) — requires `adminAuth`
+```powershell
+npm run dev
+npm run dev:backend
+npm run dev:ai
+npm start
+```
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/admin/login` | Admin login |
-| GET | `/api/admin/stats` | Platform statistics |
+From `PROJECT/mobile/artifacts/mobile`:
 
-#### Users (`/api/users`)
+```powershell
+pnpm run start
+pnpm run build
+pnpm run serve
+pnpm run typecheck
+```
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/users` | List all users |
-| GET | `/api/users/:id` | Get user by ID |
-| POST | `/api/users` | Create user |
-| PUT | `/api/users/:id` | Update user |
-| DELETE | `/api/users/:id` | Delete user |
+## Backend Endpoints Used by Mobile
 
-#### User (authenticated · `/api/user/*`) — requires `userAuth`
+The mobile app uses these backend routes heavily:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/user/home` | User home dashboard data |
-| GET | `/api/user/profile` | Get user profile |
-| PUT/POST | `/api/user/profile` | Create or update profile |
-| GET | `/api/user/skills` | Get user skills |
-| POST | `/api/user/skills` | Add skill |
-| PUT | `/api/user/skills/:skillId` | Update skill |
-| DELETE | `/api/user/skills/:skillId` | Remove skill |
-| GET | `/api/user/ai/history` | AI chat history |
-| POST | `/api/user/ai/chat` | Send AI chat message |
+```text
+GET  /health
+POST /api/auth/login
+POST /api/auth/register
+POST /api/auth/logout
+GET  /api/auth/me
+GET  /api/user/home
+GET  /api/user/profile
+PUT  /api/user/profile
+POST /api/user/profile/update
+GET  /api/user/skills
+POST /api/user/skills
+PUT  /api/user/skills/:skillId
+DELETE /api/user/skills/:skillId
+POST /api/user/ai/chat
+GET  /api/user/ai/history
+POST /api/user/ai/skill-gaps/analyze
+POST /api/user/ai/roadmap
+POST /api/user/ai/recommendations/generate
+POST /api/user/ai/career-advice
+POST /api/user/ai/job-description
+GET  /api/user/ai/jobs/search
+GET  /api/user/ai/jobs/trending
+GET  /api/v1/job-info/:slug
+GET  /api/v1/demand-history/:slug
+```
 
-#### Catalog & Content
+## Data Model Areas
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET/POST/PUT/DELETE | `/api/categories` | Category CRUD |
-| GET/POST/PUT/DELETE | `/api/skills` | Skill CRUD |
-| GET | `/api/skills/trending` | Trending skills |
-| GET/POST/PUT/DELETE | `/api/courses` | Course CRUD |
-| GET/POST/PUT/DELETE | `/api/job-roles` | Job role CRUD |
-| GET | `/api/job-roles/trending` | Trending job roles |
+The app expects Supabase tables for:
 
-#### Learning & Progress
+- Users and profiles.
+- Skills and categories.
+- User skills.
+- Job roles and market trends.
+- Courses and course-skill mapping.
+- AI roadmaps and AI roadmap steps.
+- Chat sessions and chat messages.
+- Notifications.
+- Community roadmap shares.
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET/POST/PUT/DELETE | `/api/roadmaps` | Roadmap CRUD |
-| PUT | `/api/roadmaps/:id/status` | Update roadmap status |
-| PUT | `/api/roadmaps/steps/:stepId` | Update roadmap step |
-| GET/POST/PUT/DELETE | `/api/progress` | Course progress |
+Database migrations live in:
 
-#### Platform
+```text
+PROJECT/backend/database
+```
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET/POST/PUT/DELETE | `/api/chat` | Chat sessions & messages |
-| GET/POST/PUT/DELETE | `/api/notifications` | Notification management |
-| GET/POST/PUT/DELETE | `/api/plans` | Subscription plans |
-| GET/POST/PUT | `/api/subscriptions` | Subscriptions |
-| GET | `/api/market-trends` | Market trend data |
-| GET | `/health` | Health check |
+## Important Implementation Notes
 
-### AI Service (FastAPI · port 8000)
+- `lib/api/runtime.ts` must run before generated API hooks make authenticated requests. It is called from the root app layout.
+- The mobile app stores backend JWTs under `sp.accessToken`.
+- The generated client package is imported as `@workspace/api-client-react`.
+- Some screens use generated React Query hooks, while others use custom fetch helpers in `lib/api`.
+- `services/supabaseService.ts` currently contains direct Supabase REST access for mobile roadmap/community workflows. This is acceptable for a demo/local prototype, but production mobile apps must not embed a service-role key. Move these writes behind authenticated backend endpoints before release.
+- `run-mobile-expo.ps1` currently points to an older `Skill-Pulse-1\artifacts\mobile` path. Prefer the PNPM commands above unless that script is updated to `mobile\artifacts\mobile`.
+- Some files contain older "SkillPulse" naming, while the current app branding in `app.json` and UI is `NexaPath`.
 
-| Method | Endpoint | Body | Description |
-|--------|----------|------|-------------|
-| POST | `/ai/chat` | `{ user_id, message, recent_messages?, profile? }` | AI career coaching chat |
-| POST | `/ai/generate-roadmap` | `{ role, user_profile? }` | Generate learning roadmap |
-| POST | `/ai/skill-gap` | `{ role, user_profile? }` | Analyze skill gaps |
-| POST | `/ai/extract-profile` | `{ text }` | Extract skills from resume text |
-| GET | `/docs` | — | FastAPI Swagger UI |
+## Troubleshooting
 
-**Supported roles for roadmap/skill-gap:**
-`frontend_engineer`, `backend_engineer`, `full_stack_engineer`, `mobile_engineer`, `devops_engineer`, `cloud_engineer`, `platform_engineer`, `data_analyst`, `data_engineer`, `data_scientist`, `machine_learning_engineer`, `ai_engineer`, `mlops_engineer`, `cybersecurity_analyst`, `qa_automation_engineer`, `product_manager`, `technical_project_manager`
+### The mobile app cannot reach the backend
 
----
+- Confirm the backend is running on port `5000`.
+- Open `http://localhost:5000/health` on the development machine.
+- If using a physical phone, use LAN mode and make sure the phone and computer are on the same network.
+- Clear the cached API URL by calling `resetApiRuntime()` during development or by clearing app storage.
 
-## Environment Variables Summary
+### Login works in browser but not on phone
 
-### `backend/.env`
-| Variable | Description |
-|----------|-------------|
-| `PORT` | Express server port (default: 5000) |
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_ANON_KEY` | Supabase anonymous key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (backend only) |
-| `JWT_SECRET` | Secret for JWT signing |
-| `JWT_EXPIRE` | Token expiry duration (e.g. `7d`) |
-| `ADMIN_EMAIL` | Admin login email |
-| `ADMIN_API_KEY` | Admin API key |
-| `FRONTEND_URL` | Frontend URL for CORS (production) |
+Use the computer's LAN IP instead of `localhost`.
 
-### `frontend/.env`
-| Variable | Description |
-|----------|-------------|
-| `VITE_API_URL` | Backend API URL (default: http://localhost:5000/api) |
-| `VITE_AI_URL` | AI service URL (default: http://localhost:8000) |
+Example:
 
-### `ai/.env`
-| Variable | Description |
-|----------|-------------|
-| `AI_REQUIRE_AUTH` | Enable service token auth (false for dev) |
-| `AI_SERVICE_TOKEN` | Bearer token if auth enabled |
-| `OLLAMA_URL` | Ollama server URL |
-| `OLLAMA_MODEL` | Default LLM model |
-| `OLLAMA_MODEL_CHAT` | Model for chat |
-| `OLLAMA_MODEL_EXTRACT` | Model for extraction |
-| `AI_TIMEOUT_SECONDS` | LLM request timeout |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `AI_CORS_ORIGINS` | Comma-separated allowed origins |
+```env
+EXPO_PUBLIC_API_URL=http://192.168.1.50:5000
+```
 
----
+### Roadmap generation fails
 
-## Features
+- Confirm Ollama is running.
+- Confirm the requested model is pulled.
+- Confirm the AI service is running on port `8000`.
+- Check backend logs for AI proxy or Supabase errors.
+- The mobile app can fall back to a non-LLM roadmap if generation fails, but database writes still require valid Supabase configuration.
 
-- **Admin Dashboard** — real-time stats, charts, user & course management
-- **AI Career Chat** — streaming conversation with NexaPath AI coach (local Ollama)
-- **AI Roadmap Generator** — generate structured 3-stage learning paths for any role
-- **Skill Gap Analysis** — compare current skills against target role requirements
-- **User Authentication** — JWT-based register/login with token refresh
-- **User Profile** — manage personal profile and skill assessments
-- **Course & Skill Management** — full CRUD with Supabase
-- **Learning Progress Tracking** — per-user course progress
-- **Subscription Plans** — plan management with cancellation
-- **Market Trends** — job market demand analytics
-- **Dark / Light theme** — persisted preference
+### PNPM install fails
 
----
+The workspace enforces PNPM in `PROJECT/mobile/package.json`. Use:
 
-## Contributing
+```powershell
+corepack enable
+pnpm install
+```
 
-1. Fork the repo
-2. Create a feature branch: `git checkout -b feat/your-feature`
-3. Commit changes: `git commit -m "feat: add your feature"`
-4. Push: `git push origin feat/your-feature`
-5. Open a Pull Request
+or install PNPM globally:
 
----
+```powershell
+npm install -g pnpm
+```
 
-## License
+## Current Status
 
-MIT
+The mobile app already includes the main product surface:
+
+- Authentication screens.
+- Session bootstrap and API runtime setup.
+- Home dashboard.
+- AI job search.
+- AI onboarding and roadmap generation services.
+- Roadmap progress tracking.
+- Community roadmap sharing.
+- Profile and AI insight views.
+- AI chat API integration.
+
+The biggest production hardening tasks are:
+
+- Move direct Supabase service-role mobile calls behind backend endpoints.
+- Finish OAuth configuration or remove Google sign-in CTAs.
+- Normalize old naming from SkillPulse to NexaPath.
+- Add automated tests for auth, runtime URL detection, roadmap state changes, and AI API failures.
+- Update `run-mobile-expo.ps1` to the current folder structure.

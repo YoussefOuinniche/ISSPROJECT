@@ -147,6 +147,16 @@ async function sbGet<T>(tablePath: string, query = ""): Promise<T[]> {
   return resp.json() as Promise<T[]>;
 }
 
+function isMissingTableError(error: unknown, tableName: string): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("404") &&
+    (message.includes(tableName) ||
+      message.toLowerCase().includes("could not find the table") ||
+      message.toLowerCase().includes("schema cache"))
+  );
+}
+
 async function sbPost<T>(
   tablePath: string,
   body: unknown,
@@ -352,7 +362,7 @@ export async function createRoadmap(data: {
     {
       ...data,
       status: "active",
-      ai_model: "qwen2:7b",
+      ai_model: "qwen2.5:7b",
       generation_params: data.generation_params ?? {},
     },
     true
@@ -501,32 +511,47 @@ export async function shareCompletedRoadmap(roadmap: RoadmapWithSteps): Promise<
     throw new Error("Finish every roadmap step before sharing it with the community.");
   }
 
-  await sbUpsert(
-    "community_roadmap_shares",
-    {
-      roadmap_id: roadmap.id,
-      profile_id: roadmap.profile_id,
-      title: roadmap.title,
-      summary: roadmap.summary,
-      completed_steps: completedSteps,
-      total_steps: totalSteps,
-      is_public: true,
-      shared_at: new Date().toISOString(),
-    },
-    "roadmap_id"
-  );
+  try {
+    await sbUpsert(
+      "community_roadmap_shares",
+      {
+        roadmap_id: roadmap.id,
+        profile_id: roadmap.profile_id,
+        title: roadmap.title,
+        summary: roadmap.summary,
+        completed_steps: completedSteps,
+        total_steps: totalSteps,
+        is_public: true,
+        shared_at: new Date().toISOString(),
+      },
+      "roadmap_id"
+    );
+  } catch (error) {
+    if (isMissingTableError(error, "community_roadmap_shares")) {
+      throw new Error("Community sharing is not set up yet. Run backend/database/migration_add_community_roadmap_shares.sql in Supabase.");
+    }
+    throw error;
+  }
 }
 
 export async function getCommunityRoadmapShares(): Promise<CommunityRoadmapShare[]> {
-  return sbGet<CommunityRoadmapShare>(
-    "community_roadmap_shares",
-    [
-      "is_public=eq.true",
-      "select=id,roadmap_id,profile_id,title,summary,completed_steps,total_steps,shared_at,profiles(full_name,title),ai_roadmaps(title,summary,estimated_weeks,job_roles(title))",
-      "order=shared_at.desc",
-      "limit=50",
-    ].join("&")
-  );
+  try {
+    return await sbGet<CommunityRoadmapShare>(
+      "community_roadmap_shares",
+      [
+        "is_public=eq.true",
+        "select=id,roadmap_id,profile_id,title,summary,completed_steps,total_steps,shared_at,profiles(full_name,title),ai_roadmaps(title,summary,estimated_weeks,job_roles(title))",
+        "order=shared_at.desc",
+        "limit=50",
+      ].join("&")
+    );
+  } catch (error) {
+    if (isMissingTableError(error, "community_roadmap_shares")) {
+      if (__DEV__) console.warn("[supabase] community_roadmap_shares table is missing. Returning an empty feed.");
+      return [];
+    }
+    throw error;
+  }
 }
 
 // ─── Chat Persistence ───────────────────────────────────────────────────────────

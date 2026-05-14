@@ -59,7 +59,7 @@ def _env_list(name, default=None):
 
 
 # --- SETTINGS ---
-OLLAMA_MODEL_CHAT = (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2:7b").strip()
+OLLAMA_MODEL_CHAT = (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2.5:7b").strip()
 OLLAMA_MODEL_EXTRACT = (os.getenv("OLLAMA_MODEL_EXTRACT") or OLLAMA_MODEL_CHAT).strip()
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres") # database connection string
 API_HOST = os.getenv("AI_HOST", "0.0.0.0")

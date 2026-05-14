@@ -62,7 +62,7 @@ def load_ai_chat_settings() -> AIChatSettings:
     return {
         "database_url": (os.getenv("AI_DATABASE_URL") or os.getenv("DATABASE_URL") or "").strip(),
         "ollama_url": normalize_ollama_url(os.getenv("OLLAMA_URL", "http://localhost:11434/v1")),
-        "ollama_model": (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2:7b"),
+        "ollama_model": (os.getenv("OLLAMA_MODEL_CHAT") or os.getenv("OLLAMA_MODEL") or "qwen2.5:7b"),
         "ollama_api_key": os.getenv("OLLAMA_API_KEY", "ollama"),
         "request_timeout_seconds": max(5.0, _env_float("AI_TIMEOUT_SECONDS", 180.0)),
         "connect_timeout_seconds": max(1.0, _env_float("AI_CONNECT_TIMEOUT_SECONDS", 10.0)),

@@ -22,6 +22,7 @@ const Colors = {
   surface: '#111520',
   surfaceElevated: '#181D28',
   border: 'rgba(232,67,53,0.18)',
+  borderLight: 'rgba(255,255,255,0.08)',
   borderSubtle: 'rgba(255,255,255,0.05)',
 
   // ── Text ─────────────────────────────────────────────────────────────────────

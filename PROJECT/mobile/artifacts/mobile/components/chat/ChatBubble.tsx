@@ -1,8 +1,7 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, Platform, StyleSheet, Text, View } from "react-native";
-import Colors from "@/constants/colors";
+import { Animated, StyleSheet, Text, View } from "react-native";
 
-const MONO = Platform.OS === "ios" ? "Courier New" : "monospace";
+import { SANS_MED, SANS_REG, useTheme } from "@/constants/theme";
 
 interface ChatBubbleProps {
   text: string;
@@ -10,6 +9,7 @@ interface ChatBubbleProps {
 }
 
 export const ChatBubble = ({ text, isUser }: ChatBubbleProps) => {
+  const theme = useTheme();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
 
@@ -18,17 +18,13 @@ export const ChatBubble = ({ text, isUser }: ChatBubbleProps) => {
       Animated.timing(opacity, { toValue: 1, duration: 180, useNativeDriver: true }),
       Animated.spring(translateY, { toValue: 0, tension: 120, friction: 9, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [opacity, translateY]);
 
   if (isUser) {
     return (
       <Animated.View style={[styles.row, styles.rowUser, { opacity, transform: [{ translateY }] }]}>
-        <View style={styles.userBubble}>
-          <View style={styles.userBubbleAccent} />
-          <Text style={styles.userText}>{text}</Text>
-        </View>
-        <View style={styles.userAvatar}>
-          <Text style={styles.userAvatarText}>U</Text>
+        <View style={[styles.userBubble, { backgroundColor: theme.accent, shadowColor: theme.accent }]}>
+          <Text style={[styles.userText, { color: theme.textOnAccent }]}>{text}</Text>
         </View>
       </Animated.View>
     );
@@ -36,20 +32,13 @@ export const ChatBubble = ({ text, isUser }: ChatBubbleProps) => {
 
   return (
     <Animated.View style={[styles.row, styles.rowAI, { opacity, transform: [{ translateY }] }]}>
-      {/* AI square avatar */}
-      <View style={styles.aiAvatarWrap}>
-        <View style={styles.aiAvatar}>
-          <Text style={styles.aiAvatarIcon}>AI</Text>
-        </View>
-        <View style={styles.aiOnlineDot} />
+      <View style={[styles.aiAvatar, { backgroundColor: theme.accent + "14", borderColor: theme.accent + "35" }]}>
+        <Text style={[styles.aiAvatarText, { color: theme.accent }]}>AI</Text>
       </View>
-
       <View style={styles.aiContent}>
-        <Text style={styles.aiLabel}>NEXAPATH_AI</Text>
-        <View style={styles.aiBubble}>
-          <View style={styles.aiBubbleAccent} />
-          <Text style={styles.aiPrompt}>{'> '}</Text>
-          <Text style={styles.aiText}>{text}</Text>
+        <Text style={[styles.aiLabel, { color: theme.textTertiary }]}>NexaPath Assistant</Text>
+        <View style={[styles.aiBubble, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
+          <Text style={[styles.aiText, { color: theme.textSecondary }]}>{text}</Text>
         </View>
       </View>
     </Animated.View>
@@ -60,129 +49,58 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "flex-end",
-    marginVertical: 4,
-    paddingHorizontal: 12,
+    marginVertical: 5,
+    paddingHorizontal: 14,
   },
   rowUser: { justifyContent: "flex-end" },
   rowAI: { justifyContent: "flex-start" },
-
-  // ── User bubble ──────────────────────────────────────────────────────────────
   userBubble: {
-    maxWidth: "75%",
-    backgroundColor: Colors.primary + "22",
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: Colors.primary + "55",
-    borderBottomRightRadius: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    overflow: "hidden",
-  },
-  userBubbleAccent: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    bottom: 0,
-    width: 2,
-    backgroundColor: Colors.primary,
+    maxWidth: "78%",
+    borderRadius: 18,
+    borderBottomRightRadius: 6,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   userText: {
-    color: Colors.textPrimary,
-    fontSize: 13,
-    lineHeight: 20,
-    fontFamily: MONO,
-  },
-  userAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 4,
-    backgroundColor: Colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 8,
-    marginBottom: 2,
-  },
-  userAvatarText: {
-    fontFamily: MONO,
-    color: "#fff",
-    fontSize: 10,
-    fontWeight: "700",
-  },
-
-  // ── AI bubble ────────────────────────────────────────────────────────────────
-  aiAvatarWrap: {
-    marginRight: 8,
-    marginBottom: 2,
-    position: "relative",
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: SANS_MED,
   },
   aiAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 4,
-    backgroundColor: Colors.surface,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.accent + "50",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 9,
+    marginBottom: 3,
   },
-  aiAvatarIcon: {
-    fontFamily: MONO,
-    color: Colors.accent,
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.5,
+  aiAvatarText: {
+    fontFamily: SANS_MED,
+    fontSize: 10,
+    letterSpacing: 0.6,
   },
-  aiOnlineDot: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-    backgroundColor: Colors.success,
-    borderWidth: 1.5,
-    borderColor: Colors.background,
-  },
-  aiContent: { flex: 1, maxWidth: "82%" },
+  aiContent: { flex: 1, maxWidth: "84%" },
   aiLabel: {
-    fontFamily: MONO,
-    color: Colors.accent,
-    fontSize: 8,
-    letterSpacing: 1.5,
-    marginBottom: 4,
-    marginLeft: 2,
+    fontFamily: SANS_MED,
+    fontSize: 11,
+    marginBottom: 5,
   },
   aiBubble: {
-    backgroundColor: Colors.surface,
-    borderRadius: 6,
-    borderBottomLeftRadius: 2,
+    borderRadius: 18,
+    borderBottomLeftRadius: 6,
     borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    overflow: "hidden",
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  aiBubbleAccent: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: Colors.accent + "40",
-  },
-  aiPrompt: {
-    fontFamily: MONO,
-    color: Colors.accent,
-    fontSize: 13,
-    lineHeight: 21,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
   },
   aiText: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: 13,
-    lineHeight: 21,
-    fontFamily: MONO,
+    fontSize: 14,
+    lineHeight: 22,
+    fontFamily: SANS_REG,
   },
 });

@@ -1,7 +1,6 @@
 'use no memo';
 
 import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -20,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLoginAuth } from '@workspace/api-client-react';
 
 import { storeMobileAccessToken } from '@/lib/api/runtime';
+import { signInWithOAuthProvider, type OAuthProvider } from '@/lib/auth/oauth';
 import { SANS, SANS_MED, SANS_REG, DarkTheme } from '@/constants/theme';
 
 WebBrowser.maybeCompleteAuthSession();
@@ -34,9 +34,23 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [focusEmail, setFocusEmail] = useState(false);
   const [focusPass, setFocusPass] = useState(false);
+  const [oauthProvider, setOauthProvider] = useState<OAuthProvider | null>(null);
 
   const loginMutation = useLoginAuth();
-  const isLoading = loginMutation.isPending;
+  const isLoading = loginMutation.isPending || oauthProvider !== null;
+
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setError(null);
+    setOauthProvider(provider);
+    try {
+      await signInWithOAuthProvider(provider);
+      router.replace('/(tabs)');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : `Unable to continue with ${provider}.`);
+    } finally {
+      setOauthProvider(null);
+    }
+  };
 
   const submitLogin = async () => {
     setError(null);
@@ -78,8 +92,8 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={s.brandBlock}>
-          <View style={s.logoBadge}>
-            <Image source={require('@/assets/images/logo-Photoroom.png')} contentFit="contain" style={s.logo} />
+          <View style={[s.symbolBadge, { backgroundColor: T.accent + '14', borderColor: T.accent + '32' }]}>
+            <Feather name="compass" size={30} color={T.accent} />
           </View>
           <Text style={[s.brandEye, { color: T.textTertiary }]}>NEXAPATH</Text>
           <Text style={[s.brandTitle, { color: T.text }]}>Welcome back</Text>
@@ -97,13 +111,36 @@ export default function LoginScreen() {
 
           <Pressable
             style={[s.googleBtn, { backgroundColor: T.bg2, borderColor: T.borderSubtle }]}
-            onPress={() => setError('Google Sign-In requires OAuth configuration.')}
+            onPress={() => handleOAuth('google')}
             disabled={isLoading}
           >
-            <View style={s.googleIconCircle}>
-              <Text style={s.googleG}>G</Text>
-            </View>
-            <Text style={[s.googleBtnTxt, { color: T.textSecondary }]}>Continue with Google</Text>
+            {oauthProvider === 'google' ? (
+              <ActivityIndicator color={T.accent} size="small" />
+            ) : (
+              <>
+                <View style={s.googleIconCircle}>
+                  <Text style={s.googleG}>G</Text>
+                </View>
+                <Text style={[s.googleBtnTxt, { color: T.textSecondary }]}>Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
+
+          <Pressable
+            style={[s.googleBtn, s.githubBtn, { backgroundColor: T.bg2, borderColor: T.borderSubtle }]}
+            onPress={() => handleOAuth('github')}
+            disabled={isLoading}
+          >
+            {oauthProvider === 'github' ? (
+              <ActivityIndicator color={T.accent} size="small" />
+            ) : (
+              <>
+                <View style={s.githubIconCircle}>
+                  <Feather name="github" size={14} color="#FFFFFF" />
+                </View>
+                <Text style={[s.googleBtnTxt, { color: T.textSecondary }]}>Continue with GitHub</Text>
+              </>
+            )}
           </Pressable>
 
           <View style={s.divider}>
@@ -203,16 +240,15 @@ const s = StyleSheet.create({
   screen: { flex: 1 },
   content: { flexGrow: 1 },
   brandBlock: { paddingHorizontal: 24, paddingBottom: 24 },
-  logoBadge: {
+  symbolBadge: {
     width: 78,
     height: 78,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 18,
+    borderWidth: 1,
   },
-  logo: { width: 62, height: 62 },
   brandEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 2.5, marginBottom: 4 },
   brandTitle: { fontFamily: SANS, fontSize: 38, letterSpacing: 0 },
   welcomeBlock: { paddingHorizontal: 24, paddingBottom: 20 },
@@ -235,13 +271,22 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    marginBottom: 18,
+    marginBottom: 10,
   },
+  githubBtn: { marginBottom: 18 },
   googleIconCircle: {
     width: 24,
     height: 24,
     borderRadius: 12,
     backgroundColor: '#4285F4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  githubIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#171515',
     alignItems: 'center',
     justifyContent: 'center',
   },

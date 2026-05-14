@@ -1,6 +1,5 @@
 'use no memo';
 
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -56,8 +55,8 @@ export default function WelcomeScreen() {
       style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
     >
       <View style={styles.hero}>
-        <View style={styles.logoFrame}>
-          <Image source={require('@/assets/images/logo-Photoroom.png')} contentFit="contain" style={styles.logo} />
+        <View style={styles.symbolFrame}>
+          <View style={styles.symbolMark} />
         </View>
         <Text style={styles.title}>NexaPath</Text>
         <Text style={styles.tagline}>Your AI-powered career navigator</Text>
@@ -75,15 +74,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 14,
   },
-  logoFrame: {
+  symbolFrame: {
     width: 124,
     height: 124,
     borderRadius: 32,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(53, 221, 235, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(53, 221, 235, 0.30)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logo: { width: 102, height: 102 },
+  symbolMark: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#35DDEB',
+    transform: [{ rotate: '45deg' }],
+  },
   title: {
     color: '#F3FAFF',
     fontSize: 42,

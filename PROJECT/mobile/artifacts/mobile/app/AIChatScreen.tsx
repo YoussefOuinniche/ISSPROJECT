@@ -1,6 +1,6 @@
 'use no memo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -25,6 +25,7 @@ import Reanimated, {
   ZoomIn,
 } from 'react-native-reanimated';
 import Colors from '@/constants/colors';
+import { SANS_MED, useTheme } from '@/constants/theme';
 import { sendChatMessageAI, fetchChatHistoryAI } from '@/lib/api/chatApi';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -36,9 +37,6 @@ import {
   type RoadmapWithSteps,
 } from '@/services/supabaseService';
 
-const BG = Colors.background;
-const BG2 = Colors.background2;
-
 interface Message {
   id: string;
   text: string;
@@ -47,6 +45,7 @@ interface Message {
 }
 
 export default function AIChatScreen() {
+  const theme = useTheme();
   const { summary, explicitProfile } = useAIProfile();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
@@ -80,7 +79,7 @@ export default function AIChatScreen() {
 
   const WELCOME_MSG = {
     id: 'welcome',
-    text: "Hi! I'm your NexaPath AI Career Assistant 👋\n\nI'm here to help you build a personalised career roadmap. To get started, I'll ask you a few quick questions — it only takes a minute!\n\n**Question 1:** What is your current role, field, or background? (e.g. student, junior developer, data analyst, etc.)",
+    text: "Hi, I am your NexaPath AI career assistant.\n\nI can help with roadmap steps, skill gaps, job fit, interview prep, and what to learn next. What do you want to work on today?",
     isUser: false,
   };
 
@@ -165,24 +164,24 @@ export default function AIChatScreen() {
   const hasContext = assistantTargetRole || assistantNextStep || assistantUrgentGaps.length > 0 || activeRoadmap;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <Stack.Screen
         options={{
           headerShown: true,
           headerTitle: '',
-          headerStyle: { backgroundColor: BG },
+          headerStyle: { backgroundColor: theme.bg },
           headerShadowVisible: false,
           headerLeft: () => (
             <View style={styles.headerLeft}>
               <TouchableOpacity onPress={() => router.back()} style={styles.headerBackBtn}>
                 <Feather name="arrow-left" size={18} color={Colors.textTertiary} />
               </TouchableOpacity>
-              <View style={styles.headerIconWrap}>
-                <Feather name="cpu" size={14} color={Colors.primary} />
+              <View style={[styles.headerIconWrap, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '32' }]}>
+                <Feather name="cpu" size={14} color={theme.accent} />
               </View>
               <View>
-                <Text style={styles.headerTitle}>AI Assistant</Text>
-                <Text style={styles.headerSub}>Roadmap-aware career guide</Text>
+                <Text style={[styles.headerTitle, { color: theme.text }]}>AI Assistant</Text>
+                <Text style={[styles.headerSub, { color: theme.textTertiary }]}>Roadmap-aware career guide</Text>
               </View>
             </View>
           ),
@@ -190,14 +189,14 @@ export default function AIChatScreen() {
       />
 
       {/* Background */}
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: theme.bg }]}>
 
         <View style={styles.chatArea}>
           {/* AI Context Card */}
           {hasContext ? (
-            <Reanimated.View entering={FadeInDown.duration(400)} style={styles.contextCard}>
-              <View style={styles.contextTopLine} />
-              <Text style={styles.contextEyebrow}>Assistant context</Text>
+            <Reanimated.View entering={FadeInDown.duration(400)} style={[styles.contextCard, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
+              <View style={[styles.contextTopLine, { backgroundColor: theme.accent }]} />
+              <Text style={[styles.contextEyebrow, { color: theme.textTertiary }]}>Assistant context</Text>
               {assistantTargetRole ? (
                 <Text style={styles.contextLine}>
                   <Text style={styles.contextKey}>Target: </Text>{assistantTargetRole}
@@ -221,18 +220,18 @@ export default function AIChatScreen() {
                 const total = activeRoadmap.steps.length;
                 return (
                   <TouchableOpacity
-                    style={styles.roadmapContextRow}
+                    style={[styles.roadmapContextRow, { backgroundColor: theme.bg2, borderColor: theme.borderSubtle }]}
                     onPress={() => router.push('/(tabs)/roadmap')}
                     activeOpacity={0.7}
                   >
                     <View style={styles.roadmapContextLeft}>
-                      <Text style={styles.roadmapContextTitle} numberOfLines={1}>{activeRoadmap.title.toUpperCase()}</Text>
+                      <Text style={[styles.roadmapContextTitle, { color: theme.text }]} numberOfLines={1}>{activeRoadmap.title.toUpperCase()}</Text>
                       {nextStep ? (
-                        <Text style={styles.roadmapContextNext} numberOfLines={1}>{'> '}{nextStep.title}</Text>
+                        <Text style={[styles.roadmapContextNext, { color: theme.textTertiary }]} numberOfLines={1}>{nextStep.title}</Text>
                       ) : null}
                     </View>
-                    <View style={styles.roadmapContextBadge}>
-                      <Text style={styles.roadmapContextPct}>
+                    <View style={[styles.roadmapContextBadge, { backgroundColor: theme.accent + '20', borderColor: theme.accent + '40' }]}>
+                      <Text style={[styles.roadmapContextPct, { color: theme.accent }]}>
                         {total > 0 ? Math.round((completed / total) * 100) : 0}%
                       </Text>
                     </View>
@@ -292,7 +291,7 @@ export default function AIChatScreen() {
 
         <Reanimated.View
           onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
-          style={[styles.inputDock, inputDockStyle, { paddingBottom: composerPaddingBottom }]}
+          style={[styles.inputDock, inputDockStyle, { paddingBottom: composerPaddingBottom, backgroundColor: theme.surface, borderTopColor: theme.borderSubtle }]}
         >
           <ChatInput onSend={handleSend} disabled={loading || initializing} />
         </Reanimated.View>
@@ -301,11 +300,11 @@ export default function AIChatScreen() {
   );
 }
 
-const MONO = Platform.OS === 'ios' ? 'Courier New' : 'monospace';
+const MONO = SANS_MED;
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: Colors.background },
-  container: { flex: 1, position: 'relative', backgroundColor: Colors.background },
+  safeArea: { flex: 1 },
+  container: { flex: 1, position: 'relative' },
 
   // Header
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -318,11 +317,10 @@ const styles = StyleSheet.create({
   headerIconWrap: {
     width: 30, height: 30, borderRadius: 4,
     alignItems: 'center', justifyContent: 'center',
-    backgroundColor: Colors.primary + '18',
-    borderWidth: 1, borderColor: Colors.primary + '30',
+    borderWidth: 1,
   },
-  headerTitle: { fontFamily: MONO, fontSize: 12, fontWeight: '700', color: Colors.textPrimary, letterSpacing: 0.5 },
-  headerSub: { fontFamily: MONO, fontSize: 9, color: Colors.textTertiary, marginTop: 1, letterSpacing: 0.5 },
+  headerTitle: { fontFamily: MONO, fontSize: 14, fontWeight: '700', letterSpacing: 0 },
+  headerSub: { fontFamily: MONO, fontSize: 10, marginTop: 1, letterSpacing: 0 },
 
   // Chat area
   chatArea: { flex: 1, minHeight: 0 },
@@ -331,12 +329,11 @@ const styles = StyleSheet.create({
   contextCard: {
     marginHorizontal: 14, marginTop: 14, marginBottom: 4,
     padding: 14, borderRadius: 6,
-    backgroundColor: Colors.surface,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
+    borderWidth: 1,
     overflow: 'hidden',
   },
-  contextTopLine: { position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: Colors.primary },
-  contextEyebrow: { fontFamily: MONO, fontSize: 9, color: Colors.textTertiary, letterSpacing: 1.5, marginBottom: 8 },
+  contextTopLine: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
+  contextEyebrow: { fontFamily: MONO, fontSize: 10, letterSpacing: 0.8, marginBottom: 8 },
   contextKey: { fontFamily: MONO, color: Colors.primary, fontWeight: '700' },
   contextLine: { fontFamily: MONO, fontSize: 11, lineHeight: 18, color: Colors.textSecondary, marginBottom: 3 },
 
@@ -344,18 +341,16 @@ const styles = StyleSheet.create({
   roadmapContextRow: {
     marginTop: 10, flexDirection: 'row', alignItems: 'center',
     borderRadius: 5, padding: 10, gap: 10,
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-    backgroundColor: Colors.background2,
+    borderWidth: 1,
   },
   roadmapContextLeft: { flex: 1 },
-  roadmapContextTitle: { fontFamily: MONO, fontSize: 10, fontWeight: '700', color: Colors.textPrimary, marginBottom: 2, letterSpacing: 0.5 },
-  roadmapContextNext: { fontFamily: MONO, fontSize: 9, color: Colors.textTertiary },
+  roadmapContextTitle: { fontFamily: MONO, fontSize: 11, fontWeight: '700', marginBottom: 2, letterSpacing: 0 },
+  roadmapContextNext: { fontFamily: MONO, fontSize: 10 },
   roadmapContextBadge: {
     borderRadius: 3, paddingHorizontal: 8, paddingVertical: 4,
-    backgroundColor: Colors.primary + '20',
-    borderWidth: 1, borderColor: Colors.primary + '40',
+    borderWidth: 1,
   },
-  roadmapContextPct: { fontFamily: MONO, color: Colors.primary, fontSize: 11, fontWeight: '700' },
+  roadmapContextPct: { fontFamily: MONO, fontSize: 11, fontWeight: '700' },
 
   // List
   list: { flex: 1, minHeight: 0 },
@@ -379,8 +374,7 @@ const styles = StyleSheet.create({
   inputDock: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     overflow: 'hidden',
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1, borderTopColor: Colors.borderSubtle,
+    borderTopWidth: 1,
   },
 
   // Empty state

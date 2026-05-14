@@ -1,6 +1,7 @@
 'use no memo';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -75,8 +76,8 @@ function BrandHero({ firstName, theme }: { firstName: string; theme: ReturnType<
           One useful action at a time, {firstName}.
         </Text>
       </View>
-      <View style={bh.logoBadge}>
-        <Image source={require('@/assets/images/logo-Photoroom.png')} contentFit="contain" style={bh.logo} />
+      <View style={[bh.symbolBadge, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '32' }]}>
+        <Feather name="sunrise" size={26} color={theme.accent} />
       </View>
     </View>
   );
@@ -97,15 +98,14 @@ const bh = StyleSheet.create({
   kicker: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.3, marginBottom: 8 },
   title: { fontFamily: SANS, fontSize: 24, lineHeight: 30, marginBottom: 8 },
   body: { fontFamily: SANS_REG, fontSize: 13, lineHeight: 20 },
-  logoBadge: {
+  symbolBadge: {
     width: 74,
     height: 74,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
   },
-  logo: { width: 58, height: 58 },
 });
 
 // ─── Mini sparkline ───────────────────────────────────────────────────────────
@@ -163,6 +163,8 @@ function JobCard({ job, index, theme }: { job: TrendingJob; index: number; theme
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const growthUp = (job.growth_pct ?? 0) >= 0;
   const growthColor = growthUp ? theme.accent : '#EF4444';
+  const [imageFailed, setImageFailed] = useState(false);
+  const hasImage = Boolean(job.image_url && !imageFailed);
 
   return (
     <Reanimated.View entering={FadeInLeft.delay(index * 70).springify().damping(18)} style={anim}>
@@ -172,8 +174,24 @@ function JobCard({ job, index, theme }: { job: TrendingJob; index: number; theme
         onPressOut={() => { scale.value = withSpring(1); }}
         onPress={() => router.push({ pathname: '/job-detail', params: { data: JSON.stringify(job) } })}
       >
-        <View style={[jc.iconCell, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '30' }]}>
-          <Feather name="briefcase" size={20} color={theme.accent} />
+        <View style={[jc.imageCell, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '30' }]}>
+          {hasImage ? (
+            <>
+              <Image
+                source={{ uri: job.image_url }}
+                contentFit="cover"
+                style={StyleSheet.absoluteFillObject}
+                transition={250}
+                onError={() => setImageFailed(true)}
+              />
+              <LinearGradient
+                colors={['rgba(3,7,18,0.08)', 'rgba(3,7,18,0.44)']}
+                style={StyleSheet.absoluteFillObject}
+              />
+            </>
+          ) : (
+            <Feather name="briefcase" size={20} color={theme.accent} />
+          )}
         </View>
         <View style={jc.info}>
           <Text style={[jc.cat, { color: theme.textTertiary }]} numberOfLines={1}>
@@ -209,13 +227,14 @@ function JobCard({ job, index, theme }: { job: TrendingJob; index: number; theme
 
 const jc = StyleSheet.create({
   card: { flexDirection: 'row', borderWidth: 1, borderRadius: 14, overflow: 'hidden', minHeight: 76, marginBottom: 8 },
-  iconCell: {
+  imageCell: {
     width: 64,
     height: 76,
     flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
     borderRightWidth: 1,
+    overflow: 'hidden',
   },
   info: { flex: 1, paddingHorizontal: 12, paddingVertical: 10 },
   cat: { fontFamily: SANS_MED, fontSize: 9, letterSpacing: 0.6, marginBottom: 3 },
@@ -352,8 +371,8 @@ export default function HomeScreen() {
         {/* ── Brand Header ── */}
         <View style={[s.header, { paddingTop: insets.top + 12 }]}>
           <View style={s.brandRow}>
-            <View style={s.headerLogoBadge}>
-              <Image source={require('@/assets/images/logo-Photoroom.png')} contentFit="contain" style={s.headerLogo} />
+            <View style={[s.headerSymbolBadge, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '32' }]}>
+              <Feather name="compass" size={20} color={theme.accent} />
             </View>
             <View>
             <Text style={[s.brandEye, { color: theme.textTertiary }]}>NEXAPATH</Text>
@@ -576,15 +595,14 @@ function makeStyles(theme: ReturnType<typeof useTheme>) {
     brandEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 2.5, marginBottom: 4 },
     brandTitle: { fontFamily: SANS, fontSize: 34, letterSpacing: 0 },
     brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    headerLogoBadge: {
+    headerSymbolBadge: {
       width: 52,
       height: 52,
       borderRadius: 16,
-      backgroundColor: '#FFFFFF',
       alignItems: 'center',
       justifyContent: 'center',
+      borderWidth: 1,
     },
-    headerLogo: { width: 42, height: 42 },
     headerIcons: { flexDirection: 'row', gap: 8, paddingTop: 6 },
     iconBtn: {
       width: 40, height: 40, borderRadius: 12,

@@ -202,6 +202,7 @@ export default function JobDetailScreen() {
   const params = useLocalSearchParams<{ data: string }>();
   const btnScale = useRef(new Animated.Value(1)).current;
   const [jobInfo, setJobInfo] = useState<JobInfo | null>(null);
+  const [heroImageFailed, setHeroImageFailed] = useState(false);
 
   let job: Job | null = null;
   try {
@@ -215,6 +216,10 @@ export default function JobDetailScreen() {
       getJobInfo(job.slug).then(setJobInfo).catch(() => {});
     }
   }, [job?.slug]);
+
+  useEffect(() => {
+    setHeroImageFailed(false);
+  }, [job?.image_url]);
 
   const pulse = () => {
     Animated.sequence([
@@ -231,7 +236,7 @@ export default function JobDetailScreen() {
       `Based on my skills and experience, what are my strongest match points, ` +
       `what gaps do I have, and what should I focus on to land this job?`;
     await AsyncStorage.setItem('@nexapath_pending_chat', msg);
-    router.push('/onboarding-chat');
+    router.push('/ai-assistant');
   };
 
   const DEMAND_LABELS: Record<string, { label: string; color: string }> = {
@@ -256,6 +261,7 @@ export default function JobDetailScreen() {
   }
 
   const demandInfo = DEMAND_LABELS[job.demand_index] ?? DEMAND_LABELS.moderate;
+  const hasHeroImage = Boolean(job.image_url && !heroImageFailed);
   const salaryTnd = job.avg_salary_tnd
     ? `${Math.round(job.avg_salary_tnd / 1000).toLocaleString()}k TND / year`
     : 'Not disclosed';
@@ -281,7 +287,22 @@ export default function JobDetailScreen() {
       >
         {/* ── Hero image ───────────────────────────────────────────────────── */}
         <View style={s.hero}>
-          <Image source={{ uri: job.image_url }} contentFit="cover" style={StyleSheet.absoluteFillObject} transition={400} />
+          {hasHeroImage ? (
+            <Image
+              source={{ uri: job.image_url }}
+              contentFit="cover"
+              style={StyleSheet.absoluteFillObject}
+              transition={400}
+              onError={() => setHeroImageFailed(true)}
+            />
+          ) : (
+            <LinearGradient
+              colors={[theme.panel2, theme.panel3, theme.bg]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          )}
           <LinearGradient colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.55)', theme.bg]} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFillObject} />
           <LinearGradient colors={[theme.accent + '50', 'transparent']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.heroCyanStrip} />
 

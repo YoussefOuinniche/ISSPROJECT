@@ -1,8 +1,9 @@
 import React, { useEffect, useRef } from "react";
 import { View, StyleSheet, Animated } from "react-native";
-import Colors from "@/constants/colors";
+import { useTheme } from "@/constants/theme";
 
 export const TypingIndicator = () => {
+  const theme = useTheme();
   const opacities = [
     useRef(new Animated.Value(0.3)).current,
     useRef(new Animated.Value(0.3)).current,
@@ -34,9 +35,9 @@ export const TypingIndicator = () => {
   }, []);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
       {opacities.map((opacity, i) => (
-        <Animated.View key={i} style={[styles.dot, { opacity }]} />
+        <Animated.View key={i} style={[styles.dot, { opacity, backgroundColor: theme.accent }]} />
       ))}
     </View>
   );
@@ -50,22 +51,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     minHeight: 24,
-    backgroundColor: Colors.surface,
     alignSelf: "flex-start",
     borderRadius: 20,
     marginLeft: 8,
-    shadowColor: Colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 2,
+    borderWidth: 1,
     marginBottom: 8,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
     marginHorizontal: 3,
   },
 });

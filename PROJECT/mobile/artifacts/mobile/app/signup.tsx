@@ -1,6 +1,5 @@
 'use no memo';
 import { Feather } from '@expo/vector-icons';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -21,6 +20,7 @@ import { useRegisterAuth } from '@workspace/api-client-react';
 
 import Colors from '@/constants/colors';
 import { storeMobileAccessToken } from '@/lib/api/runtime';
+import { signInWithOAuthProvider, type OAuthProvider } from '@/lib/auth/oauth';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -36,11 +36,21 @@ export default function SignupScreen() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focused, setFocused] = useState<FocusedField>(null);
+  const [oauthProvider, setOauthProvider] = useState<OAuthProvider | null>(null);
 
   const registerMutation = useRegisterAuth();
 
-  const handleGooglePress = () => {
-    setError('ERR: Google Sign-In requires OAuth client IDs in your .env file.');
+  const handleOAuth = async (provider: OAuthProvider) => {
+    setError(null);
+    setOauthProvider(provider);
+    try {
+      await signInWithOAuthProvider(provider);
+      router.replace('/(tabs)');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : `Unable to continue with ${provider}.`);
+    } finally {
+      setOauthProvider(null);
+    }
   };
 
   const submitSignup = async () => {
@@ -80,7 +90,7 @@ export default function SignupScreen() {
     }
   };
 
-  const isLoading = registerMutation.isPending;
+  const isLoading = registerMutation.isPending || oauthProvider !== null;
 
   return (
     <View style={styles.screen}>
@@ -104,12 +114,8 @@ export default function SignupScreen() {
         {/* Hero */}
         <Animated.View entering={FadeInDown.duration(460)} style={styles.heroSection}>
           <Text style={styles.heroPath}>~/nexapath/register</Text>
-          <View style={styles.logoBadge}>
-            <Image
-              source={require('@/assets/images/logo-Photoroom.png')}
-              contentFit="contain"
-              style={styles.logo}
-            />
+          <View style={styles.symbolBadge}>
+            <Feather name="compass" size={32} color={Colors.primary} />
           </View>
           <View style={styles.titleRow}>
             <Text style={styles.titleWhite}>$ nexa</Text>
@@ -126,15 +132,36 @@ export default function SignupScreen() {
           {/* Google Button */}
           <Pressable
             style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.75 }]}
-            onPress={handleGooglePress}
+            onPress={() => handleOAuth('google')}
             disabled={isLoading}
           >
-            <>
-              <View style={styles.googleIconWrap}>
-                <Text style={styles.googleG}>G</Text>
-              </View>
-              <Text style={styles.googleBtnText}>CONTINUE WITH GOOGLE</Text>
-            </>
+            {oauthProvider === 'google' ? (
+              <ActivityIndicator color={Colors.primary} size="small" />
+            ) : (
+              <>
+                <View style={styles.googleIconWrap}>
+                  <Text style={styles.googleG}>G</Text>
+                </View>
+                <Text style={styles.googleBtnText}>CONTINUE WITH GOOGLE</Text>
+              </>
+            )}
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.googleBtn, styles.githubBtn, pressed && { opacity: 0.75 }]}
+            onPress={() => handleOAuth('github')}
+            disabled={isLoading}
+          >
+            {oauthProvider === 'github' ? (
+              <ActivityIndicator color={Colors.primary} size="small" />
+            ) : (
+              <>
+                <View style={styles.githubIconWrap}>
+                  <Feather name="github" size={13} color="#fff" />
+                </View>
+                <Text style={styles.googleBtnText}>CONTINUE WITH GITHUB</Text>
+              </>
+            )}
           </Pressable>
 
           {/* Divider */}
@@ -325,7 +352,7 @@ const styles = StyleSheet.create({
   // Hero
   heroSection: { alignItems: 'center', gap: 10, marginTop: 12, marginBottom: 24 },
   heroPath: { fontFamily: MONO, fontSize: 10, color: Colors.textTertiary, letterSpacing: 1.5 },
-  logoBadge: {
+  symbolBadge: {
     width: 84, height: 84, borderRadius: 8,
     backgroundColor: Colors.surface,
     borderWidth: 1, borderColor: Colors.border,
@@ -333,7 +360,6 @@ const styles = StyleSheet.create({
     shadowColor: Colors.primary, shadowOpacity: 0.3,
     shadowRadius: 18, shadowOffset: { width: 0, height: 6 }, elevation: 8,
   },
-  logo: { width: 70, height: 70 },
   titleRow: { flexDirection: 'row', gap: 8, alignItems: 'baseline' },
   titleWhite: { fontFamily: MONO, fontSize: 26, fontWeight: '700', color: Colors.textPrimary },
   titleRed: { fontFamily: MONO, fontSize: 26, fontWeight: '700', color: Colors.primary },
@@ -354,12 +380,17 @@ const styles = StyleSheet.create({
     height: 46, borderRadius: 5,
     backgroundColor: Colors.surfaceElevated,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    marginBottom: 16,
+    marginBottom: 10,
     borderWidth: 1, borderColor: Colors.borderSubtle,
   },
+  githubBtn: { marginBottom: 16 },
   googleIconWrap: {
     width: 20, height: 20, borderRadius: 3,
     backgroundColor: '#4285F4', alignItems: 'center', justifyContent: 'center',
+  },
+  githubIconWrap: {
+    width: 20, height: 20, borderRadius: 3,
+    backgroundColor: '#171515', alignItems: 'center', justifyContent: 'center',
   },
   googleG: { color: '#fff', fontSize: 11, fontFamily: MONO, fontWeight: '700' },
   googleBtnText: { color: Colors.textSecondary, fontSize: 10, fontFamily: MONO, letterSpacing: 1 },

@@ -391,8 +391,6 @@ export function mcqIndexToScore(index: number, total: number): number {
 
 // ─── Question Type Detection ─────────────────────────────────────────────────────
 
-export type { QuestionInputType };
-
 export function detectInputType(text: string): QuestionInputType {
   if (text.includes("[MCQ:"))     return "mcq";
   if (text.includes("[RATE_ME]")) return "rating";

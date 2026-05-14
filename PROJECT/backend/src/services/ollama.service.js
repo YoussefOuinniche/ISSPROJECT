@@ -2,8 +2,8 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 
 const BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-const MODEL    = process.env.OLLAMA_MODEL    || 'qwen2.5:14b';
-const TIMEOUT  = 180_000; // 14B model needs more time than 7B
+const MODEL    = process.env.OLLAMA_MODEL    || 'qwen2.5:7b';
+const TIMEOUT  = 180_000;
 
 async function ollamaGenerate(prompt, options = {}) {
   const response = await axios.post(
