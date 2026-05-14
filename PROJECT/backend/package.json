@@ -9,6 +9,7 @@
     "dev": "node scripts/dev-start.js",
     "dev:backend": "node src/server.js",
     "dev:ai": "cd ../ai && python -m uvicorn backend:app --reload --port 8000 --log-level warning",
+    "seed:remotive": "node scripts/seed-remotive.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

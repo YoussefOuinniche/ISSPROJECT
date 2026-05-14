@@ -135,6 +135,28 @@ export const adminService = {
   getStats: () => get<any>("/admin/stats"),
 };
 
+export interface CommunityShare {
+  id: string;
+  roadmap_id: string;
+  profile_id: string;
+  title: string;
+  summary: string | null;
+  completed_steps: number;
+  total_steps: number;
+  shared_at: string;
+  profiles?: { full_name?: string | null } | null;
+  ai_roadmaps?: {
+    title?: string | null;
+    summary?: string | null;
+    estimated_weeks?: number | null;
+    job_roles?: { title?: string | null } | null;
+  } | null;
+}
+
+export const communityService = {
+  getShares: () => get<CommunityShare[]>("/community/shares"),
+};
+
 // ─── AI service (FastAPI on port 8000) ───────────────────────────────────────
 
 export const aiClient = axios.create({

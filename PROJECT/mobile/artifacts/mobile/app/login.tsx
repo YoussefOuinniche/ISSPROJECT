@@ -1,6 +1,7 @@
 'use no memo';
 
 import { Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
@@ -92,62 +93,20 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={s.brandBlock}>
-          <View style={[s.symbolBadge, { backgroundColor: T.accent + '14', borderColor: T.accent + '32' }]}>
-            <Feather name="compass" size={30} color={T.accent} />
-          </View>
-          <Text style={[s.brandEye, { color: T.textTertiary }]}>NEXAPATH</Text>
+          <Image
+            source={require('@/assets/images/nexapathicon.png')}
+            style={s.brandLogo}
+            contentFit="contain"
+          />
           <Text style={[s.brandTitle, { color: T.text }]}>Welcome back</Text>
         </View>
 
         <Reanimated.View entering={FadeInDown.delay(60).springify()} style={s.welcomeBlock}>
           <Text style={[s.welcomeTitle, { color: T.text }]}>Sign in to continue</Text>
-          <Text style={[s.welcomeSub, { color: T.textSecondary }]}>
-            Resume your roadmap, assistant context, and progress from one clean workspace.
-          </Text>
         </Reanimated.View>
 
         <Reanimated.View entering={FadeInDown.delay(120).springify()} style={[s.card, { backgroundColor: T.surface, borderColor: T.border }]}>
           <View style={[s.cardTopAccent, { backgroundColor: T.accent }]} />
-
-          <Pressable
-            style={[s.googleBtn, { backgroundColor: T.bg2, borderColor: T.borderSubtle }]}
-            onPress={() => handleOAuth('google')}
-            disabled={isLoading}
-          >
-            {oauthProvider === 'google' ? (
-              <ActivityIndicator color={T.accent} size="small" />
-            ) : (
-              <>
-                <View style={s.googleIconCircle}>
-                  <Text style={s.googleG}>G</Text>
-                </View>
-                <Text style={[s.googleBtnTxt, { color: T.textSecondary }]}>Continue with Google</Text>
-              </>
-            )}
-          </Pressable>
-
-          <Pressable
-            style={[s.googleBtn, s.githubBtn, { backgroundColor: T.bg2, borderColor: T.borderSubtle }]}
-            onPress={() => handleOAuth('github')}
-            disabled={isLoading}
-          >
-            {oauthProvider === 'github' ? (
-              <ActivityIndicator color={T.accent} size="small" />
-            ) : (
-              <>
-                <View style={s.githubIconCircle}>
-                  <Feather name="github" size={14} color="#FFFFFF" />
-                </View>
-                <Text style={[s.googleBtnTxt, { color: T.textSecondary }]}>Continue with GitHub</Text>
-              </>
-            )}
-          </Pressable>
-
-          <View style={s.divider}>
-            <View style={[s.divLine, { backgroundColor: T.borderSubtle }]} />
-            <Text style={[s.divTxt, { color: T.textTertiary }]}>or with email</Text>
-            <View style={[s.divLine, { backgroundColor: T.borderSubtle }]} />
-          </View>
 
           <View style={s.fieldWrap}>
             <Text style={[s.fieldLabel, { color: T.textSecondary }]}>Email</Text>
@@ -210,6 +169,46 @@ export default function LoginScreen() {
               </>
             )}
           </Pressable>
+
+          <View style={s.divider}>
+            <View style={[s.divLine, { backgroundColor: T.borderSubtle }]} />
+            <Text style={[s.divTxt, { color: T.textTertiary }]}>or continue with</Text>
+            <View style={[s.divLine, { backgroundColor: T.borderSubtle }]} />
+          </View>
+
+          <Pressable
+            style={[s.googleBtn, { backgroundColor: T.bg2, borderColor: T.borderSubtle }]}
+            onPress={() => handleOAuth('google')}
+            disabled={isLoading}
+          >
+            {oauthProvider === 'google' ? (
+              <ActivityIndicator color={T.accent} size="small" />
+            ) : (
+              <>
+                <View style={s.googleIconCircle}>
+                  <Text style={s.googleG}>G</Text>
+                </View>
+                <Text style={[s.googleBtnTxt, { color: T.textSecondary }]}>Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
+
+          <Pressable
+            style={[s.googleBtn, s.githubBtn, { backgroundColor: T.bg2, borderColor: T.borderSubtle }]}
+            onPress={() => handleOAuth('github')}
+            disabled={isLoading}
+          >
+            {oauthProvider === 'github' ? (
+              <ActivityIndicator color={T.accent} size="small" />
+            ) : (
+              <>
+                <View style={s.githubIconCircle}>
+                  <Feather name="github" size={14} color="#FFFFFF" />
+                </View>
+                <Text style={[s.googleBtnTxt, { color: T.textSecondary }]}>Continue with GitHub</Text>
+              </>
+            )}
+          </Pressable>
         </Reanimated.View>
 
         <Reanimated.View entering={FadeInUp.delay(200).springify()} style={s.signupRow}>
@@ -239,21 +238,11 @@ export default function LoginScreen() {
 const s = StyleSheet.create({
   screen: { flex: 1 },
   content: { flexGrow: 1 },
-  brandBlock: { paddingHorizontal: 24, paddingBottom: 24 },
-  symbolBadge: {
-    width: 78,
-    height: 78,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 18,
-    borderWidth: 1,
-  },
-  brandEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 2.5, marginBottom: 4 },
+  brandBlock: { paddingHorizontal: 24, paddingBottom: 18, alignItems: 'flex-start' },
+  brandLogo: { width: 180, height: 80, marginBottom: 14, backgroundColor: 'transparent' },
   brandTitle: { fontFamily: SANS, fontSize: 38, letterSpacing: 0 },
-  welcomeBlock: { paddingHorizontal: 24, paddingBottom: 20 },
-  welcomeTitle: { fontFamily: SANS, fontSize: 26, letterSpacing: 0, marginBottom: 6 },
-  welcomeSub: { fontFamily: SANS_REG, fontSize: 14, lineHeight: 20 },
+  welcomeBlock: { paddingHorizontal: 24, paddingBottom: 18 },
+  welcomeTitle: { fontFamily: SANS, fontSize: 24, letterSpacing: 0 },
   card: {
     marginHorizontal: 16,
     borderRadius: 22,
@@ -273,7 +262,7 @@ const s = StyleSheet.create({
     gap: 10,
     marginBottom: 10,
   },
-  githubBtn: { marginBottom: 18 },
+  githubBtn: { marginBottom: 0 },
   googleIconCircle: {
     width: 24,
     height: 24,
@@ -292,7 +281,7 @@ const s = StyleSheet.create({
   },
   googleG: { color: '#FFF', fontFamily: SANS, fontSize: 12 },
   googleBtnTxt: { fontFamily: SANS_MED, fontSize: 13 },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 18, marginBottom: 14 },
   divLine: { flex: 1, height: 1 },
   divTxt: { fontFamily: SANS_REG, fontSize: 12 },
   fieldWrap: { marginBottom: 14 },

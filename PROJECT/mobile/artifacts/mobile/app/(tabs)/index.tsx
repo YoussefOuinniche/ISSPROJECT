@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
   Platform,
   Pressable,
   RefreshControl,
@@ -52,62 +53,6 @@ function seedSparkline(slug: string, growthPct: number | null, points = 10): num
   });
 }
 
-function getDayLabel(roadmap: HomeData['roadmap']): { num: string; label: string } {
-  if (!roadmap) return { num: '001', label: 'Plan Ready' };
-  const { progress_pct, estimated_weeks } = roadmap;
-  const totalDays = (estimated_weeks ?? 12) * 7;
-  const currentDay = Math.max(1, Math.round((progress_pct / 100) * totalDays));
-  const num = String(currentDay).padStart(3, '0');
-  if (progress_pct < 5) return { num, label: 'Plan Ready' };
-  if (progress_pct < 25) return { num, label: 'Getting Started' };
-  if (progress_pct < 50) return { num, label: 'Building Momentum' };
-  if (progress_pct < 75) return { num, label: 'Strong Progress' };
-  return { num, label: 'Nearly Done' };
-}
-
-// ─── Progress Hero Illustration ───────────────────────────────────────────────
-function BrandHero({ firstName, theme }: { firstName: string; theme: ReturnType<typeof useTheme> }) {
-  return (
-    <View style={[bh.card, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
-      <View style={bh.copy}>
-        <Text style={[bh.kicker, { color: theme.accent }]}>TODAY</Text>
-        <Text style={[bh.title, { color: theme.text }]}>Focus your next step</Text>
-        <Text style={[bh.body, { color: theme.textSecondary }]}>
-          One useful action at a time, {firstName}.
-        </Text>
-      </View>
-      <View style={[bh.symbolBadge, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '32' }]}>
-        <Feather name="sunrise" size={26} color={theme.accent} />
-      </View>
-    </View>
-  );
-}
-
-const bh = StyleSheet.create({
-  card: {
-    minHeight: 154,
-    borderRadius: 18,
-    borderWidth: 1,
-    marginHorizontal: 16,
-    padding: 18,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  copy: { flex: 1 },
-  kicker: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.3, marginBottom: 8 },
-  title: { fontFamily: SANS, fontSize: 24, lineHeight: 30, marginBottom: 8 },
-  body: { fontFamily: SANS_REG, fontSize: 13, lineHeight: 20 },
-  symbolBadge: {
-    width: 74,
-    height: 74,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-});
-
 // ─── Mini sparkline ───────────────────────────────────────────────────────────
 function MiniSparkline({ slug, growth, color }: { slug: string; growth: number | null; color: string }) {
   const W = 58, H = 26;
@@ -127,34 +72,58 @@ function MiniSparkline({ slug, growth, color }: { slug: string; growth: number |
 }
 
 // ─── Search result card ───────────────────────────────────────────────────────
+async function openSearchResult(result: JobSearchResult) {
+  if (!result.url) return;
+  const can = await Linking.canOpenURL(result.url).catch(() => false);
+  if (can) Linking.openURL(result.url).catch(() => null);
+}
+
 function SearchResultCard({ result, index, theme }: { result: JobSearchResult; index: number; theme: ReturnType<typeof useTheme> }) {
+  const scale = useSharedValue(1);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const hasUrl = Boolean(result.url);
   return (
-    <Reanimated.View entering={FadeInLeft.delay(index * 40).springify().damping(20)}>
-      <View style={[sCard.wrap, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
+    <Reanimated.View entering={FadeInLeft.delay(index * 40).springify().damping(20)} style={anim}>
+      <Pressable
+        style={[sCard.wrap, { backgroundColor: theme.surface, borderColor: theme.borderSubtle, opacity: hasUrl ? 1 : 0.85 }]}
+        onPress={() => openSearchResult(result)}
+        onPressIn={() => { if (hasUrl) scale.value = withSpring(0.98); }}
+        onPressOut={() => { scale.value = withSpring(1); }}
+        disabled={!hasUrl}
+      >
         <View style={sCard.top}>
-          <Text style={[sCard.title, { color: theme.text }]} numberOfLines={1}>{result.title}</Text>
+          <Text style={[sCard.title, { color: theme.text }]} numberOfLines={2}>{result.title}</Text>
           <Text style={[sCard.badge, { color: theme.accent, borderColor: theme.accent + '50' }]}>{result.source.toUpperCase()}</Text>
         </View>
         <View style={sCard.meta}>
-          {result.company ? <Text style={[sCard.sub, { color: theme.textTertiary }]} numberOfLines={1}>{result.company}</Text> : null}
+          {result.company ? <Text style={[sCard.sub, { color: theme.textSecondary }]} numberOfLines={1}>{result.company}</Text> : null}
           {result.location ? <Text style={[sCard.sub, { color: theme.textTertiary }]} numberOfLines={1}>{result.location}</Text> : null}
         </View>
         {result.salary ? <Text style={[sCard.salary, { color: theme.accent }]}>{result.salary}</Text> : null}
-        {result.description ? <Text style={[sCard.desc, { color: theme.textSecondary }]} numberOfLines={2}>{result.description}</Text> : null}
-      </View>
+        {result.description ? <Text style={[sCard.desc, { color: theme.textSecondary }]} numberOfLines={4}>{result.description}</Text> : null}
+        <View style={sCard.footer}>
+          <Feather name={hasUrl ? 'external-link' : 'slash'} size={12} color={hasUrl ? theme.accent : theme.textTertiary} />
+          <Text style={[sCard.footerText, { color: hasUrl ? theme.accent : theme.textTertiary }]}>
+            {hasUrl ? 'Open posting' : 'No link available'}
+          </Text>
+          {hasUrl ? <Feather name="arrow-right" size={12} color={theme.accent} /> : null}
+        </View>
+      </Pressable>
     </Reanimated.View>
   );
 }
 
 const sCard = StyleSheet.create({
-  wrap: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 8 },
-  top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  title: { flex: 1, fontFamily: SANS_MED, fontSize: 13, marginRight: 8 },
-  badge: { fontFamily: SANS_MED, fontSize: 9, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  sub: { fontFamily: SANS_REG, fontSize: 11 },
-  salary: { fontFamily: SANS, fontSize: 12, marginBottom: 4 },
-  desc: { fontFamily: SANS_REG, fontSize: 11, lineHeight: 16 },
+  wrap: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 },
+  top: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8, marginBottom: 6 },
+  title: { flex: 1, fontFamily: SANS_MED, fontSize: 14, lineHeight: 19 },
+  badge: { fontFamily: SANS_MED, fontSize: 9, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start' },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 6 },
+  sub: { fontFamily: SANS_MED, fontSize: 11 },
+  salary: { fontFamily: SANS, fontSize: 12, marginBottom: 6 },
+  desc: { fontFamily: SANS_REG, fontSize: 12, lineHeight: 18, marginBottom: 10 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(0,0,0,0.06)' },
+  footerText: { flex: 1, fontFamily: SANS_MED, fontSize: 11 },
 });
 
 // ─── Job card ─────────────────────────────────────────────────────────────────
@@ -343,13 +312,11 @@ export default function HomeScreen() {
     finally { setSearchLoading(false); }
   }, []);
 
-  const firstName = data?.user_name?.split(' ')[0] ?? 'Explorer';
   const roadmap = data?.roadmap ?? null;
   const globalJobs = data?.trending_global ?? data?.trending_jobs ?? [];
   const tnJobs = data?.trending_tn ?? [];
   const trending = globalJobs.slice(0, 6);
   const topSalary = [...globalJobs].sort((a, b) => (b.avg_salary_tnd ?? 0) - (a.avg_salary_tnd ?? 0)).slice(0, 5);
-  const dayInfo = getDayLabel(roadmap);
 
   const s = makeStyles(theme);
 
@@ -371,40 +338,14 @@ export default function HomeScreen() {
         {/* ── Brand Header ── */}
         <View style={[s.header, { paddingTop: insets.top + 12 }]}>
           <View style={s.brandRow}>
-            <View style={[s.headerSymbolBadge, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '32' }]}>
-              <Feather name="compass" size={20} color={theme.accent} />
-            </View>
-            <View>
-            <Text style={[s.brandEye, { color: theme.textTertiary }]}>NEXAPATH</Text>
+            <Image
+              source={require('@/assets/images/nexapathicon.png')}
+              style={s.brandLogo}
+              contentFit="contain"
+            />
             <Text style={[s.brandTitle, { color: theme.text }]}>Home</Text>
-            </View>
-          </View>
-          <View style={s.headerIcons}>
-            <Pressable
-              style={[s.iconBtn, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}
-              onPress={() => {}}
-            >
-              <Feather name="search" size={18} color={theme.textSecondary} />
-            </Pressable>
-            <Pressable
-              style={[s.iconBtn, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}
-              onPress={() => {}}
-            >
-              <Feather name="bell" size={18} color={theme.textSecondary} />
-            </Pressable>
           </View>
         </View>
-
-        {/* ── Day badge ── */}
-        <View style={s.dayBadgeRow}>
-          <View style={[s.dayBadge, { backgroundColor: theme.warmLight, borderColor: theme.warm + '40' }]}>
-            <View style={[s.dayDiamond, { backgroundColor: theme.warm }]} />
-            <Text style={[s.dayText, { color: theme.warm }]}>Day {dayInfo.num}  ·  {dayInfo.label.toUpperCase()}</Text>
-          </View>
-        </View>
-
-        {/* ── Progress Hero ── */}
-        <BrandHero firstName={firstName} theme={theme} />
 
         {/* ── TODAY'S STEP — conditional on roadmap ── */}
         {roadmap ? (
@@ -472,7 +413,7 @@ export default function HomeScreen() {
                 </Text>
                 <Pressable
                   style={[s.pathBtn, { backgroundColor: theme.warm }]}
-                  onPress={() => router.push('/onboarding-chat')}
+                  onPress={() => router.push('/ai-assistant')}
                 >
                   <Feather name="map" size={15} color="#FFF" />
                   <Text style={s.pathBtnText}>Build my roadmap</Text>
@@ -592,35 +533,9 @@ function makeStyles(theme: ReturnType<typeof useTheme>) {
       paddingHorizontal: 20,
       paddingBottom: 6,
     },
-    brandEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 2.5, marginBottom: 4 },
     brandTitle: { fontFamily: SANS, fontSize: 34, letterSpacing: 0 },
     brandRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    headerSymbolBadge: {
-      width: 52,
-      height: 52,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-    },
-    headerIcons: { flexDirection: 'row', gap: 8, paddingTop: 6 },
-    iconBtn: {
-      width: 40, height: 40, borderRadius: 12,
-      alignItems: 'center', justifyContent: 'center',
-      borderWidth: 1,
-    },
-
-    // Day badge
-    dayBadgeRow: { paddingHorizontal: 20, marginBottom: 14 },
-    dayBadge: {
-      flexDirection: 'row', alignItems: 'center', gap: 7,
-      alignSelf: 'flex-start',
-      paddingHorizontal: 12, paddingVertical: 6,
-      borderRadius: 100, borderWidth: 1,
-    },
-    dayDiamond: { width: 6, height: 6, borderRadius: 2, transform: [{ rotate: '45deg' }] },
-    dayText: { fontFamily: SANS_MED, fontSize: 11, letterSpacing: 0.6 },
-
+    brandLogo: { width: 80, height: 56, backgroundColor: 'transparent' },
     planCard: {
       marginHorizontal: 16, marginTop: 16, marginBottom: 4,
       borderRadius: 18, borderWidth: 1, overflow: 'hidden',

@@ -76,8 +76,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Today',
-          tabBarIcon: ({ focused }) => <TabIcon name="sun" focused={focused} theme={theme} />,
+          title: 'Home',
+          tabBarIcon: ({ focused }) => <TabIcon name="home" focused={focused} theme={theme} />,
         }}
       />
       <Tabs.Screen
@@ -101,7 +101,6 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => <TabIcon name="user" focused={focused} theme={theme} />,
         }}
       />
-      <Tabs.Screen name="ai-chat" options={{ href: null }} />
       <Tabs.Screen name="skills" options={{ href: null }} />
       <Tabs.Screen name="learn" options={{ href: null }} />
       <Tabs.Screen name="trends" options={{ href: null }} />

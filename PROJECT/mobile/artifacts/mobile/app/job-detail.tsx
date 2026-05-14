@@ -1,20 +1,17 @@
 /**
  * Job Detail Screen
  * Tapped from home page job cards.
- * Shows full job info + sticky "Compare with my CV" AI button.
+ * Shows full job info.
  */
 'use no memo';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -200,7 +197,6 @@ export default function JobDetailScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ data: string }>();
-  const btnScale = useRef(new Animated.Value(1)).current;
   const [jobInfo, setJobInfo] = useState<JobInfo | null>(null);
   const [heroImageFailed, setHeroImageFailed] = useState(false);
 
@@ -220,24 +216,6 @@ export default function JobDetailScreen() {
   useEffect(() => {
     setHeroImageFailed(false);
   }, [job?.image_url]);
-
-  const pulse = () => {
-    Animated.sequence([
-      Animated.timing(btnScale, { toValue: 0.96, duration: 100, useNativeDriver: true }),
-      Animated.spring(btnScale, { toValue: 1, tension: 140, friction: 8, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const handleCompare = async () => {
-    if (!job) return;
-    pulse();
-    const msg =
-      `I want to compare my CV with the ${job.title} role (${job.category}). ` +
-      `Based on my skills and experience, what are my strongest match points, ` +
-      `what gaps do I have, and what should I focus on to land this job?`;
-    await AsyncStorage.setItem('@nexapath_pending_chat', msg);
-    router.push('/ai-assistant');
-  };
 
   const DEMAND_LABELS: Record<string, { label: string; color: string }> = {
     surging:  { label: 'Surging 🔥', color: theme.warm },
@@ -283,7 +261,7 @@ export default function JobDetailScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: insets.bottom + 110 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 28 }}
       >
         {/* ── Hero image ───────────────────────────────────────────────────── */}
         <View style={s.hero}>
@@ -444,33 +422,7 @@ export default function JobDetailScreen() {
           </Reanimated.View>
         )}
 
-        {/* ── AI compare hint ───────────────────────────────────────────────── */}
-        <Reanimated.View entering={FadeInDown.delay(380).springify()} style={s.section}>
-          <View style={s.aiHintCard}>
-            <View style={[s.aiHintIcon, { backgroundColor: theme.accent + '18' }]}>
-              <Feather name="cpu" size={18} color={theme.accent} />
-            </View>
-            <Text style={s.aiHintTxt}>
-              Tap <Text style={{ color: theme.accent, fontFamily: SANS }}>Compare with my CV</Text> below and NexaPath AI will analyze your skills against this role's requirements.
-            </Text>
-          </View>
-        </Reanimated.View>
       </ScrollView>
-
-      {/* ── Sticky bottom: Compare button ──────────────────────────────────── */}
-      <View style={[s.stickyBar, { paddingBottom: insets.bottom + 12 }]}>
-        <LinearGradient colors={['transparent', theme.bg + 'EE', theme.bg]} locations={[0, 0.4, 1]} style={s.stickyFade} />
-        <Animated.View style={[s.stickyInner, { transform: [{ scale: btnScale }] }]}>
-          <Pressable onPress={handleCompare} style={s.compareBtn}>
-            <LinearGradient colors={[theme.primary, theme.accent, theme.primary]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFillObject} />
-            <Feather name="cpu" size={18} color={theme.textOnAccent} />
-            <Text style={[s.compareBtnTxt, { color: theme.textOnAccent }]}>Compare with my CV</Text>
-            <View style={s.compareBtnArrow}>
-              <Feather name="arrow-right" size={14} color={theme.textOnAccent} />
-            </View>
-          </Pressable>
-        </Animated.View>
-      </View>
     </View>
   );
 }
@@ -547,23 +499,5 @@ function makeStyles(theme: AppTheme) {
     careerLine: { position: 'absolute', left: 4, top: 15, width: 2, height: 24 },
     careerStepTxt: { flex: 1, fontSize: 14, fontFamily: SANS_REG, color: theme.textSecondary, lineHeight: 20 },
     careerExp: { fontSize: 12, fontFamily: SANS_REG, color: theme.textTertiary, marginTop: 4, fontStyle: 'italic' },
-
-    aiHintCard: {
-      flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, padding: 16,
-      borderWidth: 1, borderColor: theme.accent + '30',
-      backgroundColor: theme.accent + '0D',
-    },
-    aiHintIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-    aiHintTxt: { flex: 1, fontSize: 13, fontFamily: SANS_REG, color: theme.textSecondary, lineHeight: 19 },
-
-    stickyBar: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 60 },
-    stickyFade: { position: 'absolute', top: 0, left: 0, right: 0, height: 70 },
-    stickyInner: { marginTop: 8 },
-    compareBtn: {
-      height: 56, borderRadius: 18, flexDirection: 'row', alignItems: 'center',
-      justifyContent: 'center', gap: 10, overflow: 'hidden',
-    },
-    compareBtnTxt: { fontSize: 16, fontFamily: SANS, letterSpacing: -0.2 },
-    compareBtnArrow: { width: 26, height: 26, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   });
 }

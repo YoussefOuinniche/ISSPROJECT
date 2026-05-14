@@ -1,6 +1,6 @@
 'use no memo';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -24,18 +24,12 @@ import Reanimated, {
   withTiming,
   ZoomIn,
 } from 'react-native-reanimated';
-import Colors from '@/constants/colors';
-import { SANS_MED, useTheme } from '@/constants/theme';
+import { SANS, SANS_MED, SANS_REG, useTheme } from '@/constants/theme';
 import { sendChatMessageAI, fetchChatHistoryAI } from '@/lib/api/chatApi';
 import { ChatBubble } from '@/components/chat/ChatBubble';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
-import { refreshProfile, useAIProfile } from '@/hooks/useAIProfile';
-import {
-  fetchProfileId,
-  getRoadmapWithSteps,
-  type RoadmapWithSteps,
-} from '@/services/supabaseService';
+import { refreshProfile } from '@/hooks/useAIProfile';
 
 interface Message {
   id: string;
@@ -44,65 +38,101 @@ interface Message {
   createdAt?: string;
 }
 
+type Mode = 'fresh' | 'history';
+
 export default function AIChatScreen() {
   const theme = useTheme();
-  const { summary, explicitProfile } = useAIProfile();
   const [messages, setMessages] = useState<Message[]>([]);
+  const [mode, setMode] = useState<Mode>('fresh');
   const [loading, setLoading] = useState(false);
-  const [initializing, setInitializing] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [composerHeight, setComposerHeight] = useState(0);
-  const [activeRoadmap, setActiveRoadmap] = useState<RoadmapWithSteps | null>(null);
+  const [hasHistory, setHasHistory] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const composerOffset = useSharedValue(0);
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
 
-  const assistantTargetRole = explicitProfile?.target_role || summary?.target_role || summary?.top_goal || null;
-  const assistantUrgentGaps = Array.isArray(summary?.urgent_gaps) ? summary.urgent_gaps.slice(0, 2) : [];
-  const assistantNextStep = summary?.next_step || null;
   const composerPaddingBottom = keyboardVisible
     ? Math.max(12, insets.bottom + 8)
     : Math.max(16, insets.bottom + 56);
   const listBottomPadding = composerHeight + composerPaddingBottom + 22;
 
-  useEffect(() => {
-    const loadRoadmapContext = async () => {
-      try {
-        const pid = await fetchProfileId();
-        if (pid) setActiveRoadmap(await getRoadmapWithSteps(pid));
-      } catch { /* non-critical */ }
-    };
-    loadRoadmapContext();
-  }, []);
+  const autoStartedRef = useRef(false);
 
-  const WELCOME_MSG = {
-    id: 'welcome',
-    text: "Hi, I am your NexaPath AI career assistant.\n\nI can help with roadmap steps, skill gaps, job fit, interview prep, and what to learn next. What do you want to work on today?",
-    isUser: false,
-  };
-
+  // On mount: probe history (for the "Past chats" affordance) and always
+  // auto-start the guided questionnaire so the user lands on Q1 rather than
+  // a blank screen — even if they have prior conversations they can still
+  // open via the header chip.
   useEffect(() => {
-    const loadHistory = async () => {
+    let cancelled = false;
+    (async () => {
       try {
         const history = await fetchChatHistoryAI();
-        const base = history && history.length > 0 ? history : [WELCOME_MSG];
-        setMessages(base);
-        const pending = await AsyncStorage.getItem('@nexapath_pending_chat');
-        if (pending) {
-          await AsyncStorage.removeItem('@nexapath_pending_chat');
-          setTimeout(() => handleSend(pending), 400);
-        }
+        if (!cancelled) setHasHistory(Array.isArray(history) && history.length > 0);
       } catch {
-        setMessages([WELCOME_MSG]);
-      } finally {
-        setInitializing(false);
+        if (!cancelled) setHasHistory(false);
       }
-    };
-    loadHistory();
+      if (cancelled) return;
+
+      const pending = await AsyncStorage.getItem('@nexapath_pending_chat').catch(() => null);
+      if (cancelled) return;
+
+      if (autoStartedRef.current) return;
+      autoStartedRef.current = true;
+
+      if (pending) {
+        await AsyncStorage.removeItem('@nexapath_pending_chat').catch(() => null);
+        setTimeout(() => handleSend(pending), 300);
+      } else {
+        setTimeout(() => kickoffGuidedFlow(), 250);
+      }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const kickoffGuidedFlow = async () => {
+    if (loading) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await sendChatMessageAI(
+        "Hi — I want to build my personalised career roadmap. Please begin the assessment.",
+      );
+      if (response?.response) {
+        setMessages([
+          {
+            id: `assistant-${response.message_id ?? Date.now()}`,
+            text: response.response,
+            isUser: false,
+          },
+        ]);
+        setHasHistory(true);
+        void Promise.allSettled([
+          refreshProfile(),
+          queryClient.invalidateQueries({ queryKey: ['/api/user/profile'] }),
+          queryClient.invalidateQueries({ queryKey: ['/api/user/dashboard'] }),
+        ]);
+      } else {
+        throw new Error('No response received from the AI.');
+      }
+    } catch (err) {
+      // Local fallback so the user is never stranded on a blank screen.
+      setMessages([
+        {
+          id: 'welcome-local',
+          text: "Hi — I'm NexaPath AI. I'll guide you through a short assessment to build your career roadmap.\n\nLet's start: **what's your name?**",
+          isUser: false,
+        },
+      ]);
+      setError(err instanceof Error ? err.message : 'Could not reach the assistant.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -127,6 +157,7 @@ export default function AIChatScreen() {
   const handleSend = async (text: string) => {
     if (!text.trim()) return;
     setError(null);
+    setMode('fresh');
     const tempId = `local-${Date.now()}`;
     setMessages((prev) => [...prev, { id: tempId, text, isUser: true }]);
     setLoading(true);
@@ -140,6 +171,7 @@ export default function AIChatScreen() {
           ...prev,
           { id: `assistant-${response.message_id ?? Date.now()}`, text: response.response, isUser: false },
         ]);
+        setHasHistory(true);
         void Promise.allSettled([
           refreshProfile(),
           queryClient.invalidateQueries({ queryKey: ['/api/user/profile'] }),
@@ -157,11 +189,34 @@ export default function AIChatScreen() {
     }
   };
 
+  const openHistory = async () => {
+    if (loadingHistory) return;
+    setLoadingHistory(true);
+    setError(null);
+    try {
+      const history = await fetchChatHistoryAI();
+      setMessages(Array.isArray(history) ? history : []);
+      setMode('history');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load past conversations.');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const startFreshChat = () => {
+    setMessages([]);
+    setMode('fresh');
+    setError(null);
+    setTimeout(() => kickoffGuidedFlow(), 200);
+  };
+
   const inputDockStyle = useAnimatedStyle(() => ({
     bottom: composerOffset.value,
   }));
 
-  const hasContext = assistantTargetRole || assistantNextStep || assistantUrgentGaps.length > 0 || activeRoadmap;
+  const showEmptyState = messages.length === 0 && !loading && !loadingHistory;
+  const inHistoryMode = mode === 'history';
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
@@ -173,88 +228,83 @@ export default function AIChatScreen() {
           headerShadowVisible: false,
           headerLeft: () => (
             <View style={styles.headerLeft}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.headerBackBtn}>
-                <Feather name="arrow-left" size={18} color={Colors.textTertiary} />
+              <TouchableOpacity onPress={() => router.back()} style={[styles.headerBackBtn, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
+                <Feather name="arrow-left" size={18} color={theme.textSecondary} />
               </TouchableOpacity>
               <View style={[styles.headerIconWrap, { backgroundColor: theme.accent + '14', borderColor: theme.accent + '32' }]}>
                 <Feather name="cpu" size={14} color={theme.accent} />
               </View>
               <View>
                 <Text style={[styles.headerTitle, { color: theme.text }]}>AI Assistant</Text>
-                <Text style={[styles.headerSub, { color: theme.textTertiary }]}>Roadmap-aware career guide</Text>
+                <Text style={[styles.headerSub, { color: theme.textTertiary }]}>
+                  {inHistoryMode ? 'Viewing past conversation' : 'Fresh chat'}
+                </Text>
               </View>
+            </View>
+          ),
+          headerRight: () => (
+            <View style={styles.headerRight}>
+              {inHistoryMode ? (
+                <TouchableOpacity
+                  onPress={startFreshChat}
+                  style={[styles.historyChip, { backgroundColor: theme.accent, borderColor: theme.accent }]}
+                >
+                  <Feather name="edit-3" size={12} color={theme.textOnAccent} />
+                  <Text style={[styles.historyChipText, { color: theme.textOnAccent }]}>New chat</Text>
+                </TouchableOpacity>
+              ) : hasHistory ? (
+                <TouchableOpacity
+                  onPress={openHistory}
+                  style={[styles.historyChip, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}
+                  disabled={loadingHistory}
+                >
+                  <Feather name="clock" size={12} color={theme.textSecondary} />
+                  <Text style={[styles.historyChipText, { color: theme.textSecondary }]}>
+                    {loadingHistory ? 'Loading…' : 'Past chats'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ),
         }}
       />
 
-      {/* Background */}
       <View style={[styles.container, { backgroundColor: theme.bg }]}>
 
         <View style={styles.chatArea}>
-          {/* AI Context Card */}
-          {hasContext ? (
-            <Reanimated.View entering={FadeInDown.duration(400)} style={[styles.contextCard, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
-              <View style={[styles.contextTopLine, { backgroundColor: theme.accent }]} />
-              <Text style={[styles.contextEyebrow, { color: theme.textTertiary }]}>Assistant context</Text>
-              {assistantTargetRole ? (
-                <Text style={styles.contextLine}>
-                  <Text style={styles.contextKey}>Target: </Text>{assistantTargetRole}
-                </Text>
-              ) : null}
-              {assistantUrgentGaps.length > 0 ? (
-                <Text style={styles.contextLine}>
-                  <Text style={styles.contextKey}>Gaps: </Text>{assistantUrgentGaps.join(', ')}
-                </Text>
-              ) : null}
-              {assistantNextStep ? (
-                <Text style={[styles.contextLine, { color: Colors.textTertiary }]}>
-                  <Text style={styles.contextKey}>Next: </Text>{assistantNextStep}
-                </Text>
-              ) : null}
-              {activeRoadmap ? (() => {
-                const nextStep = activeRoadmap.steps.find(
-                  (s) => s.status === 'available' || s.status === 'in_progress',
-                );
-                const completed = activeRoadmap.steps.filter((s) => s.status === 'completed').length;
-                const total = activeRoadmap.steps.length;
-                return (
-                  <TouchableOpacity
-                    style={[styles.roadmapContextRow, { backgroundColor: theme.bg2, borderColor: theme.borderSubtle }]}
-                    onPress={() => router.push('/(tabs)/roadmap')}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.roadmapContextLeft}>
-                      <Text style={[styles.roadmapContextTitle, { color: theme.text }]} numberOfLines={1}>{activeRoadmap.title.toUpperCase()}</Text>
-                      {nextStep ? (
-                        <Text style={[styles.roadmapContextNext, { color: theme.textTertiary }]} numberOfLines={1}>{nextStep.title}</Text>
-                      ) : null}
-                    </View>
-                    <View style={[styles.roadmapContextBadge, { backgroundColor: theme.accent + '20', borderColor: theme.accent + '40' }]}>
-                      <Text style={[styles.roadmapContextPct, { color: theme.accent }]}>
-                        {total > 0 ? Math.round((completed / total) * 100) : 0}%
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })() : null}
-            </Reanimated.View>
-          ) : null}
-
-          {initializing ? (
+          {loading && messages.length === 0 ? (
             <View style={styles.emptyState}>
-              <Reanimated.View entering={ZoomIn.springify()} style={styles.loadingOrb}>
-                <View style={styles.loadingCore} />
+              <Reanimated.View entering={ZoomIn.springify()} style={[styles.emptyIconWrap, { backgroundColor: theme.accent + '10', borderColor: theme.accent + '30' }]}>
+                <Feather name="cpu" size={28} color={theme.accent} />
               </Reanimated.View>
-              <Text style={styles.emptyTitle}>Loading chat history</Text>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>Preparing your assessment…</Text>
+              <Text style={[styles.emptySubtitle, { color: theme.textTertiary }]}>
+                The AI is warming up — this can take ~30 seconds the first time the local model loads.
+              </Text>
+              <TypingIndicator />
             </View>
-          ) : messages.length === 0 && !loading ? (
+          ) : showEmptyState ? (
             <View style={styles.emptyState}>
-              <Reanimated.View entering={ZoomIn.springify()} style={styles.emptyIconWrap}>
-                <Feather name="cpu" size={28} color={Colors.primary} />
+              <Reanimated.View entering={ZoomIn.springify()} style={[styles.emptyIconWrap, { backgroundColor: theme.accent + '10', borderColor: theme.accent + '30' }]}>
+                <Feather name="cpu" size={28} color={theme.accent} />
               </Reanimated.View>
-              <Text style={styles.emptyTitle}>Ask NexaPath AI</Text>
-              <Text style={styles.emptySubtitle}>Skills, gaps, roadmap steps, and career decisions.</Text>
+              <Text style={[styles.emptyTitle, { color: theme.text }]}>Ask NexaPath AI</Text>
+              <Text style={[styles.emptySubtitle, { color: theme.textTertiary }]}>
+                Roadmap planning, skill gaps, interview prep, what to learn next — start fresh below.
+              </Text>
+              {hasHistory && !inHistoryMode ? (
+                <TouchableOpacity
+                  onPress={openHistory}
+                  style={[styles.emptyHistoryBtn, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}
+                  disabled={loadingHistory}
+                >
+                  <Feather name="clock" size={14} color={theme.accent} />
+                  <Text style={[styles.emptyHistoryBtnText, { color: theme.accent }]}>
+                    {loadingHistory ? 'Loading past chats…' : 'Open past conversations'}
+                  </Text>
+                  <Feather name="chevron-right" size={14} color={theme.accent} />
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : (
             <FlatList
@@ -271,14 +321,22 @@ export default function AIChatScreen() {
               automaticallyAdjustKeyboardInsets
               onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
               onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+              ListHeaderComponent={inHistoryMode ? (
+                <View style={[styles.historyBanner, { backgroundColor: theme.bg2, borderColor: theme.borderSubtle }]}>
+                  <Feather name="clock" size={12} color={theme.textSecondary} />
+                  <Text style={[styles.historyBannerText, { color: theme.textSecondary }]}>
+                    Past conversation — tap “New chat” to start over.
+                  </Text>
+                </View>
+              ) : null}
               ListFooterComponent={() => (
                 <View style={styles.listFooter}>
                   {loading && <TypingIndicator />}
                   {error && (
                     <Reanimated.View entering={FadeInUp.duration(300)}>
-                      <View style={styles.errorBanner}>
+                      <View style={[styles.errorBanner, { borderColor: '#EF444440', backgroundColor: '#EF444412' }]}>
                         <LinearGradient colors={['rgba(239,68,68,0.15)', 'transparent']} style={StyleSheet.absoluteFillObject} />
-                        <Feather name="alert-circle" size={14} color={Colors.danger} />
+                        <Feather name="alert-circle" size={14} color="#EF4444" />
                         <Text style={styles.errorText}>{error}</Text>
                       </View>
                     </Reanimated.View>
@@ -293,14 +351,12 @@ export default function AIChatScreen() {
           onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}
           style={[styles.inputDock, inputDockStyle, { paddingBottom: composerPaddingBottom, backgroundColor: theme.surface, borderTopColor: theme.borderSubtle }]}
         >
-          <ChatInput onSend={handleSend} disabled={loading || initializing} />
+          <ChatInput onSend={handleSend} disabled={loading || loadingHistory} />
         </Reanimated.View>
       </View>
     </SafeAreaView>
   );
 }
-
-const MONO = SANS_MED;
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
@@ -308,55 +364,51 @@ const styles = StyleSheet.create({
 
   // Header
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', paddingRight: 14, gap: 8 },
   headerBackBtn: {
-    width: 32, height: 32, borderRadius: 4,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: Colors.borderSubtle,
-    backgroundColor: Colors.surface,
-  },
-  headerIconWrap: {
-    width: 30, height: 30, borderRadius: 4,
+    width: 34, height: 34, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 1,
   },
-  headerTitle: { fontFamily: MONO, fontSize: 14, fontWeight: '700', letterSpacing: 0 },
-  headerSub: { fontFamily: MONO, fontSize: 10, marginTop: 1, letterSpacing: 0 },
+  headerIconWrap: {
+    width: 32, height: 32, borderRadius: 10,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1,
+  },
+  headerTitle: { fontFamily: SANS, fontSize: 14, letterSpacing: 0.1 },
+  headerSub: { fontFamily: SANS_REG, fontSize: 11, marginTop: 1 },
+  historyChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
+  historyChipText: { fontFamily: SANS_MED, fontSize: 11 },
 
   // Chat area
   chatArea: { flex: 1, minHeight: 0 },
 
-  // Context card
-  contextCard: {
-    marginHorizontal: 14, marginTop: 14, marginBottom: 4,
-    padding: 14, borderRadius: 6,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  contextTopLine: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
-  contextEyebrow: { fontFamily: MONO, fontSize: 10, letterSpacing: 0.8, marginBottom: 8 },
-  contextKey: { fontFamily: MONO, color: Colors.primary, fontWeight: '700' },
-  contextLine: { fontFamily: MONO, fontSize: 11, lineHeight: 18, color: Colors.textSecondary, marginBottom: 3 },
-
-  // Roadmap context
-  roadmapContextRow: {
-    marginTop: 10, flexDirection: 'row', alignItems: 'center',
-    borderRadius: 5, padding: 10, gap: 10,
+  // History banner (in-list)
+  historyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'center',
+    marginTop: 12, marginBottom: 4,
+    paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 999,
     borderWidth: 1,
   },
-  roadmapContextLeft: { flex: 1 },
-  roadmapContextTitle: { fontFamily: MONO, fontSize: 11, fontWeight: '700', marginBottom: 2, letterSpacing: 0 },
-  roadmapContextNext: { fontFamily: MONO, fontSize: 10 },
-  roadmapContextBadge: {
-    borderRadius: 3, paddingHorizontal: 8, paddingVertical: 4,
-    borderWidth: 1,
-  },
-  roadmapContextPct: { fontFamily: MONO, fontSize: 11, fontWeight: '700' },
+  historyBannerText: { fontFamily: SANS_MED, fontSize: 11 },
 
   // List
   list: { flex: 1, minHeight: 0 },
   listContent: {
     flexGrow: 1, justifyContent: 'flex-end',
-    paddingHorizontal: 10, paddingTop: 24, paddingBottom: 18,
+    paddingHorizontal: 10, paddingTop: 16, paddingBottom: 18,
   },
   listFooter: { paddingBottom: 6 },
 
@@ -364,11 +416,11 @@ const styles = StyleSheet.create({
   errorBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     alignSelf: 'center', marginTop: 14,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 5,
-    borderWidth: 1, borderColor: Colors.danger + '30',
-    backgroundColor: Colors.danger + '10',
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
-  errorText: { fontFamily: MONO, color: Colors.danger, fontSize: 11 },
+  errorText: { fontFamily: SANS_MED, color: '#EF4444', fontSize: 11 },
 
   // Input dock
   inputDock: {
@@ -378,15 +430,23 @@ const styles = StyleSheet.create({
   },
 
   // Empty state
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32, gap: 14 },
   emptyIconWrap: {
-    width: 72, height: 72, borderRadius: 6,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 20,
-    borderWidth: 1, borderColor: Colors.primary + '30',
-    backgroundColor: Colors.primary + '10',
+    width: 72, height: 72, borderRadius: 18,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 6,
+    borderWidth: 1,
   },
-  emptyTitle: { fontFamily: MONO, fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginBottom: 8, textAlign: 'center', letterSpacing: 0.5 },
-  emptySubtitle: { fontFamily: MONO, fontSize: 11, color: Colors.textTertiary, textAlign: 'center', lineHeight: 20 },
-  loadingOrb: { width: 56, height: 56, borderRadius: 6, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', marginBottom: 16, backgroundColor: Colors.primary + '15', borderWidth: 1, borderColor: Colors.primary + '30' },
-  loadingCore: { width: 16, height: 16, borderRadius: 3, backgroundColor: Colors.primary },
+  emptyTitle: { fontFamily: SANS, fontSize: 18, textAlign: 'center', letterSpacing: 0.2 },
+  emptySubtitle: { fontFamily: SANS_REG, fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  emptyHistoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  emptyHistoryBtnText: { fontFamily: SANS_MED, fontSize: 13 },
 });

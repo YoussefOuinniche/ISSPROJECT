@@ -160,7 +160,7 @@ export default function RecommendationsScreen() {
         <View>
           <Text style={styles.navTitle}>Recommendations</Text>
         </View>
-        <Pressable style={styles.filterBtn} onPress={() => router.push("/onboarding-chat")}>
+        <Pressable style={styles.filterBtn} onPress={() => router.push("/ai-assistant")}>
           <Feather name="cpu" size={18} color={Colors.textSecondary} />
         </Pressable>
       </View>

@@ -6,6 +6,7 @@ import {
   Linking,
   Platform,
   Pressable,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -137,7 +138,10 @@ function EmptyView({ theme, insetTop }: { theme: ReturnType<typeof useTheme>; in
         <Text style={[styles.stateText, { color: theme.textSecondary, textAlign: 'center' }]}>
           Run the assessment and NexaPath will generate your first learning plan.
         </Text>
-        <Pressable style={[styles.primaryButton, { backgroundColor: theme.accent }]} onPress={() => router.push('/onboarding-chat')}>
+        <Pressable
+          style={[styles.primaryButton, { backgroundColor: theme.accent }]}
+          onPress={() => router.push('/ai-assistant')}
+        >
           <Text style={[styles.primaryButtonText, { color: theme.textOnAccent }]}>Create my plan</Text>
         </Pressable>
       </View>
@@ -295,6 +299,7 @@ export default function RoadmapScreen() {
   const [error, setError] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [shareState, setShareState] = useState<'idle' | 'sharing' | 'shared' | 'error'>('idle');
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const loadRoadmap = useCallback(async (opts: { silent?: boolean } = {}) => {
     try {
@@ -358,13 +363,43 @@ export default function RoadmapScreen() {
   const isComplete = totalSteps > 0 && completedSteps === totalSteps;
 
   async function handleShareRoadmap() {
-    if (!roadmap || !isComplete || shareState === 'sharing') return;
+    if (!roadmap || shareState === 'sharing') return;
     setShareState('sharing');
+    setShareError(null);
+
+    const completedTitles = roadmap.steps
+      .filter((s) => s.status === 'completed')
+      .map((s) => `• ${s.title}`)
+      .join('\n');
+    const shareBody =
+      `${roadmap.title}\n` +
+      `${completedSteps}/${totalSteps} steps complete (${progress}%)\n\n` +
+      (completedTitles ? `Completed:\n${completedTitles}\n\n` : '') +
+      `Built with NexaPath.`;
+
+    let communityOk = false;
+    if (isComplete) {
+      try {
+        await shareCompletedRoadmap(roadmap);
+        communityOk = true;
+      } catch (err) {
+        setShareError(err instanceof Error ? err.message : 'Community share unavailable');
+      }
+    }
+
     try {
-      await shareCompletedRoadmap(roadmap);
-      setShareState('shared');
-    } catch {
-      setShareState('error');
+      await Share.share({
+        message: shareBody,
+        title: `${roadmap.title} · NexaPath roadmap`,
+      });
+      setShareState(communityOk ? 'shared' : 'idle');
+    } catch (err) {
+      if (communityOk) {
+        setShareState('shared');
+      } else {
+        setShareState('error');
+        setShareError(err instanceof Error ? err.message : 'Could not share');
+      }
     }
   }
 
@@ -390,20 +425,31 @@ export default function RoadmapScreen() {
           </View>
         </View>
         <ProgressBar value={progress} color={theme.primary} />
+        <Pressable
+          style={[styles.shareButton, { backgroundColor: theme.accent }]}
+          onPress={handleShareRoadmap}
+          disabled={shareState === 'sharing'}
+        >
+          <Feather name={shareState === 'shared' ? 'check-circle' : 'share-2'} size={15} color={theme.textOnAccent} />
+          <Text style={[styles.shareButtonText, { color: theme.textOnAccent }]}>
+            {shareState === 'sharing'
+              ? 'Sharing...'
+              : shareState === 'shared'
+                ? 'Shared to Community'
+                : isComplete ? 'Share to Community' : 'Share Progress'}
+          </Text>
+        </Pressable>
         {isComplete ? (
           <Pressable
-            style={[styles.shareButton, { backgroundColor: theme.accent }]}
-            onPress={handleShareRoadmap}
-            disabled={shareState === 'sharing'}
+            style={[styles.shareButton, styles.nextRoadmapBtn]}
+            onPress={() => router.push('/ai-assistant')}
           >
-            <Feather name={shareState === 'shared' ? 'check-circle' : 'share-2'} size={15} color={theme.textOnAccent} />
-            <Text style={[styles.shareButtonText, { color: theme.textOnAccent }]}>
-              {shareState === 'sharing' ? 'Sharing...' : shareState === 'shared' ? 'Shared to Community' : 'Share to Community'}
-            </Text>
+            <Feather name="plus-circle" size={15} color="#FFFFFF" />
+            <Text style={[styles.shareButtonText, { color: '#FFFFFF' }]} numberOfLines={1}>Generate your next roadmap</Text>
           </Pressable>
         ) : null}
-        {shareState === 'error' ? (
-          <Text style={[styles.shareError, { color: theme.warm }]}>Could not share yet. Try again.</Text>
+        {shareError ? (
+          <Text style={[styles.shareError, { color: theme.warm }]} numberOfLines={2}>{shareError}</Text>
         ) : null}
       </LinearGradient>
 
@@ -519,11 +565,15 @@ const styles = StyleSheet.create({
   shareButton: {
     minHeight: 44,
     borderRadius: 14,
-    marginTop: 16,
+    marginTop: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
+    paddingHorizontal: 14,
+  },
+  nextRoadmapBtn: {
+    backgroundColor: '#16A34A',
   },
   shareButtonText: {
     fontFamily: SANS,

@@ -47,7 +47,8 @@ PROJECT/mobile/artifacts/mobile/
     index.tsx                      Splash/session bootstrap screen
     login.tsx                      Email login
     signup.tsx                     Account registration
-    onboarding-chat.tsx            AI onboarding assessment chat
+    AIChatScreen.tsx               AI assistant + guided assessment flow
+    ai-assistant.tsx               Route wrapper for the AI assistant
     recommendations.tsx            AI recommendation view
     profile-completion.tsx         Profile completion workflow
     job-detail.tsx                 Job role detail view
@@ -250,7 +251,7 @@ ADZUNA_APP_ID=your_adzuna_app_id_here
 ADZUNA_API_KEY=your_adzuna_api_key_here
 REDIS_URL=redis://localhost:6379
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen2.5:14b
 PORT=5000
 JWT_SECRET=change_this_in_development
 JWT_EXPIRE=7d
@@ -277,7 +278,7 @@ The Python AI service reads its own environment variables from the `ai` folder. 
 ```env
 AI_REQUIRE_AUTH=false
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
+OLLAMA_MODEL=qwen2.5:14b
 DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
 ```
 
@@ -329,7 +330,7 @@ ollama serve
 Pull the model used by the backend or AI service:
 
 ```powershell
-ollama pull qwen2.5:7b
+ollama pull qwen2.5:14b
 ```
 
 Start the backend and AI service:

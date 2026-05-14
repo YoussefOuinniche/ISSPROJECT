@@ -12,6 +12,7 @@ import React, { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { configureMobileApiRuntime } from "@/lib/api/runtime";
+import { ThemeProvider } from "@/constants/theme";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -88,9 +89,11 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <QueryClientProvider client={queryClient}>
-        <RootLayoutNav />
-      </QueryClientProvider>
+      <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
+          <RootLayoutNav />
+        </QueryClientProvider>
+      </ThemeProvider>
     </SafeAreaProvider>
   );
 }

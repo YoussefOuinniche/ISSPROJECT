@@ -65,29 +65,61 @@ def _safe_get(url: str, params: dict | None = None) -> requests.Response | None:
         return None
 
 
-def scrape_remotive(role: str, limit: int = 10) -> list[JobResult]:
-    """Scrape Remotive.io for remote IT jobs (JSON API — no scraping needed)."""
-    resp = _safe_get("https://remotive.com/api/remote-jobs", params={"category": "software-dev", "limit": limit, "search": role})
-    if resp is None:
-        return []
-    try:
-        data = resp.json()
-        jobs = data.get("jobs", [])
-        results: list[JobResult] = []
-        for job in jobs[:limit]:
-            results.append(JobResult(
-                title=job.get("title", ""),
-                company=job.get("company_name"),
-                location=job.get("candidate_required_location", "Remote"),
-                description=_strip_html(job.get("description", ""))[:300],
-                salary=job.get("salary"),
-                url=job.get("url"),
-                source="remotive.com",
-            ))
-        return results
-    except Exception as exc:
-        logger.warning("Remotive parse failed: %s", exc)
-        return []
+REMOTIVE_CATEGORIES = [
+    "software-dev",
+    "devops",
+    "qa",
+    "data",
+    "design",
+    "product",
+    "marketing",
+    "all-others",
+]
+
+
+def scrape_remotive(role: str, limit: int = 30, categories: list[str] | None = None) -> list[JobResult]:
+    """Scrape Remotive.com for remote IT jobs (JSON API).
+
+    Hits multiple categories and merges, so we get a broader haul than the
+    previous software-dev-only pull.
+    """
+    cats = categories or REMOTIVE_CATEGORIES
+    per_cat = max(limit, 50)
+    results: list[JobResult] = []
+
+    for cat in cats:
+        params: dict[str, Any] = {"category": cat, "limit": per_cat}
+        if role.strip():
+            params["search"] = role.strip()
+        resp = _safe_get("https://remotive.com/api/remote-jobs", params=params)
+        if resp is None:
+            continue
+        try:
+            data = resp.json()
+            for job in data.get("jobs", []):
+                results.append(JobResult(
+                    title=job.get("title", ""),
+                    company=job.get("company_name"),
+                    location=job.get("candidate_required_location", "Remote"),
+                    description=_strip_html(job.get("description", ""))[:500],
+                    salary=job.get("salary") or None,
+                    url=job.get("url"),
+                    source="remotive.com",
+                ))
+        except Exception as exc:
+            logger.warning("Remotive parse failed for category %s: %s", cat, exc)
+
+    # Dedup by URL (Remotive's stable identifier).
+    seen: set[str] = set()
+    unique: list[JobResult] = []
+    for j in results:
+        key = j.url or f"{j.title}|{j.company}"
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(j)
+
+    return unique[:limit]
 
 
 def scrape_arbeitnow(role: str, limit: int = 10) -> list[JobResult]:
@@ -142,21 +174,41 @@ def _generate_ai_summary(role: str, jobs: list[JobResult]) -> str | None:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+def _job_matches_keywords(job: JobResult, keywords: list[str]) -> bool:
+    """Return True only if every keyword shows up in title, company, or description."""
+    if not keywords:
+        return True
+    haystack = " ".join(
+        filter(None, [job.title, job.company or "", job.location or "", job.description or ""]),
+    ).lower()
+    return all(kw in haystack for kw in keywords)
+
+
 @router.get("/api/jobs/search", response_model=JobSearchResponse)
 async def search_jobs(
     role: str = Query(..., description="IT role or keyword to search for"),
     limit: int = Query(default=10, ge=1, le=30),
     ai_summary: bool = Query(default=False),
 ) -> JobSearchResponse:
-    """Search for live job postings from multiple public job boards."""
-    if not role.strip():
+    """Search for live job postings from multiple public job boards.
+
+    Only returns rows that mention every requested keyword in the title,
+    company, location, or description so a search for "ai" never surfaces a
+    plain frontend role.
+    """
+    query = role.strip()
+    if not query:
         raise HTTPException(status_code=422, detail="role query parameter is required")
+
+    keywords = [kw.lower() for kw in re.split(r"\s+", query) if len(kw) >= 2]
 
     results: list[JobResult] = []
 
-    # Try multiple sources in parallel-ish (sequential for simplicity)
-    results.extend(scrape_remotive(role, limit=max(limit // 2, 5)))
-    results.extend(scrape_arbeitnow(role, limit=max(limit // 2, 5)))
+    # Pull a wider pool than `limit` so that keyword filtering still has enough
+    # to surface after dropping non-matches.
+    pool = max(limit * 4, 40)
+    results.extend(scrape_remotive(query, limit=pool))
+    results.extend(scrape_arbeitnow(query, limit=pool))
 
     # Deduplicate by title+company
     seen: set[str] = set()
@@ -167,14 +219,16 @@ async def search_jobs(
             seen.add(key)
             unique.append(job)
 
-    unique = unique[:limit]
+    # Strict keyword filter — every keyword must show up somewhere in the row.
+    filtered = [job for job in unique if _job_matches_keywords(job, keywords)]
+    filtered = filtered[:limit]
 
-    summary = _generate_ai_summary(role, unique) if ai_summary else None
+    summary = _generate_ai_summary(query, filtered) if ai_summary else None
 
     return JobSearchResponse(
-        query=role,
-        results=unique,
-        total=len(unique),
+        query=query,
+        results=filtered,
+        total=len(filtered),
         ai_summary=summary,
     )
 

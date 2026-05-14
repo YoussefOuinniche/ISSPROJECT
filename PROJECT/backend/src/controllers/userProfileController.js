@@ -51,30 +51,63 @@ const getUserProfile = async (req, res) => {
 // PUT /api/user/profile  (also handles POST)
 const upsertUserProfile = async (req, res) => {
   try {
-    const { domain, title, experienceLevel, bio } = req.body;
+    const { full_name, fullName, domain, title, experienceLevel, bio } = req.body;
+    const nextFullName = full_name ?? fullName;
 
-    const updateData = {};
-    if (bio           !== undefined) updateData.bio             = bio;
+    // Build profile-table updates. `full_name` lives on `profiles` here
+    // (see authController register flow). `users` is auth.users (managed by
+    // Supabase Auth) and we mirror display name into auth metadata too.
+    const profileUpdates = {};
+    if (typeof nextFullName === 'string' && nextFullName.trim()) {
+      profileUpdates.full_name = nextFullName.trim();
+    }
+    if (bio !== undefined) profileUpdates.bio = bio;
+    if (domain !== undefined) profileUpdates.domain = domain;
+    if (title !== undefined) profileUpdates.title = title;
     if (experienceLevel !== undefined) {
-      updateData.years_experience = EXPERIENCE_TO_YEARS[experienceLevel] ?? 0;
+      profileUpdates.experience_level = experienceLevel;
     }
 
-    // Store domain & title inside bio as structured metadata if no dedicated columns
-    if ((domain || title) && !bio) {
+    // Store domain & title inside bio if no dedicated columns were provided.
+    if ((domain || title) && bio === undefined && profileUpdates.bio === undefined) {
       const parts = [];
       if (domain) parts.push(`Domain: ${domain}`);
       if (title)  parts.push(`Title: ${title}`);
-      if (parts.length) updateData.bio = parts.join('\n');
+      if (parts.length) profileUpdates.bio = parts.join('\n');
     }
 
-    const { data: profile, error } = await supabaseAdmin
-      .from('profiles')
-      .update(updateData)
-      .eq('user_id', req.user.id)
-      .select()
-      .maybeSingle();
+    let profile = null;
+    if (Object.keys(profileUpdates).length > 0) {
+      // Upsert ensures a row exists even for users who never finished onboarding.
+      const { data, error } = await supabaseAdmin
+        .from('profiles')
+        .upsert(
+          { user_id: req.user.id, ...profileUpdates },
+          { onConflict: 'user_id' },
+        )
+        .select()
+        .maybeSingle();
+      if (error) throw error;
+      profile = data;
+    }
 
-    if (error) throw error;
+    if (!profile) {
+      const { data: existing } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('user_id', req.user.id)
+        .maybeSingle();
+      profile = existing || {};
+    }
+
+    // Mirror display name into Supabase Auth user_metadata (best-effort).
+    if (profileUpdates.full_name) {
+      try {
+        await supabaseAdmin.auth.admin.updateUserById(req.user.id, {
+          user_metadata: { full_name: profileUpdates.full_name },
+        });
+      } catch { /* non-critical */ }
+    }
 
     return res.json({
       success: true,

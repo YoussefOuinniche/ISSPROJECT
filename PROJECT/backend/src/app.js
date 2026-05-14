@@ -25,6 +25,7 @@ const userProfileRoutes  = require('./routes/userProfileRoutes');
 const userAiRoutes       = require('./routes/userAiRoutes');
 const userHomeRoutes     = require('./routes/userHomeRoutes');
 const adminRoutes        = require('./routes/adminroutes');
+const communityRoutes    = require('./routes/communityRoutes');
 
 // SkillPulse aggregation routes
 const jobsRoutes = require('./routes/jobs.routes');
@@ -101,6 +102,7 @@ app.use('/api/user/profile', userProfileRoutes);
 app.use('/api/user/ai',      userAiRoutes);
 app.use('/api/user/home',    userHomeRoutes);
 app.use('/api/admin',        adminRoutes);
+app.use('/api/community',    communityRoutes);
 
 // SkillPulse aggregation API
 app.use('/api/v1', jobsRoutes);

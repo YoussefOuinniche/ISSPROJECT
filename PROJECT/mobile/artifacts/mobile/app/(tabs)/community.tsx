@@ -26,7 +26,7 @@ function displayName(share: CommunityRoadmapShare) {
 }
 
 function roleName(share: CommunityRoadmapShare) {
-  return share.ai_roadmaps?.job_roles?.title || share.profiles?.title || 'Completed roadmap';
+  return share.ai_roadmaps?.job_roles?.title || share.ai_roadmaps?.title || 'Completed roadmap';
 }
 
 export default function CommunityScreen() {

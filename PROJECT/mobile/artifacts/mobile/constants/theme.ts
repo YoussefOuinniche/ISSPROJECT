@@ -1,4 +1,6 @@
-import { Platform, useColorScheme } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Appearance, Platform, useColorScheme } from 'react-native';
 
 export const SERIF = Platform.OS === 'ios' ? 'Georgia' : 'serif';
 export const SANS = 'Inter_700Bold';
@@ -100,8 +102,72 @@ export const LightTheme = {
 } as const;
 
 export type AppTheme = typeof DarkTheme;
+export type ThemePreference = 'system' | 'light' | 'dark';
+
+const PREF_KEY = '@nexapath_theme_pref';
+
+interface ThemeContextValue {
+  preference: ThemePreference;
+  setPreference: (pref: ThemePreference) => void;
+  effective: 'light' | 'dark';
+}
+
+const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const systemScheme = useColorScheme();
+  const [preference, setPreferenceState] = useState<ThemePreference>('system');
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(PREF_KEY)
+      .then((raw) => {
+        if (raw === 'light' || raw === 'dark' || raw === 'system') {
+          setPreferenceState(raw);
+        }
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => setHydrated(true));
+  }, []);
+
+  const setPreference = useCallback((pref: ThemePreference) => {
+    setPreferenceState(pref);
+    AsyncStorage.setItem(PREF_KEY, pref).catch(() => { /* ignore */ });
+    if (pref === 'system') {
+      Appearance.setColorScheme(null);
+    } else {
+      Appearance.setColorScheme(pref);
+    }
+  }, []);
+
+  const effective: 'light' | 'dark' = preference === 'system'
+    ? (systemScheme === 'dark' ? 'dark' : 'light')
+    : preference;
+
+  const value = useMemo(
+    () => ({ preference, setPreference, effective }),
+    [preference, setPreference, effective],
+  );
+
+  if (!hydrated) {
+    return null;
+  }
+
+  return React.createElement(ThemeContext.Provider, { value }, children);
+}
+
+export function useThemePreference(): ThemeContextValue {
+  const ctx = useContext(ThemeContext);
+  const systemScheme = useColorScheme();
+  if (ctx) return ctx;
+  return {
+    preference: 'system',
+    setPreference: () => { /* noop without provider */ },
+    effective: systemScheme === 'dark' ? 'dark' : 'light',
+  };
+}
 
 export function useTheme(): AppTheme {
-  const scheme = useColorScheme();
-  return (scheme === 'dark' ? DarkTheme : LightTheme) as AppTheme;
+  const { effective } = useThemePreference();
+  return (effective === 'dark' ? DarkTheme : LightTheme) as AppTheme;
 }

@@ -18,13 +18,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useQueryClient } from '@tanstack/react-query';
-import { useGetCurrentUser, useGetUserDashboard, useLogoutAuth } from '@workspace/api-client-react';
-import { clearMobileAccessToken } from '@/lib/api/runtime';
+import { useGetCurrentUser, useGetUserDashboard } from '@workspace/api-client-react';
 import { computeProfileCompleteness } from '@/lib/profileScore';
 import { getBottomContentPadding } from '@/lib/layout';
 import { useAIProfile } from '@/hooks/useAIProfile';
-import { useTheme, SERIF, SANS, SANS_MED, SANS_REG } from '@/constants/theme';
+import { useTheme, SANS, SANS_MED, SANS_REG } from '@/constants/theme';
 
 // ─── Rank system ─────────────────────────────────────────────────────────────
 const RANKS = ['Starter', 'Learner', 'Advanced', 'Expert'];
@@ -37,37 +35,6 @@ function getRankInfo(skillScore: number): { name: string; tier: number; nextXP: 
   const nextXP = Math.min(tier * Math.ceil(1000 / RANK_TIERS), 1000);
   return { name: RANKS[rankIdx], tier, nextXP, xp };
 }
-
-function ProfileHeaderPanel({ theme, initials }: { theme: ReturnType<typeof useTheme>; initials: string }) {
-  return (
-    <View style={[ph.panel, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
-      <View>
-        <Text style={[ph.kicker, { color: theme.textSecondary }]}>PROFILE</Text>
-        <Text style={[ph.title, { color: theme.text }]}>My progress</Text>
-      </View>
-      <View style={[ph.avatar, { backgroundColor: theme.accent }]}>
-        <Text style={[ph.avatarText, { color: theme.textOnAccent }]}>{initials}</Text>
-      </View>
-    </View>
-  );
-}
-
-const ph = StyleSheet.create({
-  panel: {
-    minHeight: 150,
-    marginHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    padding: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  kicker: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.5, marginBottom: 6 },
-  title: { fontFamily: SANS, fontSize: 30, letterSpacing: 0 },
-  avatar: { width: 68, height: 68, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontFamily: SANS, fontSize: 24 },
-});
 
 // ─── Stat pill ────────────────────────────────────────────────────────────────
 function StatPill({
@@ -166,42 +133,10 @@ function SkillElevationBar({ name, level, color, theme }: {
 }
 
 // ─── Checkpoint milestone ─────────────────────────────────────────────────────
-function Milestones({ completed, theme }: { completed: number; theme: ReturnType<typeof useTheme> }) {
-  const nodes = ['Starter', 'Learner', 'Advanced', 'Expert'];
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
-      {nodes.map((n, i) => {
-        const done = i < completed;
-        const active = i === completed;
-        return (
-          <React.Fragment key={n}>
-            <View style={{ alignItems: 'center' }}>
-              <View style={[
-                { width: 10, height: 10, borderRadius: 5, borderWidth: 2 },
-                done ? { backgroundColor: theme.accent, borderColor: theme.accent }
-                  : active ? { backgroundColor: theme.warm, borderColor: theme.warm }
-                    : { backgroundColor: 'transparent', borderColor: theme.borderSubtle },
-              ]} />
-              <Text style={{ fontFamily: SANS_MED, fontSize: 7, color: active ? theme.warm : done ? theme.accent : theme.textTertiary, marginTop: 3, letterSpacing: 0.3 }} numberOfLines={1}>
-                {n}
-              </Text>
-            </View>
-            {i < nodes.length - 1 && (
-              <View style={{ flex: 1, height: 2, backgroundColor: done ? theme.accent : theme.borderSubtle, marginHorizontal: 2, marginBottom: 12 }} />
-            )}
-          </React.Fragment>
-        );
-      })}
-    </View>
-  );
-}
-
 // ─── Main screen ─────────────────────────────────────────────────────────────
 export default function ProfileScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
-  const logoutMutation = useLogoutAuth();
 
   const { data: currentUserResponse } = useGetCurrentUser();
   const { data: dashboardResponse } = useGetUserDashboard();
@@ -224,10 +159,7 @@ export default function ProfileScreen() {
     : {};
 
   const fullName = String(profile.full_name ?? currentUser.full_name ?? currentUser.email ?? 'Explorer');
-  const email = String(currentUser.email ?? '');
-  const joined = String(currentUser.created_at ?? '').slice(0, 10);
   const initials = fullName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
-  const shortName = `${fullName.split(' ')[0]} ${(fullName.split(' ')[1]?.[0] ?? '')}${fullName.split(' ')[1] ? '.' : ''}`;
 
   const skills = Array.isArray(dashboard.skills)
     ? dashboard.skills
@@ -249,19 +181,6 @@ export default function ProfileScreen() {
 
   const rankInfo = getRankInfo(skillScore);
   const earnedAch = [skills.length > 0, Boolean(aiTopGoal), highPriority > 0].filter(Boolean).length;
-  const mantraQuotes = [
-    '"Yesterday ended last night. Today is fresh. Start with one step."',
-    '"Every strong plan begins with one focused action."',
-    '"Strong careers are built one focused action at a time."',
-  ];
-  const mantra = mantraQuotes[new Date().getDate() % mantraQuotes.length];
-
-  const onSignOut = async () => {
-    try { await logoutMutation.mutateAsync(); } catch { /* ignore */ }
-    await clearMobileAccessToken();
-    queryClient.clear();
-    router.replace('/login');
-  };
 
   const s = makeStyles(theme);
 
@@ -272,9 +191,7 @@ export default function ProfileScreen() {
         contentContainerStyle={{ paddingBottom: getBottomContentPadding(insets.bottom, { hasTabBar: true }) }}
       >
 
-        <View style={{ paddingTop: Platform.OS === 'web' ? insets.top + 76 : insets.top + 16 }}>
-          <ProfileHeaderPanel theme={theme} initials={initials} />
-        </View>
+        <View style={{ paddingTop: Platform.OS === 'web' ? insets.top + 76 : insets.top + 16 }} />
 
         <View style={s.body}>
 
@@ -287,16 +204,10 @@ export default function ProfileScreen() {
                   <Text style={[s.avatarText, { color: theme.textOnAccent }]}>{initials}</Text>
                 </View>
                 <View style={s.profileInfo}>
-                  <Text style={[s.profileName, { color: theme.text }]}>{shortName}</Text>
+                  <Text style={[s.profileName, { color: theme.text }]} numberOfLines={2}>{fullName}</Text>
                   <Text style={[s.profileSince, { color: theme.textSecondary }]}>
                     Active since Day 001
                   </Text>
-                  {email ? (
-                    <View style={s.emailRow}>
-                      <Feather name="mail" size={11} color={theme.textTertiary} />
-                      <Text style={[s.emailText, { color: theme.textTertiary }]} numberOfLines={1}>{email}</Text>
-                    </View>
-                  ) : null}
                 </View>
               </View>
 
@@ -326,41 +237,6 @@ export default function ProfileScreen() {
                   theme={theme}
                 />
               </View>
-            </View>
-          </Reanimated.View>
-
-          {/* ── Today's Mantra ── */}
-          <Reanimated.View entering={FadeInDown.delay(120).springify()}>
-            <View style={[s.mantraCard, { backgroundColor: theme.surfaceWarm, borderColor: theme.warm + '30' }]}>
-              <View style={s.mantraHeader}>
-                <View style={[s.mantraIconWrap, { backgroundColor: theme.warm + '25' }]}>
-                  <Feather name="sun" size={14} color={theme.warm} />
-                </View>
-                <Text style={[s.mantraEye, { color: theme.warm }]}>TODAY'S MANTRA</Text>
-              </View>
-              <Text style={[s.mantraText, { color: theme.text }]}>{mantra}</Text>
-            </View>
-          </Reanimated.View>
-
-          {/* ── Next Checkpoint ── */}
-          <Reanimated.View entering={FadeInDown.delay(180).springify()}>
-            <View style={[s.checkCard, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
-              <View style={s.checkHeader}>
-                <View>
-                  <Text style={[s.checkEye, { color: theme.textTertiary }]}>NEXT CHECKPOINT</Text>
-                  <Text style={[s.checkTitle, { color: theme.text }]}>{rankInfo.name === 'Expert' ? 'You reached Expert!' : `${RANKS[Math.min(RANKS.indexOf(rankInfo.name) + 1, RANKS.length - 1)]} · Next level`}</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[s.checkXP, { color: theme.accent }]}>{rankInfo.xp}<Text style={[s.checkXPLabel, { color: theme.textTertiary }]}>/100</Text></Text>
-                  <Text style={[s.checkXPSub, { color: theme.textTertiary }]}>XP</Text>
-                </View>
-              </View>
-
-              <Milestones completed={RANKS.indexOf(rankInfo.name)} theme={theme} />
-              <ProgressBar pct={skillScore} color={theme.accent} bg={theme.bg2} />
-              <Text style={[s.checkFooter, { color: theme.textTertiary }]}>
-                {100 - skillScore} XP away — closer than it feels
-              </Text>
             </View>
           </Reanimated.View>
 
@@ -407,13 +283,8 @@ export default function ProfileScreen() {
           <Reanimated.View entering={FadeInDown.delay(360).springify()}>
             <Text style={[s.sectionLabelStandalone, { color: theme.textSecondary }]}>Account</Text>
             <View style={[s.menuCard, { backgroundColor: theme.surface, borderColor: theme.borderSubtle }]}>
-              <MenuItem icon="edit-3" label="Edit Profile" sublabel="Update skills & details" color={theme.primary} onPress={() => router.push('/settings')} theme={theme} />
-              <MenuItem icon="star" label="Recommendations" sublabel="View AI guidance" color={theme.accent} onPress={() => router.push('/recommendations')} theme={theme} />
-              <MenuItem icon="cpu" label="AI Roadmap" sublabel="Start assessment" color={theme.primary} onPress={() => router.push('/onboarding-chat')} showBadge theme={theme} />
-              <MenuItem icon="shield" label="Privacy" sublabel="Manage account safety" color={theme.accent} onPress={() => router.push('/settings')} theme={theme} />
-              <MenuItem icon="help-circle" label="Help & Support" sublabel="Docs & support" color={theme.gold} onPress={() => router.push('/settings')} theme={theme} />
               <View style={{ borderBottomWidth: 0 }}>
-                <MenuItem icon="log-out" label="Sign Out" sublabel="End session" color="#EF4444" onPress={onSignOut} theme={theme} />
+                <MenuItem icon="settings" label="User Settings" sublabel="Account, appearance & sign out" color={theme.primary} onPress={() => router.push('/settings')} theme={theme} />
               </View>
             </View>
           </Reanimated.View>
@@ -441,36 +312,10 @@ function makeStyles(theme: ReturnType<typeof useTheme>) {
     profileInfo: { flex: 1 },
     profileName: { fontFamily: SANS, fontSize: 18, letterSpacing: -0.3, marginBottom: 3 },
     profileSince: { fontFamily: SANS_REG, fontSize: 12, marginBottom: 5 },
-    emailRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    emailText: { fontFamily: SANS_REG, fontSize: 11, flex: 1 },
     statsRow: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
     statDivider: { width: 1, marginVertical: 8 },
 
-    // Mantra card
-    mantraCard: {
-      borderRadius: 16, borderWidth: 1, padding: 16, marginBottom: 12,
-    },
-    mantraHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-    mantraIconWrap: {
-      width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
-    },
-    mantraEye: { fontFamily: SANS_MED, fontSize: 10, letterSpacing: 1.2 },
-    mantraText: {
-      fontFamily: SERIF, fontStyle: 'italic', fontSize: 16, lineHeight: 24, letterSpacing: 0.2,
-    },
-
     // Checkpoint card
-    checkCard: {
-      borderRadius: 16, borderWidth: 1, padding: 18, marginBottom: 12,
-    },
-    checkHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-    checkEye: { fontFamily: SANS_MED, fontSize: 9, letterSpacing: 1.5, marginBottom: 5 },
-    checkTitle: { fontFamily: SANS, fontSize: 17, letterSpacing: -0.3 },
-    checkXP: { fontFamily: SANS, fontSize: 22 },
-    checkXPLabel: { fontFamily: SANS_MED, fontSize: 13 },
-    checkXPSub: { fontFamily: SANS_MED, fontSize: 9, letterSpacing: 0.8 },
-    checkFooter: { fontFamily: SANS_REG, fontSize: 11, marginTop: 8, fontStyle: 'italic' },
-
     // Sections
     sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, marginTop: 4 },
     sectionLabel: { fontFamily: SANS, fontSize: 16, letterSpacing: -0.2 },

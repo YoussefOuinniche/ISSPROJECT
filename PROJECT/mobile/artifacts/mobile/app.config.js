@@ -9,14 +9,15 @@ export default ({ config }) => ({
     scheme: 'mobile',
     userInterfaceStyle: 'light',
     newArchEnabled: true,
+    icon: './assets/images/nexapathicon.png',
     splash: {
-      image: './assets/images/splash-icon.png',
+      image: './assets/images/nexapathicon.png',
       resizeMode: 'contain',
       backgroundColor: '#03071A',
     },
     ios: { supportsTablet: false },
     android: { usesCleartextTraffic: true },
-    web: { favicon: './assets/images/icon.png' },
+    web: { favicon: './assets/images/nexapathicon.png' },
     plugins: [
       ['expo-router', { origin: 'https://replit.com/' }],
       'expo-font',

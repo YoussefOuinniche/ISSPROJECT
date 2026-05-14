@@ -115,7 +115,7 @@ export interface CommunityRoadmapShare {
   completed_steps: number;
   total_steps: number;
   shared_at: string;
-  profiles?: { full_name?: string | null; title?: string | null } | null;
+  profiles?: { full_name?: string | null } | null;
   ai_roadmaps?: {
     title?: string | null;
     summary?: string | null;
@@ -227,6 +227,42 @@ export async function getJobRoles(): Promise<JobRole[]> {
   );
 }
 
+/**
+ * Returns an existing job_roles row whose title matches `title` (case-insensitive),
+ * or inserts a new one and returns it. Lets the AI accept any role the user names
+ * (cybersecurity, embedded, etc.) without erroring on FK constraints later.
+ */
+export async function ensureJobRoleByTitle(title: string): Promise<JobRole> {
+  const trimmed = title.trim();
+  if (!trimmed) throw new Error("ensureJobRoleByTitle: title is empty");
+
+  const safe = trimmed.replace(/[*]/g, "");
+  const existing = await sbGet<JobRole>(
+    "job_roles",
+    `title=ilike.${encodeURIComponent(safe)}&select=id,title,slug,description,category_id,seniority_level,avg_salary_usd&limit=1`,
+  );
+  if (existing[0]) return existing[0];
+
+  const slug = trimmed
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 80) || "custom-role";
+
+  const inserted = await sbPost<JobRole>(
+    "job_roles",
+    {
+      title: trimmed,
+      slug,
+      description: `User-defined target role: ${trimmed}`,
+      is_active: true,
+    },
+    true,
+  );
+  if (!inserted[0]) throw new Error("ensureJobRoleByTitle: insert returned no row");
+  return inserted[0];
+}
+
 /** All active skills ordered alphabetically. */
 export async function getSkills(): Promise<Skill[]> {
   return sbGet<Skill>(
@@ -305,6 +341,47 @@ export async function fetchProfileId(): Promise<string | null> {
   }
 }
 
+/** Returns whatever the profile endpoint exposes so callers can pre-fill the assessment. */
+export async function fetchProfileContext(): Promise<{
+  id: string | null;
+  full_name: string | null;
+  target_role: string | null;
+  education_level: string | null;
+  years_experience: number | null;
+} | null> {
+  try {
+    const baseUrl = getMobileApiBaseUrl().replace(/\/$/, "");
+    const token = await getMobileAccessToken();
+    const resp = await fetch(`${baseUrl}/api/user/profile`, {
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token ?? ""}`,
+      },
+    });
+    if (!resp.ok) return null;
+    const payload = (await resp.json()) as Record<string, unknown>;
+    const envelope = (payload?.data ?? payload) as Record<string, unknown>;
+    const profile = (envelope?.profile ?? envelope) as Record<string, unknown>;
+    const yearsRaw = profile?.years_experience;
+    return {
+      id: typeof profile?.id === "string" ? (profile.id as string) : null,
+      full_name: typeof profile?.full_name === "string" && (profile.full_name as string).trim()
+        ? (profile.full_name as string).trim()
+        : null,
+      target_role: typeof profile?.explicit_target_role === "string" && (profile.explicit_target_role as string).trim()
+        ? (profile.explicit_target_role as string).trim()
+        : null,
+      education_level: typeof profile?.education_level === "string"
+        ? (profile.education_level as string)
+        : null,
+      years_experience: typeof yearsRaw === "number" ? yearsRaw : null,
+    };
+  } catch (err) {
+    if (__DEV__) console.warn("[supabase] fetchProfileContext failed:", err);
+    return null;
+  }
+}
+
 // ─── Profile Operations ─────────────────────────────────────────────────────────
 
 /**
@@ -362,7 +439,7 @@ export async function createRoadmap(data: {
     {
       ...data,
       status: "active",
-      ai_model: "qwen2.5:7b",
+      ai_model: "qwen2.5:14b",
       generation_params: data.generation_params ?? {},
     },
     true
@@ -540,7 +617,7 @@ export async function getCommunityRoadmapShares(): Promise<CommunityRoadmapShare
       "community_roadmap_shares",
       [
         "is_public=eq.true",
-        "select=id,roadmap_id,profile_id,title,summary,completed_steps,total_steps,shared_at,profiles(full_name,title),ai_roadmaps(title,summary,estimated_weeks,job_roles(title))",
+        "select=id,roadmap_id,profile_id,title,summary,completed_steps,total_steps,shared_at,profiles(full_name),ai_roadmaps(title,summary,estimated_weeks,job_roles(title))",
         "order=shared_at.desc",
         "limit=50",
       ].join("&")

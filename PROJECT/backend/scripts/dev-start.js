@@ -18,7 +18,7 @@ const state = {
   backendReady: false,
   dbReady: false,
   aiReady: false,
-  aiModel: process.env.OLLAMA_MODEL_CHAT || process.env.OLLAMA_MODEL || 'qwen2.5:7b',
+  aiModel: process.env.OLLAMA_MODEL_CHAT || process.env.OLLAMA_MODEL || 'qwen2.5:14b',
   panelShown: false,
 };
 
