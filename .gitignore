@@ -1,0 +1,4 @@
+# Local AI / tooling caches — should never be pushed
+.agents/
+.claude/
+.sixth/
